@@ -467,6 +467,7 @@ function onSelectLeaf(node: any) {
 /** 从配置弹窗确认 → 新增或更新数据集，返回数据集 id（新增时立即异步预取 schema） */
 function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourceLeafType; sourceLabel: string }): string {
   const editingId = state.ui.editingDatasetId
+  let persistOnCreate = false
   let id: string
   if (editingId) {
     const ds = getDataset(editingId)
@@ -485,7 +486,7 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
     id = editingId
   } else {
     id = `ds-${Date.now()}`
-    state.datasets.push({
+    const created = {
       id,
       sourceType: payload.sourceType,
       sourceLabel: payload.sourceLabel,
@@ -493,12 +494,28 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
       fields: [],
       filters: [],
       ...payload,
-    } as DatasetConfig)
+    } as DatasetConfig
+    state.datasets.push(created)
+    // 添加即落库：确认时立即创建后端数据集，后端同步把选中指标/维度的展示名
+    // 快照进字段表；落库完成后再预取 schema —— 查询配置回显即可走 descriptor，
+    // 不再调 /synced-metrics、/synced-dimensions 接口。失败不阻塞添加：
+    // 保持草稿状态，保存/查看数据时仍会兜底落库并按旧路径回显。
+    persistOnCreate = true
+    void (async () => {
+      try {
+        const existingDatasets = await datasetApi.list()
+        await persistDatasetInputOnce(created, existingDatasets)
+      } catch (e) {
+        state.backend.lastError = `数据集「${created.alias}」自动落库失败：${(e as Error)?.message || '未知错误'}；保存时将自动重试`
+      }
+      void refreshDatasetSchema(id, { silent: true })
+    })()
   }
   state.ui.editingDatasetId = null
   // 配置确定后异步预取数据集 schema，自动生成「字段名称」映射；
   // 不阻塞主流程，失败静默（打开弹窗时仍会兜底重试）。
-  void refreshDatasetSchema(id, { silent: true })
+  // 新增数据集由「添加即落库」链路在落库后预取，此处跳过避免并发重复。
+  if (!persistOnCreate) void refreshDatasetSchema(id, { silent: true })
   return id
 }
 
@@ -900,7 +917,8 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
     const metrics = ds.aloudata?.metrics ?? []
     const dims = ds.aloudata?.dims ?? []
     if (!metrics.length && !dims.length) return []
-    // 已持久化数据集：descriptor 的字段标题由后端按同步表全量填充（无分页截断），优先使用
+    // 已持久化数据集：descriptor 的字段标题优先取创建时冻结的展示名快照
+    // （字段表 columnAlias），旧数据集回退同步表实时值；无分页截断，优先使用
     if (ds.backendDatasetId) {
       try {
         const descriptor = await datasetApi.getInputDescriptor(ds.backendDatasetId) as unknown as datasetApi.DatasetInputDescriptor
@@ -1613,40 +1631,62 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
   }
 }
 
+type BackendDatasetList = Awaited<ReturnType<typeof datasetApi.list>>
+
+/** 进行中的落库任务按 ds.id 去重：避免「添加即落库」与保存流程并发触发重复 confirmDraft（同名 400）。 */
+const datasetPersistTasks = new Map<string, Promise<void>>()
+
+/**
+ * 落库单个数据集草稿：按名称和来源配置复用已有后端数据集，否则 confirmDraft 创建。
+ * 成功后回填 ds.backendDatasetId，后续保存/查看数据直接复用。
+ */
+async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendDatasetList): Promise<void> {
+  if (isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) return
+  // 旧仪表盘可能仍保存数字 ID，但数据集记录已被清理；不能把“数字格式”当成有效引用。
+  ds.backendDatasetId = undefined
+  const request = draftRequestForDataset(ds)
+  if (!request) throw new Error(`数据集「${ds.alias}」尚未落库，当前类型不支持自动保存`)
+
+  // 复制仪表盘或重复点击“查看数据”时，数据集草稿可能已经在后端落库。
+  // 先按名称和来源配置复用，避免 confirmDraft 因同名数据集返回 400。
+  const existing = existingDatasets.find((candidate) => {
+    if (candidate.name !== ds.alias || String(candidate.sourceType ?? '').toUpperCase() !== String(request.sourceType).toUpperCase()) return false
+    if (String(candidate.datasourceId ?? '') !== String(request.datasourceId ?? '')) return false
+    if (!candidate.sourceConfig) return true
+    try {
+      const stored = typeof candidate.sourceConfig === 'string' ? JSON.parse(candidate.sourceConfig) : candidate.sourceConfig
+      return Object.entries(request.sourceConfig ?? {}).every(([key, value]) => String(stored?.[key] ?? '') === String(value ?? ''))
+    } catch {
+      return false
+    }
+  })
+  if (existing) {
+    ds.backendDatasetId = String(existing.id)
+    return
+  }
+
+  const result = await backend.confirmDatasetDraft({
+    ...request,
+    name: ds.alias,
+    description: `仪表盘组件输入数据集：${ds.alias}`,
+  })
+  ds.backendDatasetId = String(result.datasetId)
+}
+
+/** 带并发去重的落库入口：同一数据集的重复触发共享同一个任务。 */
+function persistDatasetInputOnce(ds: DatasetConfig, existingDatasets: BackendDatasetList): Promise<void> {
+  const inFlight = datasetPersistTasks.get(ds.id)
+  if (inFlight) return inFlight
+  const task = persistDatasetInput(ds, existingDatasets).finally(() => datasetPersistTasks.delete(ds.id))
+  datasetPersistTasks.set(ds.id, task)
+  return task
+}
+
 /** 保存当前卡片配置到后端 Schema */
 async function ensurePersistedDatasetInputs(): Promise<void> {
   const existingDatasets = await datasetApi.list()
   for (const ds of state.datasets) {
-    if (isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) continue
-    // 旧仪表盘可能仍保存数字 ID，但数据集记录已被清理；不能把“数字格式”当成有效引用。
-    ds.backendDatasetId = undefined
-    const request = draftRequestForDataset(ds)
-    if (!request) throw new Error(`数据集「${ds.alias}」尚未落库，当前类型不支持自动保存`)
-
-    // 复制仪表盘或重复点击“查看数据”时，数据集草稿可能已经在后端落库。
-    // 先按名称和来源配置复用，避免 confirmDraft 因同名数据集返回 400。
-    const existing = existingDatasets.find((candidate) => {
-      if (candidate.name !== ds.alias || String(candidate.sourceType ?? '').toUpperCase() !== String(request.sourceType).toUpperCase()) return false
-      if (String(candidate.datasourceId ?? '') !== String(request.datasourceId ?? '')) return false
-      if (!candidate.sourceConfig) return true
-      try {
-        const stored = typeof candidate.sourceConfig === 'string' ? JSON.parse(candidate.sourceConfig) : candidate.sourceConfig
-        return Object.entries(request.sourceConfig ?? {}).every(([key, value]) => String(stored?.[key] ?? '') === String(value ?? ''))
-      } catch {
-        return false
-      }
-    })
-    if (existing) {
-      ds.backendDatasetId = String(existing.id)
-      continue
-    }
-
-    const result = await backend.confirmDatasetDraft({
-      ...request,
-      name: ds.alias,
-      description: `仪表盘组件输入数据集：${ds.alias}`,
-    })
-    ds.backendDatasetId = String(result.datasetId)
+    await persistDatasetInputOnce(ds, existingDatasets)
   }
 }
 

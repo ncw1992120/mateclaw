@@ -12,8 +12,10 @@ import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
 import vip.mate.dataagent.model.AloudataDimensionEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasetEntity;
+import vip.mate.dataagent.model.DatasetFieldEntity;
 import vip.mate.dataagent.repository.AloudataDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricMapper;
+import vip.mate.dataagent.repository.DatasetFieldMapper;
 import vip.mate.dataagent.repository.DatasetMapper;
 import vip.mate.dataagent.service.AloudataService;
 
@@ -27,6 +29,7 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     private final DatasetMapper datasetMapper;
     private final AloudataMetricMapper aloudataMetricMapper;
     private final AloudataDimensionMapper aloudataDimensionMapper;
+    private final DatasetFieldMapper datasetFieldMapper;
     private final AloudataService aloudataService;
     private final ObjectMapper mapper;
 
@@ -35,13 +38,37 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     @Override public DatasetInputDescriptor describe(DatasetAccessContext context, long datasetId) {
         DatasetEntity dataset = require(context, datasetId);
         Map<String, Object> config = config(dataset);
-        // 展示字段标题默认取 Aloudata 平台的「指标名称/维度名称」（metricDisplayName/dimDisplayName），
-        // 未同步或平台未配置中文名时回退技术名。
+        // 展示字段标题优先级：创建数据集时冻结的展示名快照（dataagent_dataset_field.columnAlias）
+        // > 同步表实时值（metricDisplayName/dimDisplayName）> 技术名。
+        // 快照让查询配置回显与同步表的后续变化解耦。
+        Map<String, String> snapshot = snapshotDisplayNames(datasetId);
         Map<String, String> displayNames = aloudataDisplayNames(dataset.getDatasourceId());
         List<DatasetColumn> columns = new ArrayList<>();
-        strings(config.get("dimensions")).forEach(name -> columns.add(new DatasetColumn(name, displayNames.getOrDefault(name, name), "STRING", true, "dimension")));
-        strings(config.get("metrics")).forEach(name -> columns.add(new DatasetColumn(name, displayNames.getOrDefault(name, name), "DECIMAL", true, "measure")));
+        strings(config.get("dimensions")).forEach(name -> columns.add(new DatasetColumn(name,
+                titleOf(name, snapshot, displayNames), "STRING", true, "dimension")));
+        strings(config.get("metrics")).forEach(name -> columns.add(new DatasetColumn(name,
+                titleOf(name, snapshot, displayNames), "DECIMAL", true, "measure")));
         return new DatasetInputDescriptor(datasetId, dataset.getName(), DatasetSourceType.ALOUDATA_METRICS, columns, dataset.getRowCount(), Map.of("datasourceId", dataset.getDatasourceId()), null);
+    }
+
+    private String titleOf(String name, Map<String, String> snapshot, Map<String, String> displayNames) {
+        String title = snapshot.getOrDefault(name, displayNames.getOrDefault(name, name));
+        return title == null || title.isBlank() ? name : title;
+    }
+
+    /** 创建数据集时冻结的展示名快照（columnAlias）；旧数据集无快照返回空 Map。 */
+    private Map<String, String> snapshotDisplayNames(long datasetId) {
+        try {
+            Map<String, String> result = new HashMap<>();
+            datasetFieldMapper.selectList(new LambdaQueryWrapper<DatasetFieldEntity>()
+                            .eq(DatasetFieldEntity::getDatasetId, datasetId)
+                            .eq(DatasetFieldEntity::getDeleted, 0))
+                    .forEach(field -> putIfNotBlank(result, field.getColumnName(), field.getColumnAlias()));
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标&维度] 读取展示名快照失败 datasetId={}: {}", datasetId, e.getMessage());
+            return Map.of();
+        }
     }
 
     /** 技术名 → 平台展示名映射；元数据查询失败不阻断数据集描述。 */

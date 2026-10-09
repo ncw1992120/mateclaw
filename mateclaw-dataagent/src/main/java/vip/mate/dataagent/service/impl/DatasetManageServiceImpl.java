@@ -43,6 +43,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private final DatasourceMapper datasourceMapper;
     private final DatasourceTableMapper datasourceTableMapper;
     private final DatasourceColumnMapper datasourceColumnMapper;
+    private final AloudataMetricMapper aloudataMetricMapper;
+    private final AloudataDimensionMapper aloudataDimensionMapper;
     private final ObjectMapper objectMapper;
     private final WorkspaceGuard workspaceGuard;
     private final DatasourceManageService datasourceManageService;
@@ -201,8 +203,72 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             Long fieldCount = countFields(entity.getId());
             entity.setColumnCount(fieldCount.intValue());
             datasetMapper.updateById(entity);
+        } else if (typedDefinition instanceof DatasetSourceDefinition.AloudataMetricsDefinition metricsDefinition) {
+            // 添加即落库快照：把选中指标/维度的平台展示名冻结进字段表，
+            // 查询配置回显读数据集自身快照，不再依赖同步表接口的实时值。
+            importAloudataMetricDimFields(entity, metricsDefinition);
         }
         return toVO(entity);
+    }
+
+    /**
+     * Aloudata 指标&维度数据集创建时快照展示名：按同步表把 metricDisplayName/dimDisplayName
+     * 写入 dataagent_dataset_field.columnAlias（技术名保留在 columnName）。
+     * 同步表读取失败不阻断创建，此时回退技术名，describe 仍会按同步表兜底。
+     */
+    private void importAloudataMetricDimFields(DatasetEntity entity,
+                                               DatasetSourceDefinition.AloudataMetricsDefinition definition) {
+        Map<String, String> displayNames = aloudataDisplayNames(definition.datasourceId());
+        int ordinal = 1;
+        for (String dim : definition.dimensions()) {
+            insertAloudataField(entity, dim, displayNames.getOrDefault(dim, dim),
+                    "STRING", DataAgentConstants.FIELD_CATEGORY_DIMENSION, ordinal++);
+        }
+        for (String metric : definition.metrics()) {
+            insertAloudataField(entity, metric, displayNames.getOrDefault(metric, metric),
+                    "DECIMAL", DataAgentConstants.FIELD_CATEGORY_MEASURE, ordinal++);
+        }
+        entity.setColumnCount(countFields(entity.getId()));
+        datasetMapper.updateById(entity);
+    }
+
+    private void insertAloudataField(DatasetEntity entity, String name, String displayName,
+                                     String dataType, String fieldCategory, int ordinal) {
+        if (name == null || name.isBlank()) return;
+        DatasetFieldEntity field = new DatasetFieldEntity();
+        field.setDatasetId(entity.getId());
+        field.setColumnName(name);
+        field.setColumnAlias(displayName);
+        field.setDataType(dataType);
+        field.setFieldCategory(fieldCategory);
+        field.setNullable(true);
+        field.setOrdinalPosition(ordinal);
+        field.setDatasourceId(entity.getDatasourceId());
+        field.setDeleted(0);
+        datasetFieldMapper.insert(field);
+    }
+
+    /** 技术名 → 平台展示名（读同步表）；元数据查询失败不阻断数据集创建。 */
+    private Map<String, String> aloudataDisplayNames(Long datasourceId) {
+        Map<String, String> result = new HashMap<>();
+        if (datasourceId == null) return result;
+        try {
+            aloudataMetricMapper.selectList(new LambdaQueryWrapper<AloudataMetricEntity>()
+                            .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
+                            .select(AloudataMetricEntity::getMetricName, AloudataMetricEntity::getMetricDisplayName))
+                    .forEach(metric -> putIfNotBlank(result, metric.getMetricName(), metric.getMetricDisplayName()));
+            aloudataDimensionMapper.selectList(new LambdaQueryWrapper<AloudataDimensionEntity>()
+                            .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
+                            .select(AloudataDimensionEntity::getDimName, AloudataDimensionEntity::getDimDisplayName))
+                    .forEach(dim -> putIfNotBlank(result, dim.getDimName(), dim.getDimDisplayName()));
+        } catch (Exception e) {
+            log.warn("[Aloudata指标&维度] 创建快照读取平台展示名失败 datasourceId={}: {}", datasourceId, e.getMessage());
+        }
+        return result;
+    }
+
+    private void putIfNotBlank(Map<String, String> map, String name, String displayName) {
+        if (name != null && !name.isBlank() && displayName != null && !displayName.isBlank()) map.put(name, displayName);
     }
 
     private Long typedDatasourceId(DatasetSourceDefinition definition) {
