@@ -1850,6 +1850,33 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   cursor: grabbing;
 }
 
+/* 隐藏标题栏（title-bar-hidden）：工具条整体收为零高不占位（与内联筛选组件同构），
+   仅删除按钮悬浮右上角；标题/图标/示例水印随标题栏整体隐藏。
+   拖动仍可从卡片空白处发起（handleItemPointerDown），删除与右键菜单保留。 */
+.grid-item-toolbar.title-bar-hidden {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.grid-item-toolbar.title-bar-hidden .grid-item-delete {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.grid-item-toolbar.title-bar-hidden .sample-data-watermark--titlebar {
+  display: none;
+}
+
 .grid-item-title {
   font-size: 13px;
   font-weight: 500;

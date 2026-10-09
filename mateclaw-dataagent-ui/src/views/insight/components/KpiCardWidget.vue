@@ -1,7 +1,8 @@
 <template>
   <div ref="rootRef" class="kpi-card-widget">
     <div class="kpi-card-inner">
-      <div v-if="(showTitle !== false && component.titleBarStyle !== 'hidden') || showTimeFilter" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+      <!-- 隐藏标题栏：整个标题栏（含组件级时间筛选）随标题一并隐藏 -->
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-card-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
         <div class="kpi-title-row">
           <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="kpi-header-title"><DashboardComponentIcon type="kpi" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</span>
         </div>

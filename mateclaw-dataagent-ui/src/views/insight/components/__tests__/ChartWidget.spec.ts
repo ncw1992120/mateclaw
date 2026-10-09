@@ -50,6 +50,16 @@ describe('ChartWidget', () => {
     expect(wrapper.find('.chart-header').exists()).toBe(false)
   })
 
+  it('hides the whole title bar (including the in-component time filter) when the title bar is hidden', () => {
+    const wrapper = mount(ChartWidget, {
+      props: { component: { ...component, titleBarStyle: 'hidden', enableTimeFilter: true } },
+      global: { plugins: [i18n], stubs: { 'el-date-picker': true } },
+    })
+
+    expect(wrapper.find('.chart-header').exists()).toBe(false)
+    expect(wrapper.find('.chart-time-filter').exists()).toBe(false)
+  })
+
   it('applies the configured title bar style', () => {
     const wrapper = mount(ChartWidget, {
       props: { component: { ...component, titleBarStyle: 'accent' } as any },
