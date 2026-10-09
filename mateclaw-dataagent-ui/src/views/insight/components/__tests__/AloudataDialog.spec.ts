@@ -533,7 +533,7 @@ describe('Aloudata 指标&维度选择', () => {
     expect(getAloudataMetricDetail).toHaveBeenCalledWith('aloudata-1', 'technical_rate')
   })
 
-  it('disables metrics that do not support every selected dimension', async () => {
+  it('does not validate selected dimensions against candidate metrics', async () => {
     state.ui.aloudata.metrics = []
     state.ui.aloudata.dims = ['region']
     const wrapper = mount(AloudataDialog, { global: { stubs } })
@@ -545,7 +545,8 @@ describe('Aloudata 指标&维度选择', () => {
 
     const metricA = wrapper.find('.metric-picker-popup').findAll('.directory-item')
       .find((item) => item.text().includes('metric_a'))
-    expect(metricA?.find('input').element.disabled).toBe(true)
+    expect(metricA?.find('input').element.disabled).toBe(false)
+    expect(metricA?.find('[data-tooltip]').exists()).toBe(false)
   })
 
   it('allows metrics with different dimension sets when they support the selected dimensions', async () => {
@@ -580,7 +581,7 @@ describe('Aloudata 指标&维度选择', () => {
     expect(candidate?.find('input').element.disabled).toBe(false)
   })
 
-  it('can hide metrics that are incompatible with the selected dimensions', async () => {
+  it('does not hide candidate metrics based on selected dimensions', async () => {
     state.ui.aloudata.metrics = []
     state.ui.aloudata.dims = ['region']
     const wrapper = mount(AloudataDialog, { global: { stubs } })
@@ -600,8 +601,8 @@ describe('Aloudata 指标&维度选择', () => {
 
     expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(2)
     await wrapper.find('.metric-picker-popup [role="switch"]').trigger('click')
-    expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(1)
-    expect(wrapper.find('.metric-picker-popup').text()).not.toContain('指标 A')
+    expect(wrapper.findAll('.metric-picker-popup .directory-item')).toHaveLength(2)
+    expect(wrapper.find('.metric-picker-popup').text()).toContain('指标 A')
   })
 
   it('loads and displays live metric details when hovering a metric', async () => {

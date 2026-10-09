@@ -144,7 +144,6 @@
                         :kind="'metric'"
                         :field="field.source as AloudataSyncedMetric"
                         :selected="ui.aloudata.metrics.includes(field.code)"
-                        :unavailable-reason="isMetricUnavailable(field.source as AloudataSyncedMetric) ? metricUnavailableReason(field.source as AloudataSyncedMetric) : ''"
                         :details="metricDetails[field.code]"
                         :loading="metricDetailLoading[field.code]"
                         @toggle="(checked) => toggleSelection('metrics', field.code, checked)"
@@ -540,16 +539,6 @@ function dimensionUnavailableReason(dimName: string) {
     : ''
 }
 
-function isMetricUnavailable(item: { availableDimensions?: string[] | null }) {
-  return ui.aloudata.dims.length > 0 && (!Array.isArray(item.availableDimensions)
-    || ui.aloudata.dims.some((dimName) => !item.availableDimensions!.includes(dimName)))
-}
-
-function metricUnavailableReason(item: { availableDimensions?: string[] | null }) {
-  return Array.isArray(item.availableDimensions)
-    ? '该指标不支持已选维度'
-    : '无法校验该指标对已选维度的支持情况'
-}
 function updatePickerViewportLayout(kind: 'metric' | 'dimension') {
   const trigger = kind === 'metric' ? metricPickerTriggerEl.value : dimensionPickerTriggerEl.value
   if (!trigger) return
@@ -715,14 +704,10 @@ function toDirectoryTree<T extends AloudataSyncedMetric | AloudataSyncedDimensio
       .filter((item) => {
         const code = kind === 'metric' ? (item as AloudataSyncedMetric).metricName : (item as AloudataSyncedDimension).dimName
         const label = kind === 'metric' ? (item as AloudataSyncedMetric).metricDisplayName : (item as AloudataSyncedDimension).dimDisplayName
-        const unavailable = kind === 'metric'
-          ? isMetricUnavailable(item as AloudataSyncedMetric)
-          : Boolean(dimensionUnavailableReason(code))
+        const unavailable = kind === 'dimension' && Boolean(dimensionUnavailableReason(code))
         return (!keyword || `${code} ${label || ''}`.toLocaleLowerCase().includes(keyword)
           || category.categoryName.toLocaleLowerCase().includes(keyword))
-          && (!hideUnavailable.value || !unavailable || (kind === 'metric'
-            ? ui.aloudata.metrics.includes(code)
-            : ui.aloudata.dims.includes(code)))
+          && (!hideUnavailable.value || !unavailable || ui.aloudata.dims.includes(code))
       })
       .map((item): DirectoryField => {
         const code = kind === 'metric' ? (item as AloudataSyncedMetric).metricName : (item as AloudataSyncedDimension).dimName
