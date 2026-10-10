@@ -104,4 +104,37 @@ describe('筛选器组件的左右内联布局契约', () => {
     expect(children[0].classList.contains('filter-control-content')).toBe(true)
     expect(children[0].querySelector('el-date-picker-stub')).not.toBeNull()
   })
+
+  it('编辑态强制 showTitle:true 且标题栏隐藏时，筛选器内联标签仍随标题栏一并摘掉', () => {
+    const wrapper = mount(FilterSelectWidget, {
+      props: { component: { ...filterComponent, titleBarStyle: 'hidden' }, showTitle: true },
+      global: { plugins: [i18n], stubs },
+    })
+
+    // 画布此前强制 showTitle:true，导致 titleBarStyle:'hidden' 失效、内联标签残留。
+    expect(wrapper.find('.filter-control-label').exists()).toBe(false)
+    const body = wrapper.find('.filter-control-widget')
+    expect(body.classes()).toContain('filter-control-label-hidden')
+    expect(body.classes()).toContain('title-bar-hidden')
+    const children = Array.from(body.element.children)
+    expect(children.length).toBe(1)
+    expect(children[0].classList.contains('filter-control-content')).toBe(true)
+    expect(children[0].querySelector('el-select-stub')).not.toBeNull()
+  })
+
+  it('编辑态强制 showTitle:true 且标题栏隐藏时，时间筛选器内联标签仍随标题栏一并摘掉', () => {
+    const wrapper = mount(TimeFilterWidget, {
+      props: { component: { ...timeComponent, titleBarStyle: 'hidden' }, showTitle: true },
+      global: { plugins: [i18n], stubs },
+    })
+
+    expect(wrapper.find('.filter-control-label').exists()).toBe(false)
+    const body = wrapper.find('.filter-control-widget')
+    expect(body.classes()).toContain('filter-control-label-hidden')
+    expect(body.classes()).toContain('title-bar-hidden')
+    const children = Array.from(body.element.children)
+    expect(children.length).toBe(1)
+    expect(children[0].classList.contains('filter-control-content')).toBe(true)
+    expect(children[0].querySelector('el-date-picker-stub')).not.toBeNull()
+  })
 })

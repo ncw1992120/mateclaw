@@ -223,7 +223,7 @@
                 v-else-if="getComponent(item.i)?.type === 'filter'"
                 :component="getWidgetComponent(item.i)!"
                 :model-value="runtimeFilterState?.[item.i] ? (runtimeFilterState[item.i].value ?? null) : undefined"
-                :show-title="true"
+                :show-title="getComponent(item.i)?.titleBarStyle !== 'hidden'"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleFilterChange(item.i, payload)"
@@ -233,7 +233,7 @@
                 :component="getWidgetComponent(item.i)!"
                 :model-value="runtimeFilterState?.[item.i]?.value"
                 :time-granularity="runtimeFilterState?.[item.i]?.timeGranularity"
-                :show-title="true"
+                :show-title="getComponent(item.i)?.titleBarStyle !== 'hidden'"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
@@ -2029,6 +2029,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   position: absolute;
   top: 6px;
   right: 8px;
+  z-index: 4;
   pointer-events: auto;
 }
 

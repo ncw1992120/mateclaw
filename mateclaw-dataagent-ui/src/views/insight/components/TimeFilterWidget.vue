@@ -68,7 +68,9 @@ const props = defineProps<{
   dashboardTheme?: ResolvedDashboardTheme
 }>()
 
-const showLabel = computed(() => props.showTitle === true || (props.showTitle !== false && props.component.titleBarStyle !== 'hidden'))
+// 隐藏标题栏（titleBarStyle: 'hidden'）对时间筛选器同样生效：即便外层把 show-title 置为 true，
+// 只要组件自身标记为隐藏，内联标签仍随标题栏一并摘掉，仅保留控件 + 画布悬浮删除按钮。
+const showLabel = computed(() => props.showTitle !== false && props.component.titleBarStyle !== 'hidden')
 
 const emit = defineEmits<{
   (e: 'change', payload: { field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void

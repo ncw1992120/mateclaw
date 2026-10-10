@@ -104,7 +104,7 @@
         @mousedown="onChildMouseDown($event, child)"
         @dragstart.stop.prevent
       >
-        <div v-if="isTitleVisible(child.titleBarStyle) && !isInlineFilterChild(child)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
+        <div v-if="isChildHeadVisible(child)" class="cc-child-head" :class="`title-bar-${child.titleBarStyle ?? 'standard'}`">
           <input
             v-if="editable && editingChildId === child.id"
             ref="childTitleInput"
@@ -161,6 +161,18 @@
             title="未绑定数据源，当前为示例内容"
           >示例数据</div>
         </div>
+        <!-- 头部不可见（隐藏标题栏 / 内联筛选子组件）时，删除入口悬浮在子卡片右上角：
+             所有层级子组件（递归）都必须有删除 x，不能随标题栏一起消失 -->
+        <button
+          v-if="editable && !isChildHeadVisible(child)"
+          type="button"
+          class="cc-child-del cc-child-del--float"
+          :aria-label="`删除子组件 ${child.title}`"
+          :title="t('insight.combination.deleteChild')"
+          @click.stop="deleteChild(child.id)"
+        >
+          <el-icon :size="10"><Close /></el-icon>
+        </button>
         <!-- 子组件真实渲染（复用顶层 widget 组件；v1 子卡片数据接入下轮） -->
         <div class="cc-child-body">
           <ComponentQueryState
@@ -208,7 +220,7 @@
             v-else-if="child.type === 'filter'"
             :component="childWidgetComponent(child)"
             :model-value="runtimeFilterState?.[child.id] ? (runtimeFilterState[child.id].value ?? null) : undefined"
-            :show-title="true"
+            :show-title="child.titleBarStyle !== 'hidden'"
             :dashboard-theme="dashboardTheme"
             @change="(payload) => emit('filter-change', { componentId: child.id, ...payload })"
           />
@@ -217,7 +229,7 @@
             :component="toWidgetComponent(child)"
             :model-value="runtimeFilterState?.[child.id]?.value"
             :time-granularity="runtimeFilterState?.[child.id]?.timeGranularity"
-            :show-title="true"
+            :show-title="child.titleBarStyle !== 'hidden'"
             :dashboard-theme="dashboardTheme"
             @change="(payload) => emit('time-filter-change', { componentId: child.id, ...payload })"
           />
@@ -556,6 +568,12 @@ const cfg = computed<InsightCombinationConfig>(() => props.component.containerCo
 
 function isTitleVisible(titleBarStyle: InsightComponent['titleBarStyle']): boolean {
   return titleBarStyle !== 'hidden'
+}
+
+/** 子卡片标题条是否渲染。头部不渲染（隐藏标题栏 / 内联筛选子组件）时，
+    删除入口改由 .cc-child-del--float 悬浮在子卡片右上角提供，保证递归每一层都可删除。 */
+function isChildHeadVisible(child: InsightCombinationChild): boolean {
+  return isTitleVisible(child.titleBarStyle) && !isInlineFilterChild(child)
 }
 
 const rootStyle = computed<Record<string, string>>(() => {
@@ -1365,6 +1383,9 @@ const tabNav = useTabKeyboard(
 .cc-child-title { font-size: 12px; font-weight: 500; color: var(--db-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-child-del { border: none; background: transparent; color: var(--db-text-muted); cursor: pointer; padding: 2px; border-radius: 4px; line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
 .cc-child-del:hover { background: var(--db-danger-bg); color: var(--db-danger); }
+/* 头部不可见（隐藏标题栏 / 内联筛选子组件）时的悬浮删除入口：
+   与画布 .title-bar-hidden 的悬浮删除同构，右上角常驻；z-index 压过子卡片内容与 ::before 色条 */
+.cc-child-del--float { position: absolute; top: 6px; right: 8px; z-index: 6; }
 .cc-child-body { flex: 1; overflow: hidden; min-height: 0; border-radius: 0 0 7px 7px; }
 .cc-child.inline-filter-child { border: 0; background: transparent; box-shadow: none; }
 .cc-child.inline-filter-child .cc-child-body { overflow: visible; border-radius: 0; }

@@ -501,6 +501,28 @@ describe('DashboardCanvas keyboard interaction', () => {
     expect(wrapper.findComponent({ name: 'TimeFilterWidget' }).props('component')).toEqual(timeFilter)
   })
 
+  it('隐藏标题栏的筛选器卡片仍保留右上角删除按钮', () => {
+    const filter = {
+      id: 'filter-1',
+      type: 'filter' as const,
+      title: '区域',
+      titleBarStyle: 'hidden' as const,
+      position: { x: 0, y: 0, w: 4, h: 2 },
+    }
+    const wrapper = mount(DashboardCanvas, {
+      props: { components: [filter], editable: true },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    const toolbars = wrapper.findAll('.grid-item-toolbar')
+    expect(toolbars.length).toBe(1)
+    expect(toolbars[0].classes()).toContain('title-bar-hidden')
+    // 隐藏整个标题栏后，删除组件用的 x 必须仍悬浮在右上角
+    const deletes = wrapper.findAll('.grid-item-delete')
+    expect(deletes.length).toBe(1)
+    expect(deletes[0].attributes('aria-label')).toContain('删除组件')
+  })
+
   it('restores runtime values into global filter controls after the preview canvas remounts', () => {
     const filter = {
       id: 'metric-filter',

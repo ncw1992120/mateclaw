@@ -1087,4 +1087,68 @@ describe('CombinationCardWidget · 页签移动与复制', () => {
     wrapper.unmount()
     preview.unmount()
   })
+
+  it('头部不可见的子组件（内联筛选 / 隐藏标题栏）仍有右上角悬浮删除按钮，点击可删除', async () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: true,
+        component: {
+          id: 'del-combo', type: 'combination', title: '组合卡片',
+          children: [
+            { id: 'child-filter', type: 'filter', title: '策略名称', config: { field: 'strategy_name' }, layout: { x: 0, y: 0, col: 6, h: 80 } },
+            { id: 'child-time', type: 'timeFilter', title: '策略日期', config: { field: 'strategy_date' }, layout: { x: 0, y: 90, col: 6, h: 80 } },
+            { id: 'child-hidden-table', type: 'table', title: '数据表格', titleBarStyle: 'hidden', layout: { x: 0, y: 180, col: 6, h: 120 } },
+            { id: 'child-normal', type: 'table', title: '普通表格', layout: { x: 0, y: 310, col: 6, h: 120 } },
+          ],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    // 内联筛选与隐藏标题栏的子组件：标题条不渲染，但悬浮删除按钮必须存在
+    expect(wrapper.find('[data-child="child-filter"] .cc-child-head').exists()).toBe(false)
+    expect(wrapper.find('[data-child="child-filter"] .cc-child-del--float').exists()).toBe(true)
+    expect(wrapper.find('[data-child="child-time"] .cc-child-del--float').exists()).toBe(true)
+    expect(wrapper.find('[data-child="child-hidden-table"] .cc-child-del--float').exists()).toBe(true)
+    // 普通子组件：删除按钮仍在标题条内，不额外出现悬浮钮
+    expect(wrapper.find('[data-child="child-normal"] .cc-child-head .cc-child-del').exists()).toBe(true)
+    expect(wrapper.find('[data-child="child-normal"] .cc-child-del--float').exists()).toBe(false)
+
+    // 点击悬浮删除：内联筛选子组件直接向外冒泡 delete-child
+    await wrapper.get('[data-child="child-filter"] .cc-child-del--float').trigger('click')
+    expect(wrapper.emitted('delete-child')?.[0]?.[0]).toEqual({ containerId: 'del-combo', childId: 'child-filter' })
+  })
+
+  it('预览态（非编辑）不渲染悬浮删除按钮', () => {
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: false,
+        component: {
+          id: 'del-combo-preview', type: 'combination', title: '组合卡片',
+          children: [
+            { id: 'child-filter', type: 'filter', title: '策略名称', config: { field: 'strategy_name' }, layout: { x: 0, y: 0, col: 6, h: 80 } },
+          ],
+          containerConfig, position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    expect(wrapper.find('.cc-child-del--float').exists()).toBe(false)
+  })
 })
