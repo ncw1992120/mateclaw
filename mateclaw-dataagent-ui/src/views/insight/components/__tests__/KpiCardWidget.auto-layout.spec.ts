@@ -68,7 +68,7 @@ function machineMetric(fieldKey: string, index: number): KpiMetricConfig {
   }
 }
 
-function mountWidget(metrics: KpiMetricConfig[]) {
+function mountWidget(metrics: KpiMetricConfig[], previewAutoLayout = false) {
   const component = {
     id: 'kpi-card',
     type: 'kpi',
@@ -77,7 +77,7 @@ function mountWidget(metrics: KpiMetricConfig[]) {
     kpiMetrics: metrics,
   } as unknown as InsightComponent
   const wrapper = mount(KpiCardWidget, {
-    props: { component, editable: true },
+    props: { component, editable: true, previewAutoLayout },
     global: { plugins: [i18n], stubs: { 'el-icon': true, 'el-date-picker': true } },
   })
   return { component, wrapper }
@@ -132,6 +132,19 @@ describe('KpiCardWidget · 自动铺排', () => {
     expect(styleOf(wrapper, '[data-metric="m0"]').top).toBe('20px')
     expect(styleOf(wrapper, '[data-metric="m0"]').width).toBe('160px')
     expect(styleOf(wrapper, '[data-metric="m0"] .kpi-metric-value').fontSize).toBe('28px')
+  })
+
+  it('预览宽度自适应时临时接管手动布局并根据可用区居中重排', async () => {
+    FakeResizeObserver.next = { w: 600, h: 200 }
+    const manual = { ...machineMetric('m0', 0), x: 10, y: 20, w: 160, h: 80 }
+    const savedLayout = { x: manual.x, y: manual.y, w: manual.w, h: manual.h }
+    const { component, wrapper } = mountWidget([manual, machineMetric('m1', 1)], true)
+    await nextTick()
+
+    expect(wrapper.get('.kpi-metric-group').attributes('data-kpi-auto-layout')).toBe('on')
+    expect(styleOf(wrapper, '[data-metric="m0"]').left).not.toBe('10px')
+    expect(styleOf(wrapper, '[data-metric="m0"] .kpi-metric-value').fontSize).not.toBe('28px')
+    expect({ x: component.kpiMetrics![0].x, y: component.kpiMetrics![0].y, w: component.kpiMetrics![0].w, h: component.kpiMetrics![0].h }).toEqual(savedLayout)
   })
 
   it('可用区尺寸未知时不接管，回落持久化坐标', async () => {

@@ -189,6 +189,7 @@
             :component-data="childComponentData(child)"
             :show-title="false"
             :editable="editable"
+            :preview-auto-layout="!editable && previewFillWidth"
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
             @open-metric-style="(payload) => emit('open-metric-style', { ...payload, containerId: component.id, childId: child.id })"

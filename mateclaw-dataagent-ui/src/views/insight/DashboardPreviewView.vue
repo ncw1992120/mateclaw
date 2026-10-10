@@ -198,6 +198,7 @@ import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
 import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
+import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
@@ -242,8 +243,14 @@ const aiAnalysisContents = reactive<Record<string, string>>({})
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
 
-/** 预览态「自适应宽度」开关：收拢栅格列数铺满浏览器宽度，再点恢复 100% 原始大小（开关状态传给画布） */
+/** 预览态「自适应宽度」：按仪表盘保存用户偏好，离开后再次进入仍恢复原状态。 */
 const previewFillWidth = ref(false)
+
+watch(() => props.dashboardId, (dashboardId) => {
+  previewFillWidth.value = readDashboardPreviewFillWidth(dashboardId)
+}, { immediate: true })
+
+watch(previewFillWidth, (enabled) => saveDashboardPreviewFillWidth(props.dashboardId, enabled))
 
 /** 切换预览态「自适应宽度」 */
 function togglePreviewFillWidth(): void {

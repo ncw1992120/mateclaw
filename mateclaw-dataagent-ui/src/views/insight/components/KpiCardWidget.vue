@@ -175,6 +175,8 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 预览画布自适应宽度时，仅在视图层临时强制指标自动铺排，不写回用户布局。 */
+  previewAutoLayout?: boolean
   /** 仪表盘解析后的主题；未传时保持旧卡片视觉 */
   dashboardTheme?: ResolvedDashboardTheme
   /** 正在编辑的组件标题图标样式即时预览 */
@@ -183,6 +185,7 @@ const props = withDefaults(defineProps<{
   tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
 }>(), {
   editable: false,
+  previewAutoLayout: false,
 })
 
 const emit = defineEmits<{
@@ -358,6 +361,7 @@ const layoutBroken = computed(() => {
 /** 是否处于自动铺排：新指标集合、机器默认布局、或破损布局时接管；手工调整仅锁定当前指标集合。 */
 const autoLayout = computed(() => {
   if (!autoPlan.value) return false
+  if (props.previewAutoLayout) return true
   if (sessionAdjustedIds.value.includes(props.component.id)) return false
   const sources = visibleSourceIndexes.value
   const allMachine = visibleMetrics.value.every((metric, index) => isMachineMetricLayout(metric, sources[index] ?? index))

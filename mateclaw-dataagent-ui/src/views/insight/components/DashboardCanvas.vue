@@ -187,6 +187,7 @@
                 :component="getWidgetComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :editable="editable"
+                :preview-auto-layout="!editable && previewFillWidth"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"

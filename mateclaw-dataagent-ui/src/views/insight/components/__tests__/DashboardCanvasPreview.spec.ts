@@ -14,7 +14,7 @@ import DashboardCanvas from '../DashboardCanvas.vue'
 const stubs = {
   GridLayout: { name: 'GridLayout', props: ['colNum', 'layout'], template: '<div><slot /></div>' },
   GridItem: { name: 'GridItem', template: '<div class="vgl-item"><slot /></div>' },
-  KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData'], template: '<div />' },
+  KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData', 'previewAutoLayout'], template: '<div />' },
   ChartWidget: { name: 'ChartWidget', props: ['componentData'], template: '<div />' },
   DataTableWidget: { name: 'DataTableWidget', props: ['component', 'componentData', 'showTitle', 'sampleMode'], template: '<div />' },
   FilterSelectWidget: { name: 'FilterSelectWidget', props: ['component', 'modelValue'], template: '<div />' },
@@ -154,6 +154,17 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     await wrapper.setProps({ previewFillWidth: true })
     await nextTick()
     expect(wrapper.getComponent({ name: 'GridLayout' }).props('colNum')).toBe(16)
+    wrapper.unmount()
+  })
+
+  it('只在预览自适应宽度时将 KPI 指标重排模式传入卡片', async () => {
+    const wrapper = mountPreview()
+    const kpiWidget = wrapper.getComponent({ name: 'KpiCardWidget' })
+    expect(kpiWidget.props('previewAutoLayout')).toBe(false)
+
+    await wrapper.setProps({ previewFillWidth: true })
+    await nextTick()
+    expect(wrapper.getComponent({ name: 'KpiCardWidget' }).props('previewAutoLayout')).toBe(true)
     wrapper.unmount()
   })
 
