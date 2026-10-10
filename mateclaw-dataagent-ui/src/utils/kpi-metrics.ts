@@ -68,6 +68,15 @@ export const KPI_FONT_OPTIONS: Array<{ key: string; label: string }> = [
   { key: 'roboto', label: 'Roboto' },
 ]
 
+/** 四个字段的出厂字号。既是 `defaultMetricStyles()` 的唯一来源，也是「字号是否被用户显式改过」的判定基准
+ *  （见 `isDefaultMetricFontSize` / 自动铺排的字号适配）。 */
+export const KPI_DEFAULT_FONT_SIZE: Record<KpiMetricField, number> = {
+  name: 14,
+  value: 28,
+  unit: 15,
+  helper: 12,
+}
+
 /** 单个字段样式 */
 export function fieldStyle(size: number, color: string, bold: 'bold' | 'normal' = 'normal'): KpiMetricFieldStyle {
   return { size, family: 'system', color, colorMode: color ? 'custom' : 'theme', bold }
@@ -76,10 +85,10 @@ export function fieldStyle(size: number, color: string, bold: 'bold' | 'normal' 
 /** 默认样式：指标值加粗，其余常规 */
 export function defaultMetricStyles(): KpiMetricStyles {
   return {
-    name: fieldStyle(14, '', 'normal'),
-    value: fieldStyle(28, '', 'bold'),
-    unit: fieldStyle(15, '', 'normal'),
-    helper: fieldStyle(12, '', 'normal'),
+    name: fieldStyle(KPI_DEFAULT_FONT_SIZE.name, '', 'normal'),
+    value: fieldStyle(KPI_DEFAULT_FONT_SIZE.value, '', 'bold'),
+    unit: fieldStyle(KPI_DEFAULT_FONT_SIZE.unit, '', 'normal'),
+    helper: fieldStyle(KPI_DEFAULT_FONT_SIZE.helper, '', 'normal'),
   }
 }
 
@@ -134,6 +143,222 @@ export function defaultMetricLayout(index: number): Pick<KpiMetricConfig, 'x' | 
  *  用户拖动后坐标任意、缩放会改 w/h —— 都不会命中，保持用户布局不动。 */
 function isLegacyDefaultLayout(m: Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>): boolean {
   return m.w === 284 && m.h === 88 && m.x % 296 === 0 && m.y % 96 === 0
+}
+
+/** 该指标的位置/尺寸是否仍是「机器生成的默认排布」。
+ *  命中当前或任一历史版本的默认公式即算 —— 用户拖动/缩放过的坐标不会命中，
+ *  因此自动铺排只接管「从未被手工调整过」的卡片（见 planKpiAutoLayout）。 */
+export function isMachineMetricLayout(
+  metric: Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>,
+  index: number,
+): boolean {
+  if (isLegacyDefaultLayout(metric)) return true
+  const def = defaultMetricLayout(index)
+  return metric.x === def.x && metric.y === def.y && metric.w === def.w && metric.h === def.h
+}
+
+/* ── 自动铺排（按「指标个数 + 卡片可用区尺寸」计算默认排布）──────────────
+ *
+ * 口径（需求：「配置数据并应用后，指标个数已确定，默认就按个数与卡片大小适配
+ * 字号、行数并居中摆放」）：
+ *   1. 卡片可用区先按「列 × 行」等分，枚举所有列数方案；
+ *   2. 只让单元格达到「舒适最小尺寸」（88×48）的方案优先参与竞争；全都达不到时
+ *      退而求其次取**全局最优**（尽力而为）——面积再小也把整块收进容器并居中，
+ *      而不是放弃后让持久化坐标溢出卡片；
+ *   3. 评分：优先让**字号适配系数**最大（指标值尽量大），同分时取单元格长宽比
+ *      更接近基准比例（160×72）的方案 —— 避免出现又扁又长的指标位；
+ *   4. 单元格尺寸设上限：超过上限的部分不拉伸，留给整块**居中**；
+ *   5. 字号 = 用户字号 × 适配系数（用户显式改过字号的字段不参与，见 autoFitFontSize）。
+ *
+ * 该函数只做几何计算，不读 DOM；可用区尺寸未知（0 / undefined）时返回 null，
+ * 由调用方回落到持久化坐标，保证首帧与无布局环境（如单测 jsdom）行为不变。
+ */
+
+/** 自动铺排的「基准单元格」：出厂字号（展示名 14 / 指标值 28 / 单位 15 / 辅助说明 12）在此尺寸下排版自然。 */
+export const KPI_AUTO_REF_CELL = Object.freeze({ w: 160, h: 72 })
+
+/** 自动铺排的单元格间距（与 defaultMetricLayout 的留白口径一致）。 */
+export const KPI_AUTO_GAP = Object.freeze({ x: 12, y: 12 })
+
+/** 单元格舒适尺寸上限：超过后不再拉伸，剩余空间用于整块居中。 */
+export const KPI_AUTO_MAX_CELL = Object.freeze({ w: 280, h: 96 })
+
+/** 字号适配系数区间（上限防「大卡片小指标被拉成大字号」，下限防字号缩到不可读）。 */
+export const KPI_AUTO_SCALE_MIN = 0.62
+export const KPI_AUTO_SCALE_MAX = 1.5
+
+/** 适配后的最小字号（px）。 */
+export const KPI_AUTO_MIN_FONT = 9
+
+/** 自动铺排结果（相对卡片可用区左上角，单位 px）。 */
+export interface KpiAutoLayoutPlan {
+  /** 列数 */
+  columns: number
+  /** 行数（= ceil(个数 / 列数)） */
+  rows: number
+  /** 单元格宽（未取整，用于字号换算） */
+  cellW: number
+  /** 单元格高（未取整，用于字号换算） */
+  cellH: number
+  /** 横向间距 */
+  gapX: number
+  /** 纵向间距 */
+  gapY: number
+  /** 整块水平居中偏移 */
+  offsetX: number
+  /** 整块垂直居中偏移 */
+  offsetY: number
+  /** 字号适配系数 */
+  scale: number
+}
+
+function clampAutoScale(value: number): number {
+  return Math.min(KPI_AUTO_SCALE_MAX, Math.max(KPI_AUTO_SCALE_MIN, value))
+}
+
+/**
+ * 按指标个数与卡片可用区尺寸计算默认排布。
+ * 尺寸未知（<= 0 / 非有限数）时返回 `null`；面积有效时**总有解**（尽力而为：
+ * 连舒适档都排不下也取全局最优方案收进容器，绝不放弃 —— 放弃只会让持久化坐标溢出卡片）。
+ */
+export function planKpiAutoLayout(count: number, areaW: number, areaH: number): KpiAutoLayoutPlan | null {
+  if (!Number.isFinite(count) || count < 1) return null
+  if (!Number.isFinite(areaW) || !Number.isFinite(areaH) || areaW <= 0 || areaH <= 0) return null
+
+  const gap = KPI_AUTO_GAP
+  const refAspect = KPI_AUTO_REF_CELL.w / KPI_AUTO_REF_CELL.h
+
+  interface Candidate {
+    columns: number
+    rows: number
+    cellW: number
+    cellH: number
+    scale: number
+  }
+
+  /** 方案优劣：先比字号系数（越大越好）→ 再比单元格长宽比是否贴近基准 → 最后比行数（越少越好）。 */
+  const isBetter = (next: Candidate, current: Candidate): boolean => {
+    if (Math.abs(next.scale - current.scale) > 1e-6) return next.scale > current.scale
+    const nextDeviation = Math.abs(Math.log(next.cellW / next.cellH / refAspect))
+    const currentDeviation = Math.abs(Math.log(current.cellW / current.cellH / refAspect))
+    if (Math.abs(nextDeviation - currentDeviation) > 1e-6) return nextDeviation < currentDeviation
+    if (next.rows !== current.rows) return next.rows < current.rows
+    return next.columns < current.columns
+  }
+
+  let chosen: Candidate | null = null
+
+  for (let columns = 1; columns <= count; columns++) {
+    const rows = Math.ceil(count / columns)
+    const slotW = (areaW - (columns - 1) * gap.x) / columns
+    const slotH = (areaH - (rows - 1) * gap.y) / rows
+    if (!(slotW > 0) || !(slotH > 0)) continue
+
+    // 上限制约的是「拉伸」，不限「收缩」：小卡片必须继续收缩才放得下。
+    const cellW = Math.min(slotW, KPI_AUTO_MAX_CELL.w)
+    const cellH = Math.min(slotH, KPI_AUTO_MAX_CELL.h)
+    const candidate: Candidate = {
+      columns,
+      rows,
+      cellW,
+      cellH,
+      scale: clampAutoScale(Math.min(cellW / KPI_AUTO_REF_CELL.w, cellH / KPI_AUTO_REF_CELL.h)),
+    }
+    if (!chosen || isBetter(candidate, chosen)) chosen = candidate
+  }
+
+  if (!chosen) return null
+
+  const totalW = chosen.columns * chosen.cellW + (chosen.columns - 1) * gap.x
+  const totalH = chosen.rows * chosen.cellH + (chosen.rows - 1) * gap.y
+
+  return {
+    columns: chosen.columns,
+    rows: chosen.rows,
+    cellW: chosen.cellW,
+    cellH: chosen.cellH,
+    gapX: gap.x,
+    gapY: gap.y,
+    offsetX: Math.max(0, (areaW - totalW) / 2),
+    offsetY: Math.max(0, (areaH - totalH) / 2),
+    scale: chosen.scale,
+  }
+}
+
+/** 某指标在自动铺排下的盒子（列优先铺排，整体已带居中与间距）。 */
+export function autoMetricLayout(
+  index: number,
+  plan: KpiAutoLayoutPlan,
+): Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'> {
+  const columns = Math.max(1, plan.columns)
+  const column = index % columns
+  const row = Math.floor(index / columns)
+  return {
+    x: Math.round(plan.offsetX + column * (plan.cellW + plan.gapX)),
+    y: Math.round(plan.offsetY + row * (plan.cellH + plan.gapY)),
+    // 向下取整：取整后不会因为浮点误差把单元格挤出可用区。
+    w: Math.floor(plan.cellW),
+    h: Math.floor(plan.cellH),
+  }
+}
+
+/** 布局破损判定容差（px）：盒子边缘相接不算重叠，重叠超过该值才算。 */
+export const KPI_LAYOUT_CONFLICT_EPSILON = 0.5
+
+/**
+ * 持久化布局是否「破损」：任两盒子相交、任一盒子越出可用区（含负坐标）、或坐标非有限数。
+ *
+ * 破损布局不可能是用户有意的排版（重叠 / 溢出卡片没有可解释的摆位意图），
+ * 多半来自历史版本默认公式或模板遗留 —— 自动铺排应当接管修复；
+ * 用户拖出的合法布局（盒子相接不重叠、都在界内）不受影响，仍按持久化坐标渲染。
+ */
+export function hasMetricLayoutConflict(
+  boxes: Array<Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>>,
+  areaW: number,
+  areaH: number,
+): boolean {
+  const eps = KPI_LAYOUT_CONFLICT_EPSILON
+  for (const box of boxes) {
+    if (![box.x, box.y, box.w, box.h].every((v) => Number.isFinite(v))) return true
+    if (box.x < -eps || box.y < -eps) return true
+    if (box.x + box.w > areaW + eps || box.y + box.h > areaH + eps) return true
+  }
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      const a = boxes[i]!
+      const b = boxes[j]!
+      if (
+        a.x < b.x + b.w - eps && b.x < a.x + a.w - eps &&
+        a.y < b.y + b.h - eps && b.y < a.y + a.h - eps
+      ) return true
+    }
+  }
+  return false
+}
+
+/** 某字段的字号是否仍是出厂值。用户显式改过字号的字段不参与自动适配（尊重用户配置）。 */
+export function isDefaultMetricFontSize(field: KpiMetricField, size: number): boolean {
+  return size === KPI_DEFAULT_FONT_SIZE[field]
+}
+
+/** 自动铺排下的字号：字号 × 适配系数，取整并保证不小于最小字号。 */
+export function autoFitFontSize(size: number, scale: number): number {
+  if (!Number.isFinite(size) || size <= 0) return size
+  if (!Number.isFinite(scale) || scale <= 0 || scale === 1) return size
+  return Math.max(KPI_AUTO_MIN_FONT, Math.round(size * scale))
+}
+
+/**
+ * 某盒子尺寸对应的字号适配系数（与 planKpiAutoLayout 同口径）。
+ *
+ * 用于「手动布局」指标：盒子是用户在老看板里摆好的固定尺寸，字号仍按盒子大小自适应
+ * （盒子越接近出厂基准 160×72，字号越接近原值；放大盒子字号跟着大，缩小盒子字号跟着小）。
+ * 这样「居中摆放 + 自适应字体大小」对**所有**指标生效，与卡片是否处于自动排布无关。
+ * 盒子尺寸未知 / 非有限数时回落 1（原样使用用户配置的字号）。
+ */
+export function metricBoxScale(w: number, h: number): number {
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return 1
+  return clampAutoScale(Math.min(w / KPI_AUTO_REF_CELL.w, h / KPI_AUTO_REF_CELL.h))
 }
 
 /** 结果集字段 → 指标默认展示列名（显示名优先，回落字段名） */

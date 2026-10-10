@@ -47,8 +47,15 @@
         </div>
       </div>
 
-      <!-- 指标分组（自由布局）：由结果集字段逐列投影，指标可拖拽定位 + 8 向缩放 -->
-      <div v-if="hasMetricGroup" ref="groupRef" class="kpi-metric-group" :class="{ editing: editable, interacting: movingId !== null || resizingId !== null }">
+      <!-- 指标分组（自由布局）：由结果集字段逐列投影，指标可拖拽定位 + 8 向缩放
+           未被动过手的卡片默认走「自动铺排」：按指标个数与可用区尺寸定列数 / 行数 / 字号并整块居中 -->
+      <div
+        v-if="hasMetricGroup"
+        ref="groupRef"
+        class="kpi-metric-group"
+        :class="{ editing: editable, interacting: movingId !== null || resizingId !== null }"
+        :data-kpi-auto-layout="autoLayout ? 'on' : 'off'"
+      >
         <div
           v-for="metric in visibleMetrics"
           :key="metric.fieldKey"
@@ -60,15 +67,15 @@
           @click.stop="selectMetric(metric.fieldKey)"
           @dragstart.stop.prevent
         >
-          <div class="kpi-metric-name" :style="css(metric.styles.name, metricVisual(metric).textColors.name)">
+          <div class="kpi-metric-name" :style="css(metric.styles.name, metricVisual(metric).textColors.name, 'name', metricFontScale(metric))">
             <el-icon v-if="metricIcon(metric)" class="kpi-metric-icon" :style="{ color: metricVisual(metric).accentColor }" aria-hidden="true"><component :is="metricIcon(metric)" /></el-icon>
             <span>{{ metricLabel(metric) }}</span>
           </div>
           <div class="kpi-metric-valuerow">
-            <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value)">{{ metricValue(metric) }}</span>
-            <span v-if="metric.unit" class="kpi-metric-unit" :style="css(metric.styles.unit, metricVisual(metric).textColors.unit)">{{ metric.unit }}</span>
+            <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value, 'value', metricFontScale(metric))">{{ metricValue(metric) }}</span>
+            <span v-if="metric.unit" class="kpi-metric-unit" :style="css(metric.styles.unit, metricVisual(metric).textColors.unit, 'unit', metricFontScale(metric))">{{ metric.unit }}</span>
           </div>
-          <div v-if="metric.helperText" class="kpi-metric-helper" :style="css(metric.styles.helper, metricVisual(metric).textColors.helper)">{{ metric.helperText }}</div>
+          <div v-if="metric.helperText" class="kpi-metric-helper" :style="css(metric.styles.helper, metricVisual(metric).textColors.helper, 'helper', metricFontScale(metric))">{{ metric.helperText }}</div>
 
           <button
             v-if="editable"
@@ -130,13 +137,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ArrowUp, ArrowDown, EditPen } from '@element-plus/icons-vue'
 import type { InsightComponent, InsightComponentData, KpiItemData, KpiMetricConfig, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 import DashboardTabTitle from './DashboardTabTitle.vue'
-import { resolveMetricVisual, styleToCss, type KpiMetricField } from '@/utils/kpi-metrics'
+import {
+  autoFitFontSize,
+  autoMetricLayout,
+  hasMetricLayoutConflict,
+  isDefaultMetricFontSize,
+  isMachineMetricLayout,
+  metricBoxScale,
+  planKpiAutoLayout,
+  resolveMetricVisual,
+  styleToCss,
+  type KpiMetricField,
+} from '@/utils/kpi-metrics'
 import { resolveDashboardIcon } from '@/utils/dashboard-icon-registry'
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { useFreeInteraction } from '../composables/useFreeInteraction'
@@ -247,6 +265,153 @@ const hasMetricGroup = computed(() => Array.isArray(props.component.kpiMetrics) 
 
 /** 需要展示的指标（按配置顺序，隐藏项不渲染） */
 const visibleMetrics = computed<KpiMetricConfig[]>(() => (props.component.kpiMetrics ?? []).filter((m) => m.visible !== false))
+const visibleMetricSignature = computed(() => JSON.stringify(visibleMetrics.value.map((metric) => metric.fieldKey)))
+
+/* ── 自动铺排：按「指标个数 + 卡片可用区尺寸」定列数 / 行数 / 字号并整块居中 ──────
+ * 几何口径见 utils/kpi-metrics.ts 的 planKpiAutoLayout。
+ *
+ * 两层行为要区分：
+ *   1) 盒子坐标（列数 / 行数 / 摆放）：在以下情形自动计算——
+ *      a. 全部可见指标都还是机器默认排布（从未被手工调整过）；
+ *      b. 持久化布局**破损**（盒子互相重叠 / 越出可用区，多来自历史版本默认公式或
+ *         模板遗留，不可能是用户有意的排版，见 hasMetricLayoutConflict）。
+ *      本会话内用户拖动 / 缩放过的卡片不再自动重排（尊重当次操作结果），
+ *      其余情形按保存的坐标渲染。
+ *   2) 居中 + 字号自适应：对**所有**指标生效，与是否自动排布无关。
+ *      手动布局的指标保留用户摆好的盒子位置，但盒子内仍居中、字号仍按盒子大小自适应。 */
+const groupSize = ref<{ w: number; h: number }>({ w: 0, h: 0 })
+let groupResizeObserver: ResizeObserver | null = null
+
+/** 记录可用区尺寸；尺寸未变则不触发更新，避免 resize 抖动引发多余重渲染。 */
+function setGroupSize(w: number, h: number): void {
+  if (w === groupSize.value.w && h === groupSize.value.h) return
+  groupSize.value = { w, h }
+}
+
+// 只在真实浏览器里量尺寸：无 ResizeObserver 的环境（单测 jsdom）读不到布局，
+// 自动铺排自然关闭并回落持久化坐标，行为与改动前一致。
+watch(groupRef, (el) => {
+  groupResizeObserver?.disconnect()
+  groupResizeObserver = null
+  if (!el || typeof ResizeObserver === 'undefined') return
+  groupResizeObserver = new ResizeObserver((entries) => {
+    const entry = entries[0]
+    const rect = entry?.contentRect
+    if (rect) {
+      setGroupSize(rect.width, rect.height)
+      return
+    }
+    const target = entry?.target as HTMLElement | undefined
+    if (target) setGroupSize(target.clientWidth || target.offsetWidth, target.clientHeight || target.offsetHeight)
+  })
+  groupResizeObserver.observe(el)
+}, { flush: 'post' })
+
+onBeforeUnmount(() => {
+  groupResizeObserver?.disconnect()
+  groupResizeObserver = null
+})
+
+/** 可见指标在组件配置里的原始下标。
+ *  机器默认布局是按**原始下标**生成的，隐藏项不能让下标错位，否则「隐藏一个指标」会被误判成手工布局。 */
+const visibleSourceIndexes = computed<number[]>(() => {
+  const indexes: number[] = []
+  for (const [index, metric] of (props.component.kpiMetrics ?? []).entries()) {
+    if (metric.visible !== false) indexes.push(index)
+  }
+  return indexes
+})
+
+/** 自动铺排方案；可用区尺寸未知时返回 null（面积再小也尽力收进容器，见 planKpiAutoLayout）。 */
+const autoPlan = computed(() => planKpiAutoLayout(visibleMetrics.value.length, groupSize.value.w, groupSize.value.h))
+
+/** 本会话内被用户拖动 / 缩放过的卡片 id：这些卡片不再自动重排，尊重当次操作结果。 */
+const sessionAdjustedIds = ref<string[]>([])
+const reconfiguredMetricSignature = ref<string | null>(null)
+let previousMetricSignature = visibleMetricSignature.value
+
+/** 新应用的数据集改变了可见指标集合时，旧的手动布局不再匹配当前指标组，应重新自动铺排。 */
+watch(visibleMetricSignature, (signature) => {
+  if (signature === previousMetricSignature) return
+  previousMetricSignature = signature
+  reconfiguredMetricSignature.value = signature
+  sessionAdjustedIds.value = sessionAdjustedIds.value.filter((id) => id !== props.component.id)
+}, { flush: 'sync' })
+
+function markSessionAdjusted(): void {
+  const id = props.component.id
+  if (!sessionAdjustedIds.value.includes(id)) {
+    sessionAdjustedIds.value = [...sessionAdjustedIds.value, id]
+  }
+}
+
+/** 持久化布局是否破损：任两可见指标盒子相交、或越出可用区（历史公式 / 模板遗留的典型症状）。 */
+const layoutBroken = computed(() => {
+  if (!autoPlan.value) return false
+  return hasMetricLayoutConflict(
+    visibleMetrics.value.map((metric) => ({ x: metric.x, y: metric.y, w: metric.w, h: metric.h })),
+    groupSize.value.w,
+    groupSize.value.h,
+  )
+})
+
+/** 是否处于自动铺排：新指标集合、机器默认布局、或破损布局时接管；手工调整仅锁定当前指标集合。 */
+const autoLayout = computed(() => {
+  if (!autoPlan.value) return false
+  if (sessionAdjustedIds.value.includes(props.component.id)) return false
+  const sources = visibleSourceIndexes.value
+  const allMachine = visibleMetrics.value.every((metric, index) => isMachineMetricLayout(metric, sources[index] ?? index))
+  return reconfiguredMetricSignature.value === visibleMetricSignature.value || allMachine || layoutBroken.value
+})
+
+/** 各指标实际渲染的盒子：自动铺排时由纯函数算出，否则用持久化坐标。 */
+const renderedBox = computed<Record<string, Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>>>(() => {
+  const plan = autoPlan.value
+  const useAuto = autoLayout.value && !!plan
+  const map: Record<string, Pick<KpiMetricConfig, 'x' | 'y' | 'w' | 'h'>> = {}
+  visibleMetrics.value.forEach((metric, index) => {
+    map[metric.fieldKey] = useAuto && plan
+      ? autoMetricLayout(index, plan)
+      : { x: metric.x, y: metric.y, w: metric.w, h: metric.h }
+  })
+  return map
+})
+
+/**
+ * 某指标的字号适配系数：按「该指标实际占用的盒子」与出厂基准 160×72 的比例缩放。
+ *   - 自动铺排：盒子即自动方案单元格，效果等同 autoPlan.scale；
+ *   - 手动布局（老看板里摆过的指标）：盒子是用户固定尺寸，字号仍按盒子自适应。
+ * 居中 + 字号自适应对**所有**指标生效，与卡片是否自动排布无关。
+ * 盒子尺寸未知时回落 1（原样字号）。
+ */
+function metricFontScale(metric: KpiMetricConfig): number {
+  const box = renderedBox.value[metric.fieldKey] ?? metric
+  return metricBoxScale(box.w, box.h)
+}
+
+/**
+ * 开始拖动 / 缩放前，把当前自动铺排结果**固化**成持久化坐标。
+ *
+ * 自动铺排接管中的卡片（机器默认布局或破损修复），用户动了其中一个指标就该整卡转手动布局；
+ * 若不在按下的这一瞬间固化，其余指标会立刻退回旧的持久化坐标 —— 画面会跳一下。
+ * 固化 + `markSessionAdjusted()` 后 `autoLayout` 自动变 false，后续完全走持久化坐标。
+ *
+ * ⚠️ 必须**逐个发出 `metric-layout-change`**：画布交给卡片的是「结果集投影」后的新对象
+ * （见 `projectPythonResultKpi`，`buildKpiMetrics` 会为每个指标生成新对象），
+ * 只改本地副本会在下一次投影重渲染时被覆盖 —— 和拖动提交走同一条父级更新通道才作数。
+ */
+function materializeAutoLayout(): void {
+  const plan = autoPlan.value
+  if (!plan || !autoLayout.value) return
+  let index = 0
+  for (const metric of props.component.kpiMetrics ?? []) {
+    if (metric.visible === false) continue
+    const box = autoMetricLayout(index, plan)
+    index += 1
+    Object.assign(metric, box)
+    emit('metric-layout-change', { componentId: props.component.id, fieldKey: metric.fieldKey, ...box })
+  }
+}
 
 /** 当前生效的指标值列表（Tab 模式跟随 Tab） */
 const effectiveKpiList = computed<KpiItemData[]>(() => {
@@ -301,17 +466,25 @@ function metricIcon(metric: KpiMetricConfig) {
   return resolveDashboardIcon(metricVisual(metric).iconKey)
 }
 
-function css(style: KpiMetricConfig['styles']['name'], themeColor?: string): string {
-  return styleToCss(style, themeColor)
+/** 字段样式 → 内联 CSS。
+ *  字号自适应对**所有**指标生效：仍是出厂字号的字段按该指标盒子的适配系数缩放；
+ *  用户在样式弹窗里显式改过字号的字段原样渲染，不与用户的显式配置抢方向盘。 */
+function css(style: KpiMetricConfig['styles']['name'], themeColor?: string, field?: KpiMetricField, scale = 1): string {
+  if (!field || scale === 1 || !isDefaultMetricFontSize(field, style.size)) return styleToCss(style, themeColor)
+  return styleToCss({ ...style, size: autoFitFontSize(style.size, scale) }, themeColor)
 }
 
 function metricStyle(metric: KpiMetricConfig): Record<string, string> {
+  const box = renderedBox.value[metric.fieldKey] ?? metric
   return {
     position: 'absolute',
-    left: metric.x + 'px',
-    top: metric.y + 'px',
-    width: metric.w + 'px',
-    height: metric.h + 'px',
+    left: box.x + 'px',
+    top: box.y + 'px',
+    width: box.w + 'px',
+    height: box.h + 'px',
+    // 内部间距自适应系数：行间隙（name/value/unit/helper 之间）、数值行间隙、内边距
+    // 在 CSS 里用 calc(基准 × 该系数) 跟随字号同一系数缩放，见 .kpi-metric 样式
+    '--kpi-metric-scale': String(metricFontScale(metric)),
   }
 }
 
@@ -376,6 +549,10 @@ function onMetricMouseDown(e: MouseEvent, metric: KpiMetricConfig): void {
   e.preventDefault()
   e.stopPropagation()
   selectMetric(metric.fieldKey)
+  // 先固化自动铺排结果，再按固化后的坐标起拖：否则松手时其余指标会退回旧默认坐标
+  materializeAutoLayout()
+  // 标记本会话已手工调整：此后即使布局重叠 / 越界也不再自动重排，尊重用户当次操作
+  markSessionAdjusted()
   const el = e.currentTarget as HTMLElement | null
   // 按下时读取一次几何信息，拖动过程与落点提交共用（详见 readGroupGeometry 注释）
   const geometry = readGroupGeometry()
@@ -445,6 +622,10 @@ function onMetricResizeDown(e: MouseEvent, metric: KpiMetricConfig, dir: string)
   e.preventDefault()
   e.stopPropagation()
   selectMetric(metric.fieldKey)
+  // 同上：缩放起点按固化后的盒子算，避免与自动铺排渲染值错位
+  materializeAutoLayout()
+  // 同上：本会话已手工调整，此后不再自动重排
+  markSessionAdjusted()
   const el = (e.currentTarget as HTMLElement).closest('.kpi-metric') as HTMLElement | null
   // 同上：按下时读一次布局，缩放过程与落点提交共用
   const geometry = readGroupGeometry()
@@ -738,13 +919,19 @@ function handleDateChange(val: [string, string] | null): void {
 .kpi-metric {
   position: absolute;
   box-sizing: border-box;
-  padding: 8px 10px;
-  border-radius: 8px;
+  /* 间距随字号同一系数自适应（--kpi-metric-scale 由 metricStyle 内联注入，默认 1）：
+     行间隙 / 内边距跟随盒子大小缩放，系数小时收拢、系数大时舒展，
+     与缩放后的字号保持同一视觉密度 */
+  gap: calc(2px * var(--kpi-metric-scale, 1));
+  padding: calc(8px * var(--kpi-metric-scale, 1)) calc(10px * var(--kpi-metric-scale, 1));
+  border-radius: calc(8px * var(--kpi-metric-scale, 1));
   cursor: move;
   display: flex;
   flex-direction: column;
+  /* 指标块在盒子里居中摆放：纵向居中 + 横向居中（自动铺排与手动布局观感一致） */
   justify-content: center;
-  gap: 2px;
+  align-items: center;
+  text-align: center;
   /* overflow 必须可见：八向缩放手柄探出边界，hidden 会裁掉可点击区域 */
   overflow: visible;
   transition: background 0.15s, box-shadow 0.15s;
@@ -769,7 +956,10 @@ function handleDateChange(val: [string, string] | null): void {
 .kpi-metric-valuerow {
   display: flex;
   align-items: baseline;
-  gap: 3px;
+  justify-content: center;
+  /* 值与单位之间的间隙同样随系数自适应 */
+  gap: calc(3px * var(--kpi-metric-scale, 1));
+  max-width: 100%;
   overflow: hidden;
 }
 
