@@ -1284,7 +1284,7 @@ const tabNav = useTabKeyboard(
 }
 .cc-child::before { content: ''; position: absolute; inset: 0; z-index: 2; border-radius: inherit; background: linear-gradient(to bottom, var(--component-group-accent, transparent) 0 6px, transparent 6px); pointer-events: none; }
 .cc-body.mode-vertical .cc-child { position: relative; }
-.cc-child.selected { border-color: var(--db-accent); box-shadow: 0 0 0 2px var(--db-accent-light); z-index: 5; }
+.cc-child.selected { border-color: var(--component-selected-border-color, var(--db-accent)); box-shadow: var(--component-selected-shadow, 0 0 0 2px var(--db-accent-light)); z-index: 5; }
 .cc-child.moving { opacity: 0.85; }
 /* 拖出模式：冻结容器内位置，交出视觉焦点给跟随指针的提示标签 */
 .cc-child.moving.is-dragout { opacity: 0.45; }

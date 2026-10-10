@@ -1816,13 +1816,15 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-content:hover {
-  border-color: var(--db-border-strong);
-  box-shadow: var(--shadow-card);
+  /* 边框隐藏时回落 transparent，不再重绘灰边；否则回落 --db-border-strong */
+  border-color: var(--component-hover-border-color, var(--db-border-strong));
+  box-shadow: var(--component-hover-shadow, var(--shadow-card));
 }
 
 .grid-item-content.selected {
-  border-color: var(--db-accent);
-  box-shadow: 0 0 0 2px var(--db-accent-light), var(--shadow-card-hover);
+  /* 边框隐藏时回落 transparent，不再重绘蓝边；否则回落 --db-accent */
+  border-color: var(--component-selected-border-color, var(--db-accent));
+  box-shadow: var(--component-selected-shadow, 0 0 0 2px var(--db-accent-light), var(--shadow-card-hover));
 }
 
 .editable .grid-item-content {
@@ -1831,7 +1833,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 
 .editable .grid-item-content:hover {
   border-style: solid;
-  border-color: var(--db-border-strong);
+  border-color: var(--component-hover-border-color, var(--db-border-strong));
 }
 
 .editable .grid-item-content.selected {
