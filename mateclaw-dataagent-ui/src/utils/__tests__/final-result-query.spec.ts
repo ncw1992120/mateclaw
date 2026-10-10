@@ -3,6 +3,7 @@ import { resolveOutputSpec } from '../component-output-spec'
 import type { ResultSchema } from '../script-result'
 import {
   buildFinalResultQueryConfig,
+  preserveFinalResultQueryPreferences,
   finalResultQueryConfigStatus,
   isFinalResultQueryConfigured,
   normalizeFinalResultQueryContext,
@@ -31,6 +32,58 @@ describe('buildFinalResultQueryConfig', () => {
     expect(config.sortPolicy.enabled).toBe(false)
     expect(config.paginationPolicy.enabled).toBe(false)
     expect(config.displayFields[0].title).toBe('ID')
+  })
+})
+
+describe('preserveFinalResultQueryPreferences', () => {
+  it('发现新的结果 Schema 时保留用户已保存的筛选、排序、分页和展示名设置', () => {
+    const previous = {
+      schemaFingerprint: 'schema-old',
+      confirmed: true,
+      displayFields: [{ field: 'region', title: '业务区域', role: 'dimension' as const, dataType: 'string' }],
+      filterFields: [{
+        field: 'region', title: '业务区域', dataType: 'string', parameterName: 'regionParam',
+        operators: ['eq'] as const, filterComponentId: 'region-filter',
+      }],
+      sortPolicy: { enabled: true, mode: 'single' as const, allowedFields: ['amount'], defaultSort: { field: 'amount', direction: 'desc' as const } },
+      paginationPolicy: { enabled: true, defaultPageSize: 25, maxPageSize: 75, returnTotalCount: true },
+    }
+    const discovered = {
+      schemaFingerprint: 'schema-new',
+      confirmed: false,
+      displayFields: [
+        { field: 'region', title: 'region', role: 'dimension' as const, dataType: 'string' },
+        { field: 'amount', title: 'Amount', role: 'measure' as const, dataType: 'number' },
+      ],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single' as const, allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+
+    expect(preserveFinalResultQueryPreferences(previous, discovered)).toEqual({
+      schemaFingerprint: 'schema-new',
+      confirmed: true,
+      displayFields: [
+        { field: 'region', title: '业务区域', role: 'dimension', dataType: 'string' },
+        { field: 'amount', title: 'Amount', role: 'measure', dataType: 'number' },
+      ],
+      filterFields: previous.filterFields,
+      sortPolicy: previous.sortPolicy,
+      paginationPolicy: previous.paginationPolicy,
+    })
+  })
+
+  it('首次发现结果 Schema 时使用默认查询配置', () => {
+    const discovered = {
+      schemaFingerprint: 'schema-new',
+      confirmed: false,
+      displayFields: [{ field: 'amount', title: 'Amount', role: 'measure' as const, dataType: 'number' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single' as const, allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+
+    expect(preserveFinalResultQueryPreferences(undefined, discovered)).toEqual(discovered)
   })
 })
 

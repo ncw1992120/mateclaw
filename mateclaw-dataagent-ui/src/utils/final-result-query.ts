@@ -64,6 +64,27 @@ export function buildFinalResultQueryConfig(spec: ComponentOutputSpec, schema: R
   }
 }
 
+/** 刷新输出 Schema 时更新字段清单，但保留用户已经配置的最终结果查询规则。 */
+export function preserveFinalResultQueryPreferences(
+  previous: FinalResultQueryConfig | undefined,
+  discovered: FinalResultQueryConfig,
+): FinalResultQueryConfig {
+  if (!previous) return discovered
+
+  const previousFields = new Map(previous.displayFields.map((field) => [field.field, field]))
+  return {
+    ...discovered,
+    confirmed: previous.confirmed,
+    displayFields: discovered.displayFields.map((field) => {
+      const saved = previousFields.get(field.field)
+      return saved ? { ...field, title: saved.title } : field
+    }),
+    filterFields: previous.filterFields,
+    sortPolicy: previous.sortPolicy,
+    paginationPolicy: previous.paginationPolicy,
+  }
+}
+
 function configuredFields(config: FinalResultQueryConfig): string[] {
   return [
     ...config.displayFields.map((field) => field.field),

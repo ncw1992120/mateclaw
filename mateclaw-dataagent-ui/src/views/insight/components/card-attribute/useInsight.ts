@@ -34,7 +34,7 @@ import {
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
-import { buildFinalResultQueryConfig } from '@/utils/final-result-query'
+import { buildFinalResultQueryConfig, preserveFinalResultQueryPreferences } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
@@ -1755,7 +1755,10 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
             executionId,
             elapsedMs: Date.now() - startedAt,
           })
-          if (previewSpec) state.finalResultQueryConfig = buildFinalResultQueryConfig(previewSpec, extractResultSchema(envelope))
+          if (previewSpec) {
+            const discoveredConfig = buildFinalResultQueryConfig(previewSpec, extractResultSchema(envelope))
+            state.finalResultQueryConfig = preserveFinalResultQueryPreferences(state.finalResultQueryConfig, discoveredConfig)
+          }
         } else if (envelope.kind === 'message') {
           commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
           state.resultSet.error = envelope.data.message
