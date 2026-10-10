@@ -168,14 +168,14 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     wrapper.unmount()
   })
 
-  it('从画布栅格计算确定的组合卡片缩放比例，预览重进时不依赖挂载测量时序', async () => {
+  it('按组合卡片自身跨列宽度计算缩放比例，避免固定列间距被重复放大', async () => {
     clientWidth = 2880
     const wrapper = mountPreview()
     await wrapper.setProps({ previewFillWidth: true })
     await nextTick()
 
     expect(wrapper.getComponent({ name: 'CombinationCardWidget' }).props('previewWidthScale'))
-      .toBeCloseTo(3.521, 3)
+      .toBeCloseTo(3.047, 3)
     wrapper.unmount()
   })
 

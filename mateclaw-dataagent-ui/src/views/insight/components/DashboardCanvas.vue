@@ -256,7 +256,7 @@
                 :editable="editable"
                 :container-resizing="resizingItem?.id === item.i"
                 :preview-fill-width="!editable && previewFillWidth"
-                :preview-width-scale="previewWidthScale"
+                :preview-width-scale="previewWidthScaleFor(item.i)"
                 :sample-mode="isSampleData(item.i)"
                 :selected="selectedId === item.i"
                 :drop-hint="editable && ((draggingComponentId !== null && draggingComponentId !== item.i) || gridDragHoverComboId === item.i)"
@@ -404,12 +404,15 @@ const previewStageWidth = computed(() => {
   return Math.max(previewAvailableWidth.value, contentWidth)
 })
 
-/** 与 GridLayout 实际列宽对应的统一缩放比例，供所有组合卡片层级共用。 */
-const previewWidthScale = computed(() => {
+/** 组合卡片内宽需按卡片跨列后的实际宽度缩放；固定列间距不能随列宽比例一起放大。 */
+function previewWidthScaleFor(componentId: string): number {
   if (!previewFillWidth.value || previewStageWidth.value <= 0) return 1
-  const columnWidth = (previewStageWidth.value - PREVIEW_GRID_GAP * (previewColumnCount.value + 1)) / previewColumnCount.value
-  return Math.max(1, columnWidth / PREVIEW_EDIT_COL_WIDTH)
-})
+  const span = getComponent(componentId)?.position.w ?? 1
+  const currentColumnWidth = (previewStageWidth.value - PREVIEW_GRID_GAP * (previewColumnCount.value + 1)) / previewColumnCount.value
+  const currentItemWidth = currentColumnWidth * span + PREVIEW_GRID_GAP * (span - 1)
+  const baseItemWidth = PREVIEW_EDIT_COL_WIDTH * span + PREVIEW_GRID_GAP * (span - 1)
+  return Math.max(1, currentItemWidth / baseItemWidth)
+}
 
 function updatePreviewFit(): void {
   const canvas = canvasRef.value
