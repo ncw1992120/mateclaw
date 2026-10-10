@@ -254,6 +254,7 @@
             :title-icon-style-preview="titleIconStylePreview"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
             :preview-fill-width="previewFillWidth"
+            :preview-width-scale="previewWidthScale"
             @filter-change="(payload) => emit('filter-change', payload)"
             @time-filter-change="(payload) => emit('time-filter-change', payload)"
             @retry-component-query="(id) => emit('retry-component-query', id)"
@@ -351,6 +352,8 @@ const props = withDefaults(
     selected?: boolean
     /** 预览画布启用自适应宽度时，按组合卡片内宽比例映射自由布局子组件的位置。 */
     previewFillWidth?: boolean
+    /** 画布统一计算的水平缩放比例，所有组合卡片层级共用同一基准。 */
+    previewWidthScale?: number
     /** 外层正在缩放此组合卡片；期间冻结子组件像素宽度。 */
     containerResizing?: boolean
     /** 画布正在拖动顶层组件：组合卡片显示可放置提示 */
@@ -438,7 +441,9 @@ const baseCcBodyWidth = ref(0)
 const currentCcBodyWidth = ref(0)
 let ccBodyWidthObserver: ResizeObserver | null = null
 const ccHScale = computed(() => {
-  if (props.editable || !baseCcBodyWidth.value || !currentCcBodyWidth.value) return 1
+  if (props.editable) return 1
+  if (props.previewWidthScale != null) return props.previewWidthScale
+  if (!baseCcBodyWidth.value || !currentCcBodyWidth.value) return 1
   return currentCcBodyWidth.value / baseCcBodyWidth.value
 })
 

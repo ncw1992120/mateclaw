@@ -22,7 +22,7 @@ const stubs = {
   AiAnalysisWidget: { name: 'AiAnalysisWidget', props: ['componentData'], template: '<div />' },
   CombinationCardWidget: {
     name: 'CombinationCardWidget',
-    props: ['component', 'dropHint'],
+    props: ['component', 'dropHint', 'previewFillWidth', 'previewWidthScale'],
     template: '<div class="combination-card"><div class="cc-body" /></div>',
   },
 }
@@ -165,6 +165,17 @@ describe('DashboardCanvas 预览态等比缩放', () => {
     await wrapper.setProps({ previewFillWidth: true })
     await nextTick()
     expect(wrapper.getComponent({ name: 'KpiCardWidget' }).props('previewAutoLayout')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('从画布栅格计算确定的组合卡片缩放比例，预览重进时不依赖挂载测量时序', async () => {
+    clientWidth = 2880
+    const wrapper = mountPreview()
+    await wrapper.setProps({ previewFillWidth: true })
+    await nextTick()
+
+    expect(wrapper.getComponent({ name: 'CombinationCardWidget' }).props('previewWidthScale'))
+      .toBeCloseTo(3.521, 3)
     wrapper.unmount()
   })
 

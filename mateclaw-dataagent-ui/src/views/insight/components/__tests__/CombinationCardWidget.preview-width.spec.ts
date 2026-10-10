@@ -114,4 +114,31 @@ describe('CombinationCardWidget · preview width', () => {
     expect(wrapper.get('.combination-card').attributes('style')).toContain('--cc-h-scale: 1')
     wrapper.unmount()
   })
+
+  it('uses the canvas scale when adaptive preview is already enabled at mount', async () => {
+    bodyWidth = 280
+    const wrapper = mount(CombinationCardWidget, {
+      props: {
+        editable: false,
+        previewFillWidth: true,
+        previewWidthScale: 1.25,
+        component: {
+          id: 'combo', type: 'combination' as const, title: '组合卡片',
+          children: [{ id: 'child', type: 'kpi' as const, title: '策略执行', layout: { x: 300, y: 0, col: 4, h: 3, widthPx: 100 } }],
+          position: { x: 0, y: 0, w: 16, h: 8 },
+          containerConfig: { layoutMode: 'free' as const, tabs: [] },
+        },
+      },
+      global: { plugins: [i18n], stubs: { KpiCardWidget: true, EmptyState: { template: '<div />' }, 'el-icon': true } },
+    })
+
+    // Re-entry can mount at an intermediate width before the final grid layout settles.
+    bodyWidth = 1880
+    ResizeObserverStub.instances[0].trigger()
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.get('.combination-card').attributes('style')).toContain('--cc-h-scale: 1.25')
+    expect(wrapper.get('[data-child="child"]').attributes('style')).toContain('width: 125px')
+    wrapper.unmount()
+  })
 })

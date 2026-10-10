@@ -358,6 +358,8 @@ const {
 )
 
 onMounted(async () => {
+  // 返回预览时恢复页面顶部，避免长画布的旧滚动位置将页面筛选器移出视口。
+  window.scrollTo(0, 0)
   await loadDashboard()
 })
 

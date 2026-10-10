@@ -764,6 +764,7 @@ describe('CombinationCardWidget', () => {
       props: {
         editable: false,
         previewFillWidth: true,
+        previewWidthScale: 1.25,
         component: {
           id: 'outer-combination',
           type: 'combination',
@@ -795,6 +796,7 @@ describe('CombinationCardWidget', () => {
     // 嵌套组合内部的组件在预览「自适应宽度」下不再横向自适应并可能出现交叉重叠
     const inner = outer.findComponent({ name: 'CombinationCardWidget' })
     expect(inner.props('previewFillWidth')).toBe(true)
+    expect(inner.props('previewWidthScale')).toBe(1.25)
   })
 
   it('switches an inner combination tab without starting the parent child drag', async () => {
