@@ -1,5 +1,5 @@
 <template>
-  <div class="dashboard-preview-view">
+  <div class="dashboard-preview-view" :style="dashboardThemeVariables">
     <!-- 顶部工具栏 -->
     <div class="preview-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
@@ -196,7 +196,7 @@ import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { extractResultSchema, parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
-import { resolveDashboardTheme } from '@/utils/dashboard-theme'
+import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
 import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
@@ -228,6 +228,7 @@ const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
+const dashboardThemeVariables = computed(() => themeCssVariables(dashboardTheme.value))
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
 const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
@@ -1746,8 +1747,7 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   color: var(--db-text-muted);
 }
 
-/* 预览区卡片容器：Tab 行与内容一起框进同一张卡片，
-   Tab 行是卡片白色头部，画布保持灰底作为卡片内嵌区域 */
+/* 预览内容区与仪表盘画布使用同一主题底色；页签和组件卡片保留各自表面色 */
 .preview-body {
   flex: 1;
   overflow: hidden;
@@ -1755,7 +1755,7 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   flex-direction: column;
   /* 外边距已由根容器统一提供，与列表页灰底留边一致 */
   margin: 0;
-  background: var(--db-card);
+  background: var(--db-bg);
   border: 1px solid var(--db-border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
