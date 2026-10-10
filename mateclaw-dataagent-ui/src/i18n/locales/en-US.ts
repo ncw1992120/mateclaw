@@ -1818,6 +1818,7 @@ export default {
     subPageDefaultName: 'Sub Page {index}',
     previewFailed: 'Preview failed',
     loadFailed: 'Failed to load dashboards',
+    loadingSchema: 'Loading dashboard…',
     createFailed: 'Failed to create dashboard',
     saveSuccess: 'Saved successfully',
     saveFailed: 'Failed to save',

@@ -13,7 +13,7 @@
           </span>
           <div class="list-title-text">
             <h2 class="list-title">{{ t('insight.title') }}</h2>
-            <p class="list-subtitle">{{ t('insight.headerSub', { count: scopedDashboards.length }) }}</p>
+            <p class="list-subtitle">{{ t('insight.headerSub', { count: store.summaryTotal }) }}</p>
           </div>
         </div>
         <div class="header-actions">
@@ -379,6 +379,20 @@
             </div>
           </div>
           </div>
+
+          <!-- 服务端分页：总数来自服务端，翻页只取当前页摘要 -->
+          <div v-if="store.summaryTotal > pageSize" class="list-pagination">
+            <el-pagination
+              v-model:current-page="currentPage"
+              :page-size="pageSize"
+              :page-sizes="[20, 50, 100]"
+              :total="store.summaryTotal"
+              layout="total, sizes, prev, pager, next"
+              background
+              @current-change="handlePageChange"
+              @size-change="handleSizeChange"
+            />
+          </div>
         </div>
       </div>
 
@@ -451,15 +465,16 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import dayjs from 'dayjs'
 import { formatRelativeTime } from '@/utils/time'
-import type { InsightDashboard, InsightDashboardTemplateMeta } from '@/types'
+import type { InsightDashboard, InsightDashboardSummary, InsightDashboardSummaryQuery, InsightDashboardTemplateMeta } from '@/types'
+import * as insightDashboardApi from '@/api/insight-dashboard'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import { usePersistedState } from '@/composables/usePersistedRef'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import { useUserStore } from '@/stores/useUserStore'
 import DashboardPreviewView from './DashboardPreviewView.vue'
 import AiChatPanel from './components/AiChatPanel.vue'
+import { markDashboardPerformance } from '@/utils/dashboardPerformance'
 
 defineOptions({
   name: 'DashboardListView',
@@ -478,7 +493,7 @@ const canCreate = computed(() => hasPermission(PERMISSION.INSIGHT_CREATE))
  * 是否可管理该仪表盘（编辑/发布/取消发布/删除）：
  * 工作区 admin+owner 管理全部，普通成员仅限自己创建的
  */
-function canModifyDashboard(dashboard: InsightDashboard): boolean {
+function canModifyDashboard(dashboard: InsightDashboardSummary): boolean {
   return canModifyResource((dashboard as InsightDashboard & { ownerId?: number | string | null }).ownerId)
 }
 
@@ -495,24 +510,19 @@ const searchKeyword = ref('')
 /** 一级范围 Tab：mine=我的仪表盘 / templates=团队样例模板库 */
 const activeTab = ref<'mine' | 'templates'>('mine')
 
-/** 是否样例模板（含官方样例） */
-function isTemplateDashboard(dashboard: InsightDashboard): boolean {
-  return dashboard.visibility === 'template' || dashboard.visibility === 'official'
-}
+/** 两个 Tab 的可见性取值：服务端按白名单过滤，「我的」即非模板/官方的私有与工作区可见 */
+const VISIBILITY_MINE = 'private,workspace'
+const VISIBILITY_TEMPLATES = 'template,official'
 
-/** 当前作用域下的仪表盘：模板 Tab 只看模板，我的仪表盘 Tab 排除模板 */
-const scopedDashboards = computed(() => {
-  return activeTab.value === 'templates'
-    ? store.dashboards.filter(isTemplateDashboard)
-    : store.dashboards.filter((d) => !isTemplateDashboard(d))
-})
+/** 当前作用域下的仪表盘摘要（服务端已按可见性过滤，前端不再二次过滤） */
+const scopedDashboards = computed(() => store.summaries)
 
-/** 两个 Tab 的计数（不受搜索影响） */
-const mineCount = computed(() => store.dashboards.filter((d) => !isTemplateDashboard(d)).length)
-const templateCount = computed(() => store.dashboards.filter(isTemplateDashboard).length)
+/** 两个 Tab 的计数：当前作用域取服务端总数，另一侧保留最近一次已知值 */
+const mineCount = ref(0)
+const templateCount = ref(0)
 
 /** 解析模板元信息 JSON，缺失或解析失败返回空对象 */
-function templateMetaOf(dashboard: InsightDashboard): InsightDashboardTemplateMeta {
+function templateMetaOf(dashboard: InsightDashboardSummary): InsightDashboardTemplateMeta {
   if (!dashboard.templateMeta) {
     return {}
   }
@@ -524,15 +534,64 @@ function templateMetaOf(dashboard: InsightDashboard): InsightDashboardTemplateMe
 }
 
 /** 模板标签（兜底空数组） */
-function templateTagsOf(dashboard: InsightDashboard): string[] {
+function templateTagsOf(dashboard: InsightDashboardSummary): string[] {
   const tags = templateMetaOf(dashboard).tags
   return Array.isArray(tags) ? tags : []
 }
 
-/** 按当前作用域取数：模板 Tab 走后端 visibility 过滤 */
+/**
+ * 组装当前列表查询条件：可见性范围 + 关键词 + 状态 + 排序 + 分页。
+ * 搜索/状态/排序/翻页全部走服务端，避免分页后只在当前页过滤导致用户以为数据丢失。
+ */
+function buildListQuery(): InsightDashboardSummaryQuery {
+  const keyword = searchKeyword.value.trim()
+  return {
+    visibility: activeTab.value === 'templates' ? VISIBILITY_TEMPLATES : VISIBILITY_MINE,
+    keyword: keyword || undefined,
+    // 状态筛选只作用于「我的仪表盘」：模板态该控件已隐藏，残留值会把模板筛成空
+    status: activeTab.value === 'mine' && statusFilter.value !== 'all' ? statusFilter.value : undefined,
+    sortBy: 'updateTime',
+    sortOrder: sortOrder.value,
+    page: currentPage.value,
+    size: pageSize.value,
+  }
+}
+
+/** 同步当前作用域的 Tab 计数 */
+function syncScopeCount(): void {
+  if (activeTab.value === 'templates') {
+    templateCount.value = store.summaryTotal
+  } else {
+    mineCount.value = store.summaryTotal
+  }
+}
+
+/** 按当前作用域取数（服务端分页） */
 function loadDashboards(): Promise<void> {
-  const params = activeTab.value === 'templates' ? { visibility: 'template,official' } : undefined
-  return store.fetchDashboards(params)
+  markDashboardPerformance('insight-list-request-start')
+  return store.fetchDashboardSummaries(buildListQuery()).then(() => {
+    syncScopeCount()
+    // 卡片渲染发生在下一次 DOM 刷新之后，标记点放在渲染完成后
+    void nextTick(() => markDashboardPerformance('insight-list-data-ready'))
+  })
+}
+
+/**
+ * 顺带刷新另一个 Tab 的计数（只取 1 条，代价极小）。
+ * 仅用于首次进入、切换 Tab 和写操作之后，不随每次搜索发起。
+ */
+function loadPeerCount(): void {
+  const peerVisibility = activeTab.value === 'templates' ? VISIBILITY_MINE : VISIBILITY_TEMPLATES
+  void insightDashboardApi.listSummary({ visibility: peerVisibility, size: 1 }).then((data) => {
+    const total = Number((data as unknown as { total?: number }).total ?? 0)
+    if (activeTab.value === 'templates') {
+      mineCount.value = total
+    } else {
+      templateCount.value = total
+    }
+  }).catch(() => {
+    // 计数失败不打断列表
+  })
 }
 
 /** 切换一级 Tab 并重新取数 */
@@ -541,23 +600,14 @@ function switchTab(tab: 'mine' | 'templates'): void {
     return
   }
   activeTab.value = tab
-  loadDashboards().catch(() => {
+  currentPage.value = 1
+  loadDashboards().then(loadPeerCount).catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
 }
 
-/** 按关键词过滤仪表盘列表 */
-const filteredDashboards = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) {
-    return scopedDashboards.value
-  }
-  return scopedDashboards.value.filter((d) => {
-    return d.name?.toLowerCase().includes(keyword)
-      || d.description?.toLowerCase().includes(keyword)
-      || d.ownerName?.toLowerCase().includes(keyword)
-  })
-})
+/** 关键词由服务端过滤，当前页即最终结果 */
+const filteredDashboards = computed(() => scopedDashboards.value)
 
 /** 状态筛选：all / published / draft */
 const statusFilter = ref<'all' | 'published' | 'draft'>('all')
@@ -567,6 +617,24 @@ const sortOrder = ref<'desc' | 'asc'>('desc')
 
 /** 卡片布局：grid / list（持久化） */
 const viewMode = usePersistedState<'grid' | 'list'>('mc-insight-view-layout', 'grid')
+
+/** 当前页码（服务端分页，从 1 开始） */
+const currentPage = ref(1)
+/** 每页条数 */
+const pageSize = ref(20)
+
+/** 翻页：回到服务端取对应页 */
+function handlePageChange(page: number): void {
+  currentPage.value = page
+  void reloadList()
+}
+
+/** 每页条数变化：回到第一页 */
+function handleSizeChange(size: number): void {
+  pageSize.value = size
+  currentPage.value = 1
+  void reloadList()
+}
 
 /** 卡片网格容器 ref：用于测量描述截断状态 */
 const cardGridRef = ref<HTMLElement | null>(null)
@@ -595,31 +663,11 @@ function handleWindowResize(): void {
   measureDescTruncation()
 }
 
-/** 各状态计数（基于搜索后的列表） */
-const statusCounts = computed(() => {
-  const list = filteredDashboards.value
-  return {
-    all: list.length,
-    published: list.filter((d) => d.status === 'published').length,
-    draft: list.filter((d) => d.status === 'draft').length,
-  }
-})
+/** 各状态计数：取服务端返回的可见范围计数，tab 计数不随翻页变化 */
+const statusCounts = computed(() => store.summaryCounts)
 
-/** 最终展示列表：状态筛选 + 按更新时间排序 */
-const displayedDashboards = computed(() => {
-  let list = filteredDashboards.value
-  // 状态筛选只作用于「我的仪表盘」：模板态该控件已隐藏，残留的筛选值会把模板筛成空
-  if (activeTab.value === 'mine' && statusFilter.value !== 'all') {
-    list = list.filter((d) => d.status === statusFilter.value)
-  }
-  const sorted = [...list]
-  sorted.sort((a, b) => {
-    const ta = dayjs(a.updateTime).valueOf() || 0
-    const tb = dayjs(b.updateTime).valueOf() || 0
-    return sortOrder.value === 'desc' ? tb - ta : ta - tb
-  })
-  return sorted
-})
+/** 最终展示列表：服务端已完成可见性/关键词/状态/排序/分页，前端直接使用 */
+const displayedDashboards = computed(() => filteredDashboards.value)
 
 /* watch 必须位于 displayedDashboards 声明之后：
    setup 同步执行时求值源数组会访问未初始化的 const，抛出 TDZ ReferenceError 导致整页崩溃 */
@@ -627,14 +675,42 @@ watch([displayedDashboards, viewMode], () => {
   void nextTick(measureDescTruncation)
 })
 
-/** 切换排序方向 */
+/** 切换排序方向：服务端排序，方向变化后回到第一页重新查询 */
 function toggleSortOrder(): void {
   sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
+  currentPage.value = 1
+  void reloadList()
 }
 
+/** 按新的查询条件重新取数（搜索/状态/排序/翻页共用） */
+function reloadList(): Promise<void> {
+  return loadDashboards().catch(() => {
+    ElMessage.error(t('insight.loadFailed'))
+  })
+}
+
+/** 搜索关键词防抖：300ms 内连续输入只触发一次服务端查询 */
+let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchKeyword, () => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+  searchDebounceTimer = setTimeout(() => {
+    currentPage.value = 1
+    void reloadList()
+  }, 300)
+})
+
+/** 状态筛选变化：回到第一页并按服务端过滤重新取数 */
+watch(statusFilter, () => {
+  currentPage.value = 1
+  void reloadList()
+})
+
 onMounted(() => {
+  markDashboardPerformance('insight-list-interactive')
   window.addEventListener('resize', handleWindowResize)
-  loadDashboards().catch(() => {
+  loadDashboards().then(loadPeerCount).catch(() => {
     ElMessage.error(t('insight.loadFailed'))
   })
   // 刷新后恢复预览模式时，需要加载对应仪表盘数据；编辑器由正式路由负责加载。
@@ -680,8 +756,10 @@ async function handleCreate(): Promise<void> {
       name: t('insight.defaultName'),
       description: '',
     })
+    markDashboardPerformance('insight-create-resolved')
     currentDashboardId.value = created.id
     void router.push({ name: 'insight-dashboard-editor', query: { dashboardId: created.id } })
+    markDashboardPerformance('insight-create-navigated')
   } catch {
     ElMessage.error(t('insight.createFailed'))
   }
@@ -701,7 +779,7 @@ function handlePreview(id: string): void {
 
 
 /** 发布仪表盘 */
-async function handlePublish(dashboard: InsightDashboard): Promise<void> {
+async function handlePublish(dashboard: InsightDashboardSummary): Promise<void> {
   try {
     await store.updateDashboard(dashboard.id, { status: 'published' })
     ElMessage.success(t('insight.publishSuccess'))
@@ -711,7 +789,7 @@ async function handlePublish(dashboard: InsightDashboard): Promise<void> {
 }
 
 /** 取消发布 */
-async function handleUnpublish(dashboard: InsightDashboard): Promise<void> {
+async function handleUnpublish(dashboard: InsightDashboardSummary): Promise<void> {
   try {
     await store.updateDashboard(dashboard.id, { status: 'draft' })
     ElMessage.success(t('insight.unpublishSuccess'))
@@ -727,7 +805,7 @@ const saveTemplateSource = ref<InsightDashboard | null>(null)
 const saveTemplateForm = ref({ name: '', description: '', category: '', tags: '' })
 
 /** 打开「存为样例模板」弹窗 */
-function openSaveTemplate(dashboard: InsightDashboard): void {
+function openSaveTemplate(dashboard: InsightDashboardSummary): void {
   saveTemplateSource.value = dashboard
   saveTemplateForm.value = {
     name: dashboard.name || '',
@@ -758,6 +836,7 @@ async function confirmSaveTemplate(): Promise<void> {
     })
     ElMessage.success(t('insight.saveTemplateSuccess'))
     saveTemplateVisible.value = false
+    await syncListAfterMutation()
   } catch {
     ElMessage.error(t('insight.saveTemplateFailed'))
   } finally {
@@ -765,29 +844,37 @@ async function confirmSaveTemplate(): Promise<void> {
   }
 }
 
+/** 写操作后同步列表：store 可能在删除后回退页码，这里对齐并补齐另一 Tab 计数 */
+async function syncListAfterMutation(): Promise<void> {
+  currentPage.value = store.summaryPage
+  await loadDashboards()
+  loadPeerCount()
+}
+
 /** 基于此模板创建：复制为当前用户的私有副本，带示例数据可直接使用 */
-async function handleCreateFromTemplate(dashboard: InsightDashboard): Promise<void> {
+async function handleCreateFromTemplate(dashboard: InsightDashboardSummary): Promise<void> {
   try {
     await store.copyDashboard(dashboard.id)
     ElMessage.success(t('insight.createFromTemplateSuccess'))
-    await loadDashboards()
+    await syncListAfterMutation()
   } catch {
     ElMessage.error(t('insight.createFromTemplateFailed'))
   }
 }
 
 /** 复制仪表盘 */
-async function handleCopy(dashboard: InsightDashboard): Promise<void> {
+async function handleCopy(dashboard: InsightDashboardSummary): Promise<void> {
   try {
     await store.copyDashboard(dashboard.id)
     ElMessage.success(t('insight.copySuccess'))
+    await syncListAfterMutation()
   } catch {
     ElMessage.error(t('insight.copyFailed'))
   }
 }
 
 /** 删除仪表盘 */
-async function handleDelete(dashboard: InsightDashboard): Promise<void> {
+async function handleDelete(dashboard: InsightDashboardSummary): Promise<void> {
   try {
     await ElMessageBox.confirm(
       t('insight.deleteConfirm', { name: dashboard.name }),
@@ -796,6 +883,7 @@ async function handleDelete(dashboard: InsightDashboard): Promise<void> {
     )
     await store.deleteDashboard(dashboard.id)
     ElMessage.success(t('insight.deleteSuccess'))
+    await syncListAfterMutation()
   } catch (e) {
     // 用户取消删除时不报错
     if (e !== 'cancel') {
@@ -843,7 +931,7 @@ const cardThemeChart: Record<CardTheme, ChartKind> = {
 /** 从仪表盘 schemaJson 解析出主要图表类型 */
 type ChartKind = 'bar' | 'area' | 'bar-alert' | 'donut' | 'funnel' | 'dual-line' | 'kpi-grid' | 'line' | 'empty'
 
-/** chartType → ChartKind 映射 */
+/** chartType → ChartKind 映射（仅在摘要缺少 chartKind 且本地持有 schemaJson 时使用） */
 const chartTypeToKind: Record<string, ChartKind> = {
   bar: 'bar',
   line: 'line',
@@ -869,9 +957,16 @@ const chartTypeToKind: Record<string, ChartKind> = {
   effectScatter: 'dual-line',
 }
 
-function getDashboardChartKind(dashboard: InsightDashboard): ChartKind {
-  // schemaJson 为空 → 空状态
-  if (!dashboard.schemaJson || dashboard.schemaJson.trim() === '') return 'empty'
+/**
+ * 卡片缩略图形态：优先使用摘要接口返回的 chartKind（服务端已轻量推导），
+ * 避免列表为画一张缩略图去解析整页 Schema。
+ */
+function getDashboardChartKind(dashboard: InsightDashboardSummary): ChartKind {
+  const kind = dashboard.chartKind
+  if (kind) return kind
+  const schemaJson = (dashboard as InsightDashboard).schemaJson
+  // 摘要缺 chartKind 且本地持有完整 Schema（兼容旧数据）时才回退到本地解析
+  if (!schemaJson || schemaJson.trim() === '') return 'empty'
   try {
     const parsed = JSON.parse(dashboard.schemaJson)
     const pages = parsed?.pages ?? []
@@ -919,7 +1014,7 @@ function getDashboardChartKind(dashboard: InsightDashboard): ChartKind {
   }
 }
 
-function getDashboardIconType(dashboard: InsightDashboard): 'bar' | 'line' | 'pie' | 'funnel' | 'empty' {
+function getDashboardIconType(dashboard: InsightDashboardSummary): 'bar' | 'line' | 'pie' | 'funnel' | 'empty' {
   const kind = getDashboardChartKind(dashboard)
   if (kind === 'empty') return 'empty'
   if (kind === 'bar' || kind === 'bar-alert') return 'bar'
@@ -930,11 +1025,11 @@ function getDashboardIconType(dashboard: InsightDashboard): 'bar' | 'line' | 'pi
   return 'line'
 }
 
-/** 返回列表（预览页使用） */
+/** 返回列表（预览页使用）：列表可能已过期，返回时按需刷新并补齐另一 Tab 计数 */
 function handleBackToList(): void {
   mode.value = 'list'
   currentDashboardId.value = ''
-  loadDashboards().catch(() => {
+  loadDashboards().then(loadPeerCount).catch(() => {
     // 静默失败
   })
 }
@@ -1445,6 +1540,20 @@ function handleBackToList(): void {
   overflow-y: auto;
   /* 顶部留白：为首卡片 hover 上浮预留空间，避免上边框/投影被滚动容器裁切 */
   padding: 4px 0 var(--space-xl);
+}
+
+/* 分页条：与卡片网格同宽，右对齐，避免和空态/卡片视觉打架 */
+.list-pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 4px 8px;
+}
+
+.list-pagination :deep(.el-pagination) {
+  --el-pagination-bg-color: transparent;
+  --el-pagination-button-color: var(--db-text-muted);
+  --el-pagination-hover-color: var(--main-orange);
+  padding: 0;
 }
 
 .empty-state {

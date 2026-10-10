@@ -26,6 +26,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -50,6 +51,72 @@ class DataAgentInsightDashboardControllerQueryTest {
         mvc = MockMvcBuilders.standaloneSetup(controller)
                 .setControllerAdvice(new vip.mate.dataagent.exception.DataAgentGlobalExceptionHandler())
                 .build();
+    }
+
+    @Test
+    @DisplayName("列表摘要端点透传分页/过滤/排序参数，并返回分页信封")
+    void summaryEndpointMapsQueryParameters() throws Exception {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        InsightDataBindService bind = mock(InsightDataBindService.class);
+        InsightReportService reports = mock(InsightReportService.class);
+        DashboardExecutionService exec = mock(DashboardExecutionService.class);
+        ResultSetQueryService rsq = mock(ResultSetQueryService.class);
+        DataAgentInsightDashboardController controller = new DataAgentInsightDashboardController(
+                dashboards, bind, reports, exec, rsq);
+        MockMvc standalone = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new vip.mate.dataagent.exception.DataAgentGlobalExceptionHandler())
+                .build();
+
+        vip.mate.dataagent.dto.InsightDashboardPageVO page = new vip.mate.dataagent.dto.InsightDashboardPageVO();
+        page.setRecords(List.of());
+        page.setTotal(0);
+        page.setPage(2);
+        page.setSize(10);
+        page.setCounts(new vip.mate.dataagent.dto.InsightDashboardCountsVO(0, 0, 0));
+        when(dashboards.pageDashboards(any())).thenReturn(page);
+
+        standalone.perform(get("/v1/insight/dashboards/summary")
+                        .param("page", "2")
+                        .param("size", "10")
+                        .param("visibility", "template,official")
+                        .param("status", "published")
+                        .param("keyword", "策略")
+                        .param("sortBy", "name")
+                        .param("sortOrder", "asc"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.page").value(2))
+                .andExpect(jsonPath("$.data.size").value(10))
+                .andExpect(jsonPath("$.data.counts.all").value(0));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(vip.mate.dataagent.dto.InsightDashboardSummaryQuery.class);
+        verify(dashboards).pageDashboards(captor.capture());
+        vip.mate.dataagent.dto.InsightDashboardSummaryQuery q = captor.getValue();
+        org.junit.jupiter.api.Assertions.assertEquals(2, q.getPage());
+        org.junit.jupiter.api.Assertions.assertEquals(10, q.getSize());
+        org.junit.jupiter.api.Assertions.assertEquals("template,official", q.getVisibility());
+        org.junit.jupiter.api.Assertions.assertEquals("published", q.getStatus());
+        org.junit.jupiter.api.Assertions.assertEquals("策略", q.getKeyword());
+        org.junit.jupiter.api.Assertions.assertEquals("name", q.getSortBy());
+        org.junit.jupiter.api.Assertions.assertEquals("asc", q.getSortOrder());
+    }
+
+    @Test
+    @DisplayName("列表摘要端点在无参数时使用服务默认分页")
+    void summaryEndpointDefaults() throws Exception {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        DataAgentInsightDashboardController controller = new DataAgentInsightDashboardController(
+                dashboards, mock(InsightDataBindService.class), mock(InsightReportService.class),
+                mock(DashboardExecutionService.class), mock(ResultSetQueryService.class));
+        MockMvc standalone = MockMvcBuilders.standaloneSetup(controller).build();
+        when(dashboards.pageDashboards(any())).thenReturn(new vip.mate.dataagent.dto.InsightDashboardPageVO());
+
+        standalone.perform(get("/v1/insight/dashboards/summary"))
+                .andExpect(status().isOk());
+
+        var captor = org.mockito.ArgumentCaptor.forClass(vip.mate.dataagent.dto.InsightDashboardSummaryQuery.class);
+        verify(dashboards).pageDashboards(captor.capture());
+        org.junit.jupiter.api.Assertions.assertNull(captor.getValue().getPage());
+        org.junit.jupiter.api.Assertions.assertNull(captor.getValue().getSize());
     }
 
     @Test

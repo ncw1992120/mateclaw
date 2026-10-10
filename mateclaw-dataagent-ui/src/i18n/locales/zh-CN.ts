@@ -1829,6 +1829,7 @@ export default {
     subPageDefaultName: '子页面 {index}',
     previewFailed: '预览失败',
     loadFailed: '加载仪表盘失败',
+    loadingSchema: '正在加载仪表盘…',
     createFailed: '创建仪表盘失败',
     saveSuccess: '保存成功',
     saveFailed: '保存失败',

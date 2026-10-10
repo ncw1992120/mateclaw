@@ -50,6 +50,37 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
+     * 仪表盘列表摘要（分页，轻量投影）
+     * <p>
+     * 列表首屏只取卡片所需字段，不含 schemaJson / reportContent；分页、计数、过滤与排序
+     * 在数据库侧完成。counts 为当前可见范围内的状态总数，不随翻页变化。
+     */
+    @GetMapping("/summary")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "仪表盘列表摘要", description = "分页返回仪表盘摘要（不含 Schema），支持可见性/状态/关键词过滤与排序")
+    public R<InsightDashboardPageVO> summary(
+            @Parameter(description = "页码，从 1 开始") @RequestParam(required = false) Integer page,
+            @Parameter(description = "每页条数，默认 20，最大 100") @RequestParam(required = false) Integer size,
+            @Parameter(description = "可见性过滤：逗号分隔取值 template,official / private 等；为空返回工作区内全部")
+            @RequestParam(required = false) String visibility,
+            @Parameter(description = "状态过滤：draft / published；为空不过滤")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "关键词：匹配名称/描述/负责人名称")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "排序字段白名单：updateTime / name") @RequestParam(required = false) String sortBy,
+            @Parameter(description = "排序方向：asc / desc，默认 desc") @RequestParam(required = false) String sortOrder) {
+        InsightDashboardSummaryQuery query = new InsightDashboardSummaryQuery();
+        query.setPage(page);
+        query.setSize(size);
+        query.setVisibility(visibility);
+        query.setStatus(status);
+        query.setKeyword(keyword);
+        query.setSortBy(sortBy);
+        query.setSortOrder(sortOrder);
+        return R.ok(dashboardService.pageDashboards(query));
+    }
+
+    /**
      * 仪表盘详情
      */
     @GetMapping("/{id}")

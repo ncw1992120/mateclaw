@@ -223,6 +223,235 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 .map(this::toVO).collect(Collectors.toList());
     }
 
+    /** 摘要列表每页默认条数 */
+    private static final int SUMMARY_DEFAULT_SIZE = 20;
+    /** 摘要列表每页最大条数 */
+    private static final int SUMMARY_MAX_SIZE = 100;
+    /** 排序字段白名单：列表只暴露更新时间与名称，避免暴露内部列 */
+    private static final Set<String> SUMMARY_SORT_FIELDS = Set.of("updateTime", "name");
+    /** 列表缩略图：chartType → 展示形态 */
+    private static final Map<String, String> CHART_KIND_BY_TYPE = Map.ofEntries(
+            Map.entry("bar", "bar"),
+            Map.entry("line", "line"),
+            Map.entry("area", "area"),
+            Map.entry("pie", "donut"),
+            Map.entry("scatter", "dual-line"),
+            Map.entry("radar", "donut"),
+            Map.entry("funnel", "funnel"),
+            Map.entry("gauge", "donut"),
+            Map.entry("heatmap", "bar-alert"),
+            Map.entry("candlestick", "bar-alert"),
+            Map.entry("sankey", "funnel"),
+            Map.entry("treemap", "bar"),
+            Map.entry("sunburst", "donut"),
+            Map.entry("tree", "line"),
+            Map.entry("graph", "dual-line"),
+            Map.entry("map", "area"),
+            Map.entry("lines", "dual-line"),
+            Map.entry("boxplot", "bar"),
+            Map.entry("parallel", "dual-line"),
+            Map.entry("themeRiver", "area"),
+            Map.entry("pictorialBar", "bar"),
+            Map.entry("effectScatter", "dual-line")
+    );
+
+    /**
+     * 分页查询仪表盘摘要。
+     * <p>
+     * 列表首屏只需要卡片元信息：这里只投影轻量字段，并从 Schema 推导缩略图类型，
+     * 不返回 schemaJson / reportContent。分页、计数、过滤、排序全部交给数据库。
+     */
+    @Override
+    public InsightDashboardPageVO pageDashboards(InsightDashboardSummaryQuery query) {
+        InsightDashboardSummaryQuery effective = query == null ? new InsightDashboardSummaryQuery() : query;
+        int page = normalizePage(effective.getPage());
+        int size = normalizeSize(effective.getSize());
+        long workspaceId = workspaceGuard.currentWorkspaceId();
+
+        long all = countOrZero(summaryWrapper(workspaceId, effective));
+        long draft = countOrZero(summaryWrapper(workspaceId, effective), DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        long published = countOrZero(summaryWrapper(workspaceId, effective), DataAgentConstants.INSIGHT_DASHBOARD_STATUS_PUBLISHED);
+
+        LambdaQueryWrapper<InsightDashboardEntity> pageWrapper = summaryWrapper(workspaceId, effective);
+        if (effective.getStatus() != null && !effective.getStatus().isBlank()) {
+            pageWrapper.eq(InsightDashboardEntity::getStatus, effective.getStatus().trim());
+        }
+        applySorting(pageWrapper, effective);
+        pageWrapper.last("LIMIT " + size + " OFFSET " + ((page - 1) * size));
+
+        List<InsightDashboardEntity> entities = insightDashboardMapper.selectList(pageWrapper);
+
+        InsightDashboardPageVO result = new InsightDashboardPageVO();
+        result.setRecords(entities.stream().map(this::toSummaryVO).collect(Collectors.toList()));
+        result.setTotal(all);
+        result.setPage(page);
+        result.setSize(size);
+        result.setCounts(new InsightDashboardCountsVO(all, draft, published));
+        return result;
+    }
+
+    /** 构造摘要查询的基础条件：工作区隔离 + 软删除 + 可见性 + 关键词 */
+    private LambdaQueryWrapper<InsightDashboardEntity> summaryWrapper(long workspaceId, InsightDashboardSummaryQuery query) {
+        LambdaQueryWrapper<InsightDashboardEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightDashboardEntity::getWorkspaceId, workspaceId);
+        wrapper.eq(InsightDashboardEntity::getDeleted, 0);
+        String visibility = query.getVisibility();
+        if (visibility != null && !visibility.isBlank()) {
+            Set<String> wanted = Arrays.stream(visibility.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toSet());
+            if (!wanted.isEmpty()) {
+                wrapper.and(w -> {
+                    boolean first = true;
+                    for (String item : wanted) {
+                        if (!first) {
+                            w.or();
+                        }
+                        w.eq(InsightDashboardEntity::getVisibility, item);
+                        first = false;
+                    }
+                    // 未显式设置可见性的历史数据按 private 处理（与旧列表过滤保持一致）
+                    if (wanted.contains(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE)) {
+                        if (!first) {
+                            w.or();
+                        }
+                        w.isNull(InsightDashboardEntity::getVisibility);
+                    }
+                });
+            }
+        }
+        String keyword = query.getKeyword() == null ? null : query.getKeyword().trim();
+        if (keyword != null && !keyword.isEmpty()) {
+            wrapper.and(w -> w.like(InsightDashboardEntity::getName, keyword)
+                    .or().like(InsightDashboardEntity::getDescription, keyword)
+                    .or().like(InsightDashboardEntity::getOwnerName, keyword));
+        }
+        return wrapper;
+    }
+
+    private long countOrZero(LambdaQueryWrapper<InsightDashboardEntity> wrapper) {
+        return countOrZero(wrapper, null);
+    }
+
+    /** 计数失败不阻塞列表：返回 0 由页面按空态处理 */
+    private long countOrZero(LambdaQueryWrapper<InsightDashboardEntity> wrapper, String status) {
+        if (status != null) {
+            wrapper.eq(InsightDashboardEntity::getStatus, status);
+        }
+        try {
+            Long count = insightDashboardMapper.selectCount(wrapper);
+            return count == null ? 0L : count;
+        } catch (RuntimeException ex) {
+            log.warn("仪表盘摘要计数失败: {}", ex.getMessage());
+            return 0L;
+        }
+    }
+
+    /** 只接受白名单排序字段，其余按更新时间倒序 */
+    private void applySorting(LambdaQueryWrapper<InsightDashboardEntity> wrapper, InsightDashboardSummaryQuery query) {
+        String sortBy = normalizeSortBy(query.getSortBy());
+        boolean desc = isDescending(query.getSortOrder());
+        if ("name".equals(sortBy)) {
+            wrapper.orderBy(true, desc, InsightDashboardEntity::getName);
+        } else {
+            wrapper.orderBy(true, desc, InsightDashboardEntity::getUpdateTime);
+        }
+        // 同值时用主键兜底排序，避免翻页出现重复/漏行
+        wrapper.orderBy(true, desc, InsightDashboardEntity::getId);
+    }
+
+    /** 排序字段白名单归一：未指定或不在白名单内返回 null（调用方按更新时间处理） */
+    static String normalizeSortBy(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return null;
+        }
+        String trimmed = sortBy.trim();
+        return SUMMARY_SORT_FIELDS.contains(trimmed) ? trimmed : null;
+    }
+
+    /** 排序方向归一：仅 "asc" 为升序，其余（含空值）按倒序 */
+    static boolean isDescending(String sortOrder) {
+        return sortOrder == null || !"asc".equalsIgnoreCase(sortOrder.trim());
+    }
+
+    /** 页码归一：小于 1 或缺失均按第一页 */
+    static int normalizePage(Integer page) {
+        if (page == null || page < 1) {
+            return 1;
+        }
+        return page;
+    }
+
+    /** 每页条数归一：缺失取默认 20，上限 100 */
+    static int normalizeSize(Integer size) {
+        if (size == null || size < 1) {
+            return SUMMARY_DEFAULT_SIZE;
+        }
+        return Math.min(size, SUMMARY_MAX_SIZE);
+    }
+
+    /**
+     * 从 Schema 推导列表缩略图类型。
+     * 只做一次轻量解析：空 Schema / 解析失败回退 empty，非 chart 组件回退 kpi-grid。
+     */
+    String resolveChartKind(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return "empty";
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(schemaJson);
+        } catch (Exception ex) {
+            return "empty";
+        }
+        JsonNode pages = root == null ? null : root.get("pages");
+        if (pages == null || !pages.isArray() || pages.size() == 0) {
+            return "empty";
+        }
+        Map<String, Integer> chartCounts = new LinkedHashMap<>();
+        boolean hasDataComponent = false;
+        for (JsonNode page : pages) {
+            JsonNode components = page.get("components");
+            if (components == null || !components.isArray()) {
+                continue;
+            }
+            for (JsonNode component : components) {
+                String type = component.path("type").asText("");
+                if ("chart".equals(type)) {
+                    String chartType = component.path("chartType").asText("");
+                    String kind = CHART_KIND_BY_TYPE.get(chartType);
+                    chartCounts.merge(kind == null ? "line" : kind, 1, Integer::sum);
+                } else if ("kpi".equals(type) || "table".equals(type)) {
+                    hasDataComponent = true;
+                }
+            }
+        }
+        if (!chartCounts.isEmpty()) {
+            return chartCounts.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
+                            .thenComparing(Map.Entry.comparingByKey()))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElse("line");
+        }
+        return hasDataComponent ? "kpi-grid" : "empty";
+    }
+
+    private InsightDashboardSummaryVO toSummaryVO(InsightDashboardEntity entity) {
+        InsightDashboardSummaryVO vo = new InsightDashboardSummaryVO();
+        // 只复制同名字段：schemaJson / reportContent 无对应属性，天然不会被带出
+        BeanUtils.copyProperties(entity, vo);
+        if (entity.getCreateTime() != null) {
+            vo.setCreateTime(entity.getCreateTime().toString());
+        }
+        if (entity.getUpdateTime() != null) {
+            vo.setUpdateTime(entity.getUpdateTime().toString());
+        }
+        vo.setChartKind(resolveChartKind(entity.getSchemaJson()));
+        return vo;
+    }
+
     /**
      * 按可见性过滤（纯函数，便于单测）：
      * DB 层仅按 workspace 过滤，可见性在此做精确匹配。

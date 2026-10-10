@@ -168,7 +168,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, View, Loading, Upload, EditPen, Download } from '@element-plus/icons-vue'
@@ -202,6 +202,7 @@ import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
 import { removeDanglingFilterBindings } from '@/utils/dashboard-filter-deletion'
+import { markDashboardPerformance } from '@/utils/dashboardPerformance'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -265,6 +266,8 @@ const reportChartInstances = ref<echarts.ECharts[]>([])
 
 /** 防抖定时器 */
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
+/** 视图是否已卸载：卸载后所有异步回调不再回写状态 */
+let previewDisposed = false
 /** 旧直连 preview 与组件查询共用的单调请求序列；晚到的整页响应不能覆盖新查询。 */
 let queryRequestSequence = 0
 const latestComponentRequest = new Map<string, number>()
@@ -350,6 +353,14 @@ onMounted(async () => {
   await loadDashboard()
 })
 
+onUnmounted(() => {
+  previewDisposed = true
+  if (filterReloadTimer) {
+    clearTimeout(filterReloadTimer)
+    filterReloadTimer = null
+  }
+})
+
 watch(
   () => props.dashboardId,
   async () => {
@@ -357,11 +368,77 @@ watch(
   }
 )
 
+/** 本轮预览需要取数的组件 ID；为空表示尚未开始，避免误判「全部完成」 */
+let expectedQueryComponentIds = new Set<string>()
+/** 已进入终态（success/empty/error/timeout）的组件 ID */
+const settledQueryComponentIds = new Set<string>()
+/** 是否已经写下「首个组件出数」阶段点 */
+let firstComponentSettled = false
+
+/**
+ * 本轮预览会取数的组件 ID（直连通道 + 脚本绑定通道 + 数据集管线通道）。
+ * 与三个通道各自的目标集合保持同一口径，用于判定「全部组件完成」。
+ */
+function previewQueryComponentIds(): string[] {
+  const allComponents = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+  const allIds = new Set(allComponents.map((component) => component.id))
+  const directIds = new Set(directQueryComponents().map((component) => component.id))
+  const pipelineIds = new Set(pipelineComponents().map((component) => component.id))
+  // 与 reloadScriptBindings 的唯一数据源仲裁保持同一口径：被管线/直连覆盖的组件不走脚本绑定
+  const scriptBound = schema.script?.trim() && schema.scriptBindings?.length
+    ? schema.scriptBindings
+        .map((binding) => binding.componentId)
+        .filter((id) => allIds.has(id) && !directIds.has(id) && !pipelineIds.has(id))
+    : []
+  return Array.from(new Set([
+    ...directIds,
+    ...scriptBound,
+    ...pipelineIds,
+  ]))
+}
+
+/** 开始一轮取数前重置阶段进度；expected 为本轮所有会取数的组件 ID */
+function resetPreviewProgress(expected: string[]): void {
+  expectedQueryComponentIds = new Set(expected)
+  settledQueryComponentIds.clear()
+  firstComponentSettled = false
+}
+
+/** 组件数据进入终态时推进阶段标记（首个组件出数 / 全部组件完成） */
+function trackComponentSettled(componentId: string): void {
+  if (!expectedQueryComponentIds.has(componentId) || settledQueryComponentIds.has(componentId)) {
+    return
+  }
+  settledQueryComponentIds.add(componentId)
+  if (!firstComponentSettled) {
+    firstComponentSettled = true
+    markDashboardPerformance('insight-preview-first-component')
+  }
+  if (settledQueryComponentIds.size >= expectedQueryComponentIds.size) {
+    markDashboardPerformance('insight-preview-all-components')
+  }
+}
+
+/** 组件数据终态统一出口：任何通道写入终态都在这里推进阶段标记 */
+watch(
+  componentDataMap,
+  (map) => {
+    for (const [componentId, data] of Object.entries(map)) {
+      const status = data?.queryStatus
+      if (status && status !== 'loading') {
+        trackComponentSettled(componentId)
+      }
+    }
+  },
+  { deep: true },
+)
+
 /** 加载仪表盘 */
 async function loadDashboard(): Promise<void> {
   if (!props.dashboardId) {
     return
   }
+  markDashboardPerformance('insight-preview-start')
   await store.selectDashboard(props.dashboardId)
   if (dashboard.value) {
     try {
@@ -388,14 +465,27 @@ async function loadDashboard(): Promise<void> {
       activePageId.value = schema.pages[0].id
     }
     initializeDefaults()
+    // Schema 已可用，画布骨架可以先呈现；后续数据阶段各自回填
+    markDashboardPerformance('insight-preview-canvas-ready')
     await materializePreviewDatasetInputs()
     previousRuntimeFilterState = getRuntimeFilterState()
-    await reloadComponentData(filterContext.value)
-    await reloadScriptBindings(filterContext.value)
-    // 首次预览与筛选刷新共用组件管线，避免沿用上次编辑保存的静态快照。
-    await refreshPipelineComponents(getRuntimeFilterState(), true)
-    // 加载已生成的报告
-    await loadReport()
+    resetPreviewProgress(previewQueryComponentIds())
+    // 直连组件查询、Python 绑定执行、数据集管线三个通道互不依赖，并行启动；
+    // 各通道内部会把单组件的 loading/success/empty/error/timeout 写入 componentDataMap，
+    // 单通道失败只影响其目标组件，不会拖垮其他通道。
+    const channelResults = await Promise.allSettled([
+      reloadComponentData(filterContext.value),
+      reloadScriptBindings(filterContext.value),
+      refreshPipelineComponents(getRuntimeFilterState(), true),
+    ])
+    for (const result of channelResults) {
+      if (result.status === 'rejected') {
+        // 防御兜底：通道本身抛出未捕获异常时记录，不让页面停留在整体加载态
+        console.error('[preview] 数据通道执行失败', result.reason)
+      }
+    }
+    // 报告读取是独立后台任务，不阻塞组件数据渲染路径；卸载后不回写状态
+    void loadReport()
   }
 }
 
@@ -497,10 +587,11 @@ async function materializePreviewDatasetInputsOnce(): Promise<void> {
   }
 }
 
-/** 加载已生成的报告 */
+/** 加载已生成的报告（后台任务：卸载后不回写状态） */
 async function loadReport(): Promise<void> {
   try {
     const content = await getReport(props.dashboardId)
+    if (previewDisposed) return
     if (content) {
       reportHtmlContent.value = content
     }
@@ -547,11 +638,55 @@ function writeComponentQueryState(component: InsightComponent, queryStatus: NonN
   }
 }
 
+/** 脚本状态轮询退避：首次 500ms，之后 1s、2s 翻倍推进，封顶 5s */
+function scriptPollDelayMs(attempt: number): number {
+  if (attempt <= 0) return 500
+  return Math.min(500 * 2 ** attempt, 5000)
+}
+
+/**
+ * 脚本状态轮询循环：终态（SUCCEEDED/RESULT_REF）或业务失败立即返回；
+ * 视图卸载或执行被新请求替代时静默放弃（不写状态）。attempt 从 0 开始。
+ */
+async function pollScriptExecution(
+  executionId: string,
+  requestId: number,
+  requestOwner: string,
+): Promise<{ status: string; envelope: unknown }> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    // 每次唤醒先检查：视图已卸载或执行已被新请求替代时，放弃本轮等待（旧结果不再回写）
+    if (attempt > 0 && (previewDisposed || latestComponentRequest.get(requestOwner) !== requestId)) {
+      return { status: '__abandoned__', envelope: undefined }
+    }
+    const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
+      status?: string; result?: string; error?: string
+    }
+    if (status.status === 'SUCCEEDED') {
+      return { status: status.status, envelope: status.result ? JSON.parse(status.result) : undefined }
+    }
+    if (status.status === 'RESULT_REF') {
+      const result = await insightDashboardApi.getExecutionResult(executionId) as unknown as { envelope?: unknown }
+      return { status: status.status, envelope: result.envelope }
+    }
+    if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
+      throw new Error(`${status.status}: ${status.error || '脚本执行未成功'}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, scriptPollDelayMs(attempt)))
+  }
+  throw new Error('脚本执行等待超时')
+}
+
+
+/** 旧版直连数据集（非管线）组件：仍走整页 preview 接口 */
+function directQueryComponents(): InsightComponent[] {
+  return collectDashboardComponents(currentPageComponents.value)
+    .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
+}
+
 /** 旧版直连组件仍走预览接口，但按组件合并并拒绝过期整页响应。 */
 async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
   const requestId = ++queryRequestSequence
-  const directComponents = collectDashboardComponents(currentPageComponents.value)
-    .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
+  const directComponents = directQueryComponents()
   const directIds = new Set(directComponents.map((component) => component.id))
   if (directComponents.length === 0) return
   directIds.forEach((componentId) => latestComponentRequest.set(componentId, requestId))
@@ -732,29 +867,9 @@ async function refreshPipelineComponent(
         props.dashboardId, component.id, {}, JSON.stringify(schema), queryContext,
       ) as unknown as { executionId?: string }
       if (!created.executionId) throw new Error('未获取到组件执行 ID')
-      let envelope: unknown
-      let terminalStatus = ''
-      for (let attempt = 0; attempt < 120; attempt += 1) {
-        const status = await insightDashboardApi.getExecutionStatus(created.executionId) as unknown as {
-          status?: string; result?: string; error?: string
-        }
-        if (status.status === 'SUCCEEDED') {
-          envelope = status.result ? JSON.parse(status.result) : undefined
-          terminalStatus = status.status
-          break
-        }
-        if (status.status === 'RESULT_REF') {
-          const result = await insightDashboardApi.getExecutionResult(created.executionId) as unknown as { envelope?: unknown }
-          envelope = result.envelope
-          terminalStatus = status.status
-          break
-        }
-        if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
-          throw new Error(`${status.status}: ${status.error || '组件执行失败'}`)
-        }
-        await new Promise((resolve) => setTimeout(resolve, 500))
-      }
-      if (!terminalStatus) throw new Error('组件执行等待超时')
+      const polled = await pollScriptExecution(created.executionId, requestId, component.id)
+      if (polled.status === '__abandoned__') return
+      const envelope = polled.envelope
       const outputConfig = finalResultQueryConfig(component, effectiveFilters)
       const parsed = parseScriptResultEnvelope(envelope)
       if (parsed.kind !== 'table') throw new Error(parsed.kind === 'message' ? parsed.message : 'Python 输出不是表格结果')
@@ -826,10 +941,17 @@ async function reloadScriptBindings(
   componentIds?: Set<string>,
 ): Promise<void> {
   if (!schema.script?.trim() || !schema.scriptBindings?.length) return
-  const bindings = schema.scriptBindings.filter((binding) => !componentIds || componentIds.has(binding.componentId))
+  const components = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+  // 唯一数据源仲裁：组件已由数据集管线或旧版直连通道提供数据时，整页脚本绑定让位，
+  // 避免同一组件被两个通道并发写入产生竞态（优先级：管线 > 直连 > 脚本绑定）。
+  const channelCovered = new Set<string>([
+    ...pipelineComponents().map((component) => component.id),
+    ...directQueryComponents().map((component) => component.id),
+  ])
+  const bindings = schema.scriptBindings.filter((binding) =>
+    (!componentIds || componentIds.has(binding.componentId)) && !channelCovered.has(binding.componentId))
   if (!bindings.length) return
   const requestId = ++queryRequestSequence
-  const components = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
   bindings.forEach((binding) => {
     latestComponentRequest.set(binding.componentId, requestId)
     const component = components.find((item) => item.id === binding.componentId)
@@ -842,31 +964,9 @@ async function reloadScriptBindings(
     )
     const executionId = (created as unknown as { executionId?: string }).executionId
     if (!executionId) throw new Error('未获取到脚本执行 ID')
-    let resultEnvelope: unknown
-    let completed = false
-    for (let attempt = 0; attempt < 120; attempt += 1) {
-      const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
-        status?: string
-        result?: string
-        error?: string
-      }
-      if (status.status === 'SUCCEEDED') {
-        resultEnvelope = status.result ? JSON.parse(status.result) : undefined
-        completed = true
-        break
-      }
-      if (status.status === 'RESULT_REF') {
-        const result = await insightDashboardApi.getExecutionResult(executionId)
-        resultEnvelope = (result as unknown as { envelope?: unknown }).envelope
-        completed = true
-        break
-      }
-      if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
-        throw new Error(`${status.status}: ${status.error || '脚本执行未成功'}`)
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500))
-    }
-    if (!completed) throw new Error('脚本执行等待超时')
+    const polled = await pollScriptExecution(executionId, requestId, bindings[0]?.componentId ?? '')
+    if (polled.status === '__abandoned__') return
+    const resultEnvelope = polled.envelope
     for (const binding of bindings) {
       if (latestComponentRequest.get(binding.componentId) !== requestId) continue
       const component = components.find((item) => item.id === binding.componentId)
@@ -931,6 +1031,7 @@ function scheduleReloadWithFilters(context: DashboardFilterContext, refreshAllPi
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
+    if (previewDisposed) return
     const state = getRuntimeFilterState()
     void Promise.all([
       reloadScopedComponentData(context),

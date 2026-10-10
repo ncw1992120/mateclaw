@@ -3,7 +3,9 @@ package vip.mate.dataagent.service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import vip.mate.dataagent.dto.InsightDashboardAiChatRequest;
 import vip.mate.dataagent.dto.InsightDashboardCreateRequest;
+import vip.mate.dataagent.dto.InsightDashboardPageVO;
 import vip.mate.dataagent.dto.InsightDashboardSaveAsTemplateRequest;
+import vip.mate.dataagent.dto.InsightDashboardSummaryQuery;
 import vip.mate.dataagent.dto.InsightDashboardUpdateRequest;
 import vip.mate.dataagent.dto.InsightDashboardVO;
 
@@ -24,6 +26,17 @@ public interface InsightDashboardService {
      * @return 仪表盘列表
      */
     List<InsightDashboardVO> listDashboards(String visibility);
+
+    /**
+     * 分页查询当前工作区的仪表盘摘要（列表专用轻量契约）。
+     * <p>
+     * 只投影卡片所需字段，并额外计算列表缩略图类型；不含 {@code schemaJson} 与
+     * {@code reportContent}。计数与分页均在数据库侧完成。
+     *
+     * @param query 查询条件（分页 / 可见性 / 状态 / 关键词 / 排序）
+     * @return 分页摘要响应
+     */
+    InsightDashboardPageVO pageDashboards(InsightDashboardSummaryQuery query);
 
     /**
      * 获取仪表盘详情

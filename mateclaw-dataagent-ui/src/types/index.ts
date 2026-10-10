@@ -1997,6 +1997,75 @@ export interface InsightDashboard {
   templateMeta?: string | null
 }
 
+/** 列表缩略图形态：由服务端从 Schema 轻量推导，列表无需读取完整 Schema */
+export type InsightDashboardChartKind =
+  | 'bar'
+  | 'line'
+  | 'area'
+  | 'bar-alert'
+  | 'donut'
+  | 'funnel'
+  | 'dual-line'
+  | 'kpi-grid'
+  | 'empty'
+
+/**
+ * 仪表盘列表摘要（GET /v1/insight/dashboards/summary）。
+ * 只携带卡片渲染所需的元信息，不含 schemaJson / reportContent；
+ * 详情仍使用 InsightDashboard。
+ */
+export interface InsightDashboardSummary {
+  id: string
+  name: string
+  description?: string | null
+  status: 'draft' | 'published'
+  agentId?: string
+  workspaceId?: string
+  ownerId?: string
+  ownerName?: string
+  visibility?: string
+  templateMeta?: string | null
+  modifier?: string
+  createTime?: string
+  updateTime?: string
+  /** 列表缩略图形态；空 Schema 或解析失败为 empty */
+  chartKind?: InsightDashboardChartKind
+}
+
+/** 列表状态计数（当前可见范围内，不随分页变化） */
+export interface InsightDashboardCounts {
+  all: number
+  draft: number
+  published: number
+}
+
+/** 列表摘要查询条件 */
+export interface InsightDashboardSummaryQuery {
+  /** 页码，从 1 开始 */
+  page?: number
+  /** 每页条数，默认 20，最大 100 */
+  size?: number
+  /** 可见性过滤，逗号分隔，如 "template,official" */
+  visibility?: string
+  /** 状态过滤 */
+  status?: 'draft' | 'published'
+  /** 关键词：匹配名称/描述/负责人 */
+  keyword?: string
+  /** 排序字段白名单 */
+  sortBy?: 'updateTime' | 'name'
+  /** 排序方向，默认 desc */
+  sortOrder?: 'asc' | 'desc'
+}
+
+/** 列表摘要分页响应 */
+export interface InsightDashboardSummaryPage {
+  records: InsightDashboardSummary[]
+  total: number
+  page: number
+  size: number
+  counts: InsightDashboardCounts
+}
+
 /** 模板元信息（templateMeta 解析后的结构） */
 export interface InsightDashboardTemplateMeta {
   sourceDashboardId?: number

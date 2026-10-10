@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Test;
 
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.dto.InsightDashboardPageVO;
 import vip.mate.dataagent.dto.InsightDashboardSaveAsTemplateRequest;
+import vip.mate.dataagent.dto.InsightDashboardSummaryQuery;
+import vip.mate.dataagent.dto.InsightDashboardSummaryVO;
 import vip.mate.dataagent.dto.InsightDashboardVO;
 import vip.mate.dataagent.model.InsightDashboardEntity;
 import vip.mate.dataagent.repository.InsightDashboardMapper;
@@ -27,6 +30,15 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class InsightDashboardServiceImplTest {
+
+    static {
+        // 为 LambdaQueryWrapper#getCustomSqlSegment 准备实体元数据（列名缓存），
+        // 单测未启动 Spring 容器，需要手工注册 TableInfo。
+        com.baomidou.mybatisplus.core.metadata.TableInfoHelper.initTableInfo(
+                new org.apache.ibatis.builder.MapperBuilderAssistant(
+                        new com.baomidou.mybatisplus.core.MybatisConfiguration(), ""),
+                InsightDashboardEntity.class);
+    }
 
     @Test
     void optimisticUpdateRequiresTheReadVersionWhenProvided() {
@@ -170,6 +182,111 @@ class InsightDashboardServiceImplTest {
         assertEquals(4, service.listDashboards(null).size());
         // null 可见性按 private 处理，故 "private" 过滤命中 priv + nullVis
         assertEquals(2, service.listDashboards("private").size());
+    }
+
+    @Test
+    void summaryQueryNormalizesPaginationAndSorting() {
+        assertEquals("updateTime", InsightDashboardServiceImpl.normalizeSortBy("updateTime"));
+        assertEquals("name", InsightDashboardServiceImpl.normalizeSortBy("name"));
+        assertNull(InsightDashboardServiceImpl.normalizeSortBy("schemaJson"));
+        assertNull(InsightDashboardServiceImpl.normalizeSortBy(null));
+        assertTrue(InsightDashboardServiceImpl.isDescending(null));
+        assertTrue(InsightDashboardServiceImpl.isDescending("desc"));
+        assertFalse(InsightDashboardServiceImpl.isDescending("asc"));
+        assertEquals(1, InsightDashboardServiceImpl.normalizePage(0));
+        assertEquals(1, InsightDashboardServiceImpl.normalizePage(null));
+        assertEquals(3, InsightDashboardServiceImpl.normalizePage(3));
+        assertEquals(20, InsightDashboardServiceImpl.normalizeSize(null));
+        assertEquals(100, InsightDashboardServiceImpl.normalizeSize(500));
+        assertEquals(5, InsightDashboardServiceImpl.normalizeSize(5));
+    }
+
+    @Test
+    void pageDashboardsProjectsSummaryWithoutLargeFieldsAndCountsWholeScope() {
+        InsightDashboardMapper mapper = mock(InsightDashboardMapper.class);
+        WorkspaceGuard wg = mock(WorkspaceGuard.class);
+        when(wg.currentWorkspaceId()).thenReturn(7L);
+
+        InsightDashboardEntity a = entity(1L, "策略解读", "private", "draft", "{\"version\":\"1.0\",\"pages\":[{\"id\":\"p\",\"components\":[{\"type\":\"chart\",\"chartType\":\"bar\"}]}]}");
+        InsightDashboardEntity b = entity(2L, "销售看板", "private", "published", "{\"version\":\"1.0\",\"pages\":[{\"id\":\"p\",\"components\":[{\"type\":\"kpi\"}]}]}");
+        InsightDashboardEntity c = entity(3L, "空看板", "template", "draft", "");
+
+        when(mapper.selectList(any())).thenReturn(List.of(a, b, c));
+        // 三次计数依次为：可见范围总数 / 草稿数 / 已发布数
+        when(mapper.selectCount(any())).thenReturn(3L, 2L, 1L);
+
+        InsightDashboardServiceImpl service =
+                new InsightDashboardServiceImpl(mapper, wg, null, null, null, new ObjectMapper(), null);
+        InsightDashboardSummaryQuery query = new InsightDashboardSummaryQuery();
+        InsightDashboardPageVO page = service.pageDashboards(query);
+
+        assertEquals(3, page.getRecords().size());
+        assertEquals(3L, page.getTotal());
+        assertEquals(1, page.getPage());
+        assertEquals(20, page.getSize());
+        assertEquals(3L, page.getCounts().getAll());
+        assertEquals(2L, page.getCounts().getDraft());
+        assertEquals(1L, page.getCounts().getPublished());
+        // 摘要不得携带大字段：避免列表首屏为整页 Schema 付出序列化成本
+        InsightDashboardSummaryVO first = page.getRecords().get(0);
+        assertEquals("bar", first.getChartKind());
+        assertEquals("kpi-grid", page.getRecords().get(1).getChartKind());
+        assertEquals("empty", page.getRecords().get(2).getChartKind());
+    }
+
+    @Test
+    void pageDashboardsFallsBackToEmptyChartKindWhenSchemaIsUnparsable() {
+        InsightDashboardMapper mapper = mock(InsightDashboardMapper.class);
+        WorkspaceGuard wg = mock(WorkspaceGuard.class);
+        when(wg.currentWorkspaceId()).thenReturn(7L);
+        InsightDashboardEntity broken = entity(9L, "坏 Schema", "private", "draft", "{ not json");
+        when(mapper.selectList(any())).thenReturn(List.of(broken));
+        when(mapper.selectCount(any())).thenReturn(1L);
+
+        InsightDashboardServiceImpl service =
+                new InsightDashboardServiceImpl(mapper, wg, null, null, null, new ObjectMapper(), null);
+        InsightDashboardPageVO page = service.pageDashboards(new InsightDashboardSummaryQuery());
+        assertEquals("empty", page.getRecords().get(0).getChartKind());
+    }
+
+    @Test
+    void pageDashboardsPaginatesAndFiltersInTheDatabaseQuery() {
+        InsightDashboardMapper mapper = mock(InsightDashboardMapper.class);
+        WorkspaceGuard wg = mock(WorkspaceGuard.class);
+        when(wg.currentWorkspaceId()).thenReturn(7L);
+        when(mapper.selectList(any())).thenReturn(List.of());
+        when(mapper.selectCount(any())).thenReturn(0L);
+
+        InsightDashboardServiceImpl service =
+                new InsightDashboardServiceImpl(mapper, wg, null, null, null, new ObjectMapper(), null);
+        InsightDashboardSummaryQuery query = new InsightDashboardSummaryQuery();
+        query.setPage(3);
+        query.setSize(5);
+        query.setStatus("published");
+        query.setKeyword(" 策略 ");
+        query.setVisibility("template,official");
+        query.setSortBy("name");
+        query.setSortOrder("asc");
+        service.pageDashboards(query);
+
+        var captor = org.mockito.ArgumentCaptor.forClass(com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper.class);
+        verify(mapper, org.mockito.Mockito.atLeastOnce()).selectList(captor.capture());
+        String sql = captor.getValue().getCustomSqlSegment();
+        assertTrue(sql.contains("LIMIT"), "分页必须在 SQL 侧完成，而不是把全量实体读进内存后再截断: " + sql);
+        assertTrue(sql.contains("OFFSET"), "分页必须在 SQL 侧完成: " + sql);
+        assertTrue(sql.toLowerCase().contains("like"), "关键词过滤必须下推到数据库: " + sql);
+    }
+
+    private static InsightDashboardEntity entity(Long id, String name, String visibility, String status, String schemaJson) {
+        InsightDashboardEntity e = new InsightDashboardEntity();
+        e.setId(id);
+        e.setWorkspaceId(7L);
+        e.setName(name);
+        e.setVisibility(visibility);
+        e.setStatus(status);
+        e.setSchemaJson(schemaJson);
+        e.setDeleted(0);
+        return e;
     }
 
     @Test

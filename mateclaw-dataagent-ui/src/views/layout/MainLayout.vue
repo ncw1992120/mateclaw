@@ -49,7 +49,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, defineAsyncComponent } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import { useAgentStore } from '@/stores/useAgentStore'
@@ -59,13 +59,19 @@ import { useUserStore } from '@/stores/useUserStore'
 import { shouldLoadActiveModel } from './mainLayoutModelLoad'
 import TopNavBar from './TopNavBar.vue'
 import WorkbenchView from '../WorkbenchView.vue'
-import DashboardListView from '../insight/DashboardListView.vue'
 import ReportListView from '../report/ReportListView.vue'
 import ConfigCenter from '../config/ConfigCenter.vue'
 import HelpCenterView from '../help/HelpCenterView.vue'
 import ModelConfigDialog from '../dialog/ModelConfigDialog.vue'
 import AgentConfigDialog from '../dialog/AgentConfigDialog.vue'
 import type { Agent } from '@/types'
+
+// 洞察列表视图传递依赖较重（Schema 解析/分页等），按需加载以减轻首页解析负担；
+// 仅改变打包拆分，不改路由与 query 语义。显式解包 .default，保证运行时与测试环境下
+// loader 的 resolve 值恒为组件对象本身。
+const DashboardListView = defineAsyncComponent(
+  async () => (await import('../insight/DashboardListView.vue')).default,
+)
 
 const { t } = useI18n()
 const route = useRoute()
@@ -87,34 +93,72 @@ const editingAgent = ref<Agent | null>(null)
 /** 切回标签页时尝试续连的处理函数（onUnmounted 时清理） */
 let handleVisibilityChange: (() => void) | null = null
 
-onMounted(async () => {
-  // 并行加载：agents、models、会话列表互不依赖，同时发起减少白屏时间
-  const [, , ,] = await Promise.all([
-    agentStore.fetchAgents(1),
-    modelStore.fetchEnabledModels(),
-    chatStore.fetchConversations(),
-    userStore.isAdmin ? modelStore.fetchProviders() : Promise.resolve(),
-  ])
-  if (shouldLoadActiveModel(activeNav.value)) {
-    modelStore.fetchActiveModel()
-  }
+/**
+ * 导航作用域后台数据：会话列表、历史消息恢复与 SSE 续连只属于智能问数。
+ * 进入洞察/报告/配置等导航时不发起这些请求，缩短首次进入的无关请求链路。
+ */
+const initializedNavScopes = new Set<string>()
+/** 当前导航作用域令牌：用户快速切换导航时，旧作用域尚未完成的异步回调据此失效 */
+let navScopeToken = 0
 
+/** 智能问数作用域：加载会话列表并尝试恢复上次会话/续连（导航切换后失效则不写状态） */
+async function initSmartAskScope(token: number): Promise<void> {
+  await Promise.all([
+    agentStore.fetchAgents(1),
+    chatStore.fetchConversations(),
+  ])
+  if (token !== navScopeToken) {
+    return
+  }
   // 刷新页面时尝试续连上一次未完成的 SSE 流（后端 RunState 5 分钟内可恢复）
   // tryResumeStream 内部对已完成对话会直接用 listMessages 渲染（不走 SSE 回放），
   // 对仍在运行的对话走 SSE buffer 回放；返回 true 时 MainLayout 无需再 switchConversation
   const resumed = await chatStore.tryResumeStream()
+  if (token !== navScopeToken) {
+    return
+  }
   // 没有进入续连/恢复流程时，恢复当前选中会话的历史消息，避免刷新后显示为空态
   if (!resumed && chatStore.conversationId && !chatStore.isStreaming) {
     await chatStore.switchConversation(chatStore.conversationId, true)
   }
+}
 
-  // 用户切回该 tab 时再次尝试续连，覆盖：刷新→离开→回来 的场景
+/** 按当前导航初始化所需的后台数据（每个作用域只执行一次） */
+function ensureNavScopeData(nav: string): void {
+  if (initializedNavScopes.has(nav)) {
+    return
+  }
+  initializedNavScopes.add(nav)
+  if (nav !== 'smart-ask') {
+    return
+  }
+  const token = ++navScopeToken
+  void initSmartAskScope(token)
+}
+
+onMounted(() => {
+  // 模型/供应商列表只被配置弹窗消费：后台加载不阻塞首屏导航渲染
+  void modelStore.fetchEnabledModels().catch(() => {})
+  if (userStore.isAdmin) {
+    void modelStore.fetchProviders().catch(() => {})
+  }
+  if (shouldLoadActiveModel(activeNav.value)) {
+    modelStore.fetchActiveModel()
+  }
+  ensureNavScopeData(activeNav.value)
+
+  // 用户切回该 tab 时再次尝试续连，覆盖：刷新→离开→回来 的场景（仅问数作用域有效）
   handleVisibilityChange = () => {
-    if (document.visibilityState === 'visible') {
+    if (document.visibilityState === 'visible' && activeNav.value === 'smart-ask') {
       chatStore.tryResumeStream()
     }
   }
   document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+/** 导航切换：进入问数时才恢复原会话初始化流程 */
+watch(activeNav, (nav) => {
+  ensureNavScopeData(nav)
 })
 
 onUnmounted(() => {

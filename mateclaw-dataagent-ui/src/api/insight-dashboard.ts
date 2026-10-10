@@ -1,5 +1,5 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardSaveAsTemplateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardSaveAsTemplateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext, InsightDashboardSummaryPage, InsightDashboardSummaryQuery } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/v1/insight/dashboards'
@@ -10,6 +10,15 @@ const BASE_URL = '/v1/insight/dashboards'
  */
 export function list(params?: { visibility?: string }) {
   return api.get<InsightDashboard[]>(BASE_URL, { params })
+}
+
+/**
+ * 查询仪表盘列表摘要（分页，不含 schemaJson）
+ *
+ * 列表首屏专用：搜索、状态筛选、排序和翻页都在服务端完成，避免把整页 Schema 拉到前端。
+ */
+export function listSummary(params?: InsightDashboardSummaryQuery) {
+  return api.get<InsightDashboardSummaryPage>(`${BASE_URL}/summary`, { params })
 }
 
 /** 查询仪表盘详情 */

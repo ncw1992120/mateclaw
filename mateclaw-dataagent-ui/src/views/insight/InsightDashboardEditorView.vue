@@ -78,7 +78,7 @@
         </el-button>
         <el-button
           class="toolbar-btn history-action"
-          :disabled="!canUndoEdit || isOfficialTemplate"
+          :disabled="!canUndoEdit || isOfficialTemplate || schemaLoading"
           title="撤销（⌘Z / Ctrl+Z）"
           aria-label="撤销"
           aria-keyshortcuts="Meta+Z Control+Z"
@@ -88,7 +88,7 @@
         </el-button>
         <el-button
           class="toolbar-btn history-action"
-          :disabled="!canRedoEdit || isOfficialTemplate"
+          :disabled="!canRedoEdit || isOfficialTemplate || schemaLoading"
           title="重做（⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y）"
           aria-label="重做"
           aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z Control+Y"
@@ -97,11 +97,11 @@
           <el-icon><RefreshRight /></el-icon>
         </el-button>
         <span v-if="dashboard" :class="['editor-save-status', `is-${schemaSaveState}`]" role="status" aria-live="polite">{{ schemaSaveStatusText }}</span>
-        <el-button class="toolbar-btn" @click="handleSave" :loading="saving" :disabled="isOfficialTemplate">
+        <el-button class="toolbar-btn" @click="handleSave" :loading="saving" :disabled="isOfficialTemplate || schemaLoading">
           <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
           {{ t('insight.save') }}
         </el-button>
-        <el-button type="primary" class="toolbar-btn" @click="handlePreview" :disabled="!dashboard">
+        <el-button type="primary" class="toolbar-btn" @click="handlePreview" :disabled="!dashboard || schemaLoading">
           <template #icon><el-icon><View /></el-icon></template>
           {{ t('insight.preview') }}
         </el-button>
@@ -225,7 +225,17 @@
 
       <!-- 画布 -->
       <div class="editor-canvas">
+        <!-- 详情/Schema 未就绪：外壳先可交互，画布区给出加载态；失败时保留返回入口 -->
+        <div v-if="schemaLoading" class="editor-canvas-state" role="status" aria-live="polite">
+          <el-icon class="is-loading editor-canvas-spinner"><Loading /></el-icon>
+          <span class="editor-canvas-state-text">{{ t('insight.loadingSchema') }}</span>
+        </div>
+        <div v-else-if="schemaError" class="editor-canvas-state is-error" role="alert">
+          <span class="editor-canvas-state-text">{{ schemaError }}</span>
+          <el-button class="toolbar-btn" @click="handleBack">{{ t('common.back') }}</el-button>
+        </div>
         <DashboardCanvas
+          v-else
           :components="currentPageComponents"
           :component-data-map="componentDataMap"
           :dataset-inputs="schema.datasetInputs"
@@ -453,7 +463,7 @@ import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, nextTick } 
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold, RefreshLeft, RefreshRight } from '@element-plus/icons-vue'
+import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold, RefreshLeft, RefreshRight, Loading } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
 import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage, DatasetQueryConfig, InsightDashboardTemplateMeta, InsightDashboardSaveAsTemplateInput } from '@/types'
 import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
@@ -487,6 +497,7 @@ import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
 import { createComponentPreviewRevisions } from '@/composables/component-preview-revisions'
 import { createDashboardEditHistory, resolveDashboardHistoryShortcut } from './composables/dashboard-edit-history'
+import { markDashboardPerformance } from '@/utils/dashboardPerformance'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -557,6 +568,10 @@ function onSaveQueryConfig(config: DatasetQueryConfig, fixedFilters: Array<{ fie
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
+/** 详情/Schema 是否仍在加载：编辑器外壳先呈现，数据相关操作在就绪前禁用 */
+const schemaLoading = ref(true)
+/** 详情加载失败提示：保留外壳与返回入口，给出可理解的错误态 */
+const schemaError = ref('')
 const schemaSaveState = ref<'saved' | 'pending' | 'saving' | 'error'>('saved')
 const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
@@ -1012,6 +1027,7 @@ const filterComponents = computed<PanelFilterComponent[]>(() =>
 )
 
 onMounted(async () => {
+  markDashboardPerformance('insight-editor-interactive')
   document.addEventListener('keydown', handleEditorClipboardKeydown)
   await loadDashboard(props.dashboardId)
 })
@@ -1232,6 +1248,8 @@ function migrateSchema(parsed: any): InsightDashboardSchema {
 /** 加载仪表盘数据 */
 async function loadDashboard(id: string): Promise<void> {
   editHistoryReady = false
+  schemaLoading.value = true
+  schemaError.value = ''
   if (editHistoryTimer) {
     clearTimeout(editHistoryTimer)
     editHistoryTimer = null
@@ -1242,11 +1260,20 @@ async function loadDashboard(id: string): Promise<void> {
     await userStore.fetchCurrentUser()
   }
   if (!userStore.token) {
+    schemaLoading.value = false
     return
   }
-  await store.selectDashboard(id)
+  markDashboardPerformance('insight-editor-request-start')
+  try {
+    await store.selectDashboard(id)
+  } catch {
+    schemaLoading.value = false
+    schemaError.value = t('insight.loadFailed')
+    return
+  }
   // 归属守卫：非创建者且非工作区管理员不可进入编辑（防止 localStorage 残留的编辑模式）
   if (dashboard.value && !canModifyResource(dashboard.value.ownerId)) {
+    schemaLoading.value = false
     ElMessage.warning(t('insight.noEditPerm'))
     emit('back')
     return
@@ -1294,6 +1321,8 @@ async function loadDashboard(id: string): Promise<void> {
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
+    markDashboardPerformance('insight-editor-schema-ready')
+    schemaLoading.value = false
     resetEditorHistory()
     // 结果集持久化（决策 B）：按各组件已保存的结果集恢复画布数据，不阻塞编辑器打开
     void restorePipelineResults()
@@ -2940,6 +2969,31 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   background: var(--db-bg);
   border: 1px solid var(--db-border);
   border-radius: 12px;
+}
+
+/* 详情/Schema 加载与错误态：占满画布区，不阻塞外壳其他面板 */
+.editor-canvas-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100%;
+  padding: 32px;
+}
+
+.editor-canvas-state.is-error .editor-canvas-state-text {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.editor-canvas-state-text {
+  font-size: 13px;
+  color: var(--db-text-muted);
+}
+
+.editor-canvas-spinner {
+  font-size: 22px;
+  color: var(--db-text-muted);
 }
 
 .component-context-menu {
