@@ -359,6 +359,8 @@ const props = withDefaults(defineProps<{
   editable?: boolean
   /** 预览态「自适应宽度」开关（由父级工具栏按钮控制）：收拢栅格列数到内容实际占宽并铺满视口 */
   previewFillWidth?: boolean
+  /** 预览态可显式与页面采用同一个背景表面；编辑态默认仍跟随页面主题底色。 */
+  canvasBackground?: string
   /** 当前选中的组件 ID */
   selectedId?: string
   /** 当前仪表盘解析后的主题 */
@@ -553,7 +555,10 @@ const childTitleIconStylePreview = computed(() => {
     : undefined
 })
 
-const dashboardThemeVariables = computed(() => props.dashboardTheme ? themeCssVariables(props.dashboardTheme) : {})
+const dashboardThemeVariables = computed(() => ({
+  ...(props.dashboardTheme ? themeCssVariables(props.dashboardTheme) : {}),
+  ...(props.canvasBackground ? { '--dashboard-canvas-background': props.canvasBackground } : {}),
+}))
 
 const emit = defineEmits<{
   (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void
@@ -1523,7 +1528,7 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   overflow: auto;
   padding: var(--space-xl);
   box-sizing: border-box;
-  background: var(--db-bg, #F7F8FA);
+  background: var(--dashboard-canvas-background, var(--db-bg, #F7F8FA));
   display: flex;
   flex-direction: column;
 }

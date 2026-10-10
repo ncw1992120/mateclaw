@@ -126,6 +126,7 @@
         :editable="false"
         :preview-fill-width="previewFillWidth"
         :dashboard-theme="dashboardTheme"
+        :canvas-background="'var(--dashboard-preview-background)'"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
@@ -229,7 +230,11 @@ const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
-const dashboardThemeVariables = computed(() => themeCssVariables(dashboardTheme.value))
+const dashboardThemeVariables = computed(() => ({
+  ...themeCssVariables(dashboardTheme.value),
+  // 预览以主题卡片表面作为统一底色，与铺满画布的组合卡片视觉一致。
+  '--dashboard-preview-background': dashboardTheme.value.cardBackground || 'var(--db-card)',
+}))
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
 const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
@@ -1380,7 +1385,7 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--db-bg);
+  background: var(--dashboard-preview-background, var(--db-bg));
   overflow: hidden;
   /* 与列表页/编辑页一致：四周留灰底边距，页头与预览卡片悬浮于页面底色之上 */
   padding: var(--space-md) var(--space-lg) var(--space-lg);
@@ -1764,7 +1769,7 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   flex-direction: column;
   /* 外边距已由根容器统一提供，与列表页灰底留边一致 */
   margin: 0;
-  background: var(--db-bg);
+  background: var(--dashboard-preview-background, var(--db-bg));
   border: 1px solid var(--db-border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);

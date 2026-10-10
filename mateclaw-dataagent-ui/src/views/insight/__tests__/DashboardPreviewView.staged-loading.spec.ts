@@ -210,4 +210,19 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
 
     expect(wrapper.get('.dashboard-preview-view').attributes('style') ?? '').toContain('--insight-page-bg: #FFF7FA')
   })
+
+  it('预览页面与画布使用仪表盘卡片底色，避免浅灰画布衬在白色看板外', async () => {
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '白色底色预览',
+      schemaJson: JSON.stringify({
+        version: '1.0',
+        theme: { mode: 'preset', presetId: 'rose' },
+        pages: [{ id: 'page-1', name: '页面', components: [pipelineComponent] }],
+      }),
+    }
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(wrapper.get('.dashboard-preview-view').attributes('style') ?? '').toContain('--dashboard-preview-background: #FFFFFF')
+  })
 })

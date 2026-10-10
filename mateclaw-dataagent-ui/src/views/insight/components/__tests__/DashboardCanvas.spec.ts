@@ -12,6 +12,7 @@ import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from '../dash
 import { resolveDashboardTheme } from '@/utils/dashboard-theme'
 
 const stubs = {
+  ElIcon: true,
   GridLayout: { template: '<div class="vgl-layout"><slot /></div>' },
   GridItem: { template: '<div><slot /></div>' },
   KpiCardWidget: { name: 'KpiCardWidget', props: ['component', 'componentData'], template: '<div />' },
@@ -48,6 +49,20 @@ const component = {
 }
 
 describe('DashboardCanvas keyboard interaction', () => {
+  it('uses the explicitly supplied background token when rendering a preview canvas', () => {
+    const wrapper = mount(DashboardCanvas, {
+      props: {
+        components: [component],
+        editable: false,
+        canvasBackground: 'var(--dashboard-preview-background)',
+      },
+      global: { stubs, plugins: [i18n] },
+    })
+
+    expect(wrapper.get('.dashboard-canvas').attributes('style') ?? '')
+      .toContain('--dashboard-canvas-background: var(--dashboard-preview-background)')
+  })
+
   it('moves and resizes the selected component with keyboard arrows', async () => {
     const wrapper = mount(DashboardCanvas, {
       props: { components: [component], editable: true, selectedId: 'kpi-1' },
