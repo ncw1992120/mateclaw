@@ -75,6 +75,31 @@ describe('PythonResultDataDialog', () => {
     wrapper.unmount()
   })
 
+  it('允许清空结果字段展示名，清空后输入框保持为空', async () => {
+    Object.assign(state.resultSet, {
+      columns: [{ name: 'amount', type: 'number', title: '默认金额' }],
+      rows: [{ amount: 10 }],
+      rowCount: 1,
+    })
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'test',
+      confirmed: true,
+      displayFields: [{ field: 'amount', title: '自定义金额', role: 'measure' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    await flushPromises()
+    const input = wrapper.get('.dd-display-table input')
+    await input.setValue('')
+
+    expect(state.finalResultQueryConfig?.displayFields[0].title).toBe('')
+    expect((input.element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+
   it('Python 数值输出列应按指标保存，不能沿用旧的维度分类', async () => {
     Object.assign(state.resultSet, {
       columns: [{ name: '转化规模', type: 'number' }, { name: '转化人数', type: 'number' }],

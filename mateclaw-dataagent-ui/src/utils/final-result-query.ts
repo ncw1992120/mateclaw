@@ -85,6 +85,28 @@ export function preserveFinalResultQueryPreferences(
   }
 }
 
+/** 查询刷新列元数据时按技术字段名恢复展示字段，并保留用户的展示名（包括显式清空）。 */
+export function reconcileFinalResultDisplayFields(
+  columns: Array<{ name: string; type: string; title?: string }>,
+  rows: Record<string, unknown>[],
+  previousFields: QueryDisplayField[],
+): QueryDisplayField[] {
+  const previousByField = new Map(previousFields.map((field) => [field.field, field]))
+  return columns.map((column) => {
+    const configured = previousByField.get(column.name)
+    const sampleValue = rows[0]?.[column.name]
+    const role = column.type === 'number' || typeof sampleValue === 'number'
+      ? 'measure'
+      : configured?.role ?? 'dimension'
+    return {
+      field: column.name,
+      title: configured ? configured.title : column.title || column.name,
+      role,
+      dataType: column.type,
+    }
+  })
+}
+
 function configuredFields(config: FinalResultQueryConfig): string[] {
   return [
     ...config.displayFields.map((field) => field.field),

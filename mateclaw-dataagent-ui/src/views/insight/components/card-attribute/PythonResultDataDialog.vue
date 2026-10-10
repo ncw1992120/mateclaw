@@ -141,7 +141,7 @@ const displayRows = computed(() => (previewState.payload?.dataColumns ?? []).map
   const role = column.type === 'number' || typeof sampleValue === 'number'
     ? 'measure'
     : configured?.role ?? 'dimension'
-  return { name: column.name, title: configured?.title || column.title || column.name, role }
+  return { name: column.name, title: configured ? configured.title : column.title || column.name, role }
 }))
 const filterFields = computed(() => config.value?.filterFields ?? [])
 const paginationEnabled = computed(() => config.value?.paginationPolicy.enabled === true)

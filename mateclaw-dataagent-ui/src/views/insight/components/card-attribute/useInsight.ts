@@ -34,7 +34,7 @@ import {
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
-import { buildFinalResultQueryConfig, preserveFinalResultQueryPreferences } from '@/utils/final-result-query'
+import { buildFinalResultQueryConfig, preserveFinalResultQueryPreferences, reconcileFinalResultDisplayFields } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
@@ -1996,22 +1996,9 @@ async function loadResultPreview(): Promise<void> {
     state.resultSet.rows = rows
     state.resultSet.rowCount = rows.length
     if (state.finalResultQueryConfig) {
-      const previousFields = state.finalResultQueryConfig.displayFields ?? []
       state.finalResultQueryConfig = {
         ...state.finalResultQueryConfig,
-        displayFields: columns.map((column) => {
-          const configured = previousFields.find((field) => field.field === column.name)
-          const sampleValue = rows[0]?.[column.name]
-          const role = column.type === 'number' || typeof sampleValue === 'number'
-            ? 'measure'
-            : configured?.role ?? 'dimension'
-          return {
-            field: column.name,
-            title: configured?.title || column.title || column.name,
-            role,
-            dataType: column.type,
-          }
-        }),
+        displayFields: reconcileFinalResultDisplayFields(columns, rows, state.finalResultQueryConfig.displayFields ?? []),
       }
     }
     if (activeCard.value?.type === 'kpi') rebuildKpiMetrics()

@@ -3,6 +3,7 @@ import { resolveOutputSpec } from '../component-output-spec'
 import type { ResultSchema } from '../script-result'
 import {
   buildFinalResultQueryConfig,
+  reconcileFinalResultDisplayFields,
   preserveFinalResultQueryPreferences,
   finalResultQueryConfigStatus,
   isFinalResultQueryConfigured,
@@ -84,6 +85,29 @@ describe('preserveFinalResultQueryPreferences', () => {
     }
 
     expect(preserveFinalResultQueryPreferences(undefined, discovered)).toEqual(discovered)
+  })
+})
+
+describe('reconcileFinalResultDisplayFields', () => {
+  it('查询刷新列元数据时保留已编辑或清空的展示名，并为新字段使用默认名', () => {
+    const fields = reconcileFinalResultDisplayFields(
+      [
+        { name: 'amount', type: 'number', title: '默认金额' },
+        { name: 'region', type: 'string', title: '默认区域' },
+        { name: 'count', type: 'number', title: '默认数量' },
+      ],
+      [{ amount: 10, region: '华东', count: 2 }],
+      [
+        { field: 'amount', title: '自定义金额', role: 'measure' },
+        { field: 'region', title: '', role: 'dimension' },
+      ],
+    )
+
+    expect(fields).toEqual([
+      { field: 'amount', title: '自定义金额', role: 'measure', dataType: 'number' },
+      { field: 'region', title: '', role: 'dimension', dataType: 'string' },
+      { field: 'count', title: '默认数量', role: 'measure', dataType: 'number' },
+    ])
   })
 })
 
