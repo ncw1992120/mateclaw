@@ -14,15 +14,15 @@ describe('component-visual-style', () => {
     expect(resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'kpi')['--component-border']).toBe('1px solid transparent')
   })
 
-  it('自定义颜色作为顶线颜色输出，与边框模式无关', () => {
+  it('自定义颜色作为顶线颜色输出，但隐藏边框时不保留顶线', () => {
     expect(resolveComponentVisualStyle({ border: { mode: 'visible', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-group-accent']).toBe('#FF5500')
-    expect(resolveComponentVisualStyle({ border: { mode: 'hidden', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-group-accent']).toBe('#FF5500')
+    expect(resolveComponentVisualStyle({ border: { mode: 'hidden', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-group-accent']).toBe('transparent')
     expect(resolveComponentVisualStyle({ border: { mode: 'theme' } }, 'kpi')['--component-group-accent']).toBeUndefined()
     expect(resolveComponentVisualStyle({ border: { mode: 'theme', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-border']).toBe('1px solid var(--db-border)')
   })
 
-  it('隐藏边框且无自定义色时，顶线被显式置透明以覆盖主题强调色', () => {
-    // 修复：边框隐藏后仍可见顶部强调色（被误认为边框未隐藏）
+  it('隐藏边框时顶线被显式置透明以覆盖主题或自定义强调色', () => {
+    // 修复：边框隐藏后仍可见主题顶部强调色（被误认为边框未隐藏）
     expect(resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'kpi')['--component-group-accent']).toBe('transparent')
     // 控制区（filter/timeFilter）本就不下发强调色，隐藏边框同样回落透明
     expect(resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'filter')['--component-group-accent']).toBe('transparent')
@@ -31,6 +31,7 @@ describe('component-visual-style', () => {
   it('隐藏边框时下发交互态守卫变量，让 hover/选中不再重绘边框与阴影', () => {
     // 修复：边框隐藏后，编辑选中见蓝边、预览悬停见灰边的问题
     const hidden = resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'kpi')
+    expect(hidden['--component-shadow']).toBe('none')
     expect(hidden['--component-hover-border-color']).toBe('transparent')
     expect(hidden['--component-selected-border-color']).toBe('transparent')
     expect(hidden['--component-hover-shadow']).toBe('none')

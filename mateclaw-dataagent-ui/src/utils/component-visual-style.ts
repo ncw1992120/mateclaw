@@ -57,15 +57,10 @@ export function resolveComponentVisualStyle(
       ? 'transparent'
       : 'var(--db-surface-card, var(--db-card))'
 
-  // 顶线（= 边框颜色语义的载体）输出规则：
-  // 1. 有自定义色时优先输出自定义色（与边框模式无关，隐藏边框也可保留顶线强调色）；
-  // 2. 无自定义色且边框隐藏时，显式置 transparent，覆盖主题注入的强调色，
-  //    否则主题强调色的顶线会被误认为「边框尚未隐藏」；
-  // 3. 无自定义色且边框未隐藏时，不下发，回落主题强调色（zone 分区色）。
-  const accent = topline ?? (border.mode === 'hidden' ? 'transparent' : undefined)
-
   const borderHidden = border.mode === 'hidden'
   const shadowNone = (normalized.shadow ?? 'subtle') === 'none'
+  // 隐藏边框代表不显示卡片外框装饰，不能保留自定义或主题顶线，否则预览中仍像有一条边。
+  const accent = borderHidden ? 'transparent' : topline
 
   return {
     '--component-border': borderHidden
@@ -74,7 +69,10 @@ export function resolveComponentVisualStyle(
     '--component-surface': background,
     ...(accent ? { '--component-group-accent': accent } : {}),
     '--component-radius': `${normalized.radius ?? 12}px`,
-    '--component-shadow': SHADOW_TOKENS[normalized.shadow ?? 'subtle'],
+    // 隐藏边框时同步移除基础态外阴影；否则预览态（无选中样式）仍会看到卡片轮廓。
+    '--component-shadow': borderHidden || shadowNone
+      ? 'none'
+      : SHADOW_TOKENS[normalized.shadow ?? 'subtle'],
     '--component-padding': `${normalized.padding ?? 0}px`,
     // 交互态（hover / 选中）边框与阴影：尊重组件的「隐藏边框 / 关闭阴影」设置。
     // 基础态的 --component-border / --component-shadow 在隐藏时已置 transparent / none，
