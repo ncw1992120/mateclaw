@@ -41,12 +41,20 @@ export function cloneInsightComponentForPaste(
 
     const tabs = node.containerConfig?.tabs
     if (Array.isArray(tabs)) {
+      // 先收集旧 id → 新 id 映射，重生成页签 id 后把 activeTab 同步重映射，
+      // 否则克隆出的嵌套组合卡片 activeTab 仍指向旧 id，渲染查不到该页签会回退到空 children。
+      const tabIdMap = new Map<string, string>()
       tabs.forEach((tab: Record<string, any>) => {
-        tab.id = createId('tab')
+        const newId = createId('tab')
+        tabIdMap.set(tab.id, newId)
+        tab.id = newId
         if (Array.isArray(tab.children)) {
           tab.children.forEach((child: Record<string, any>) => cloneNode(child))
         }
       })
+      if (node.containerConfig?.activeTab != null && tabIdMap.has(node.containerConfig.activeTab)) {
+        node.containerConfig.activeTab = tabIdMap.get(node.containerConfig.activeTab)
+      }
     }
   }
 
@@ -76,12 +84,19 @@ export function cloneCombinationChildForPaste(
     }
     const tabs = node.containerConfig?.tabs
     if (Array.isArray(tabs)) {
+      // 同步重映射 activeTab，避免克隆出的嵌套组合卡片 activeTab 指向旧 id 而渲染为空。
+      const tabIdMap = new Map<string, string>()
       tabs.forEach((tab: Record<string, any>) => {
-        tab.id = createId('tab')
+        const newId = createId('tab')
+        tabIdMap.set(tab.id, newId)
+        tab.id = newId
         if (Array.isArray(tab.children)) {
           tab.children.forEach((child: Record<string, any>) => cloneNode(child))
         }
       })
+      if (node.containerConfig?.activeTab != null && tabIdMap.has(node.containerConfig.activeTab)) {
+        node.containerConfig.activeTab = tabIdMap.get(node.containerConfig.activeTab)
+      }
     }
   }
   cloneNode(clone as unknown as Record<string, any>)
