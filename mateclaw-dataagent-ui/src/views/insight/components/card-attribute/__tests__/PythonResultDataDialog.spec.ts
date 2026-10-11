@@ -1,9 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PythonResultDataDialog from '../PythonResultDataDialog.vue'
 import { useInsight } from '../useInsight'
+import * as insightModule from '../useInsight'
 
 const { state, previewState } = useInsight()
+let reloadResult: ReturnType<typeof vi.fn>
 
 const stubs = {
   'el-dialog': { template: '<div><slot /></div>' },
@@ -38,6 +40,17 @@ const stubs = {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks()
+  const originalUseInsight = insightModule.useInsight
+  reloadResult = vi.fn((forceRefresh?: boolean) =>
+    forceRefresh ? Promise.resolve() : originalUseInsight().loadResultPreview(forceRefresh),
+  )
+  vi.spyOn(insightModule, 'useInsight').mockImplementation(() => ({
+    ...originalUseInsight(),
+    loadResultPreview: reloadResult,
+  }))
+  state.datasets = []
+  state.backend.dashboardId = ''
   state.ui.preview = { visible: true, kind: 'result', datasetId: null, tab: 'data' }
   state.finalResultQueryConfig = undefined
   state.filterCatalog = []
@@ -153,11 +166,12 @@ describe('PythonResultDataDialog', () => {
     expect(wrapper.text()).toContain('暂无筛选字段；本次将展示全部 Python 输出。')
     expect(wrapper.get('[data-testid="python-run-query"]').attributes('disabled')).toBeUndefined()
     await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+    await flushPromises()
     expect(wrapper.find('.result-table').exists()).toBe(true)
     wrapper.unmount()
   })
 
-  it('点击查询只筛选已加载的 Python 结果，不重新执行并保留字段及筛选配置', async () => {
+  it('点击查询会重新执行上游查询和 Python，同时保留字段及筛选配置', async () => {
     state.datasets = [{ datasetId: 'dataset-1', inputName: 'table_ab' }] as any
     state.finalResultQueryConfig = {
       schemaFingerprint: 'stable-schema',
@@ -170,21 +184,23 @@ describe('PythonResultDataDialog', () => {
       paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
     }
     state.filterCatalog = [{ id: 'result-filter', title: '结果筛选器', type: 'filter', selectionMode: 'single' }]
-    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    reloadResult.mockClear()
+    const refreshedWrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()
     const configBeforeQuery = JSON.parse(JSON.stringify(state.finalResultQueryConfig))
 
-    await wrapper.find('.dd-filter-table input:not([type="checkbox"])').setValue('rendered')
-    await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+    await refreshedWrapper.find('.dd-filter-table input:not([type="checkbox"])').setValue('rendered')
+    await refreshedWrapper.get('[data-testid="python-run-query"]').trigger('click')
     await flushPromises()
 
+    expect(reloadResult).toHaveBeenCalledWith(true)
     expect(previewState.error).toBe('')
     expect(state.finalResultQueryConfig).toEqual(configBeforeQuery)
-    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(1)
-    expect(wrapper.findAll('[data-testid="python-query-filter-row"]')).toHaveLength(1)
-    expect(wrapper.find('.result-table').exists()).toBe(true)
+    expect(refreshedWrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(1)
+    expect(refreshedWrapper.findAll('[data-testid="python-query-filter-row"]')).toHaveLength(1)
+    expect(refreshedWrapper.find('.result-table').exists()).toBe(true)
     state.datasets = []
-    wrapper.unmount()
+    refreshedWrapper.unmount()
   })
 
   it('loads the existing result when mounted while already visible', async () => {
@@ -220,6 +236,7 @@ describe('PythonResultDataDialog', () => {
     await wrapper.find('input[type="checkbox"]').setValue(true)
 
     await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+    await flushPromises()
 
     expect(wrapper.emitted('resultset')).toBeUndefined()
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)

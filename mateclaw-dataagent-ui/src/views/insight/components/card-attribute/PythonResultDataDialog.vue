@@ -299,7 +299,10 @@ function onSortChange(detail: { prop?: string; order?: 'ascending' | 'descending
   page.value = 1
 }
 
-function query(): void {
+async function query(): Promise<void> {
+  // “查询”必须重新查询上游数据集并执行 Python；否则弹窗会一直展示打开时缓存的旧结果。
+  // forceRefresh 会保留已编辑的最终结果字段/筛选配置，只更新实际数据结果。
+  await loadResultPreview(true)
   appliedConditions.value = enabledPythonResultConditions(conditionRows.value)
   page.value = 1
   hasQueried.value = Boolean(previewState.payload)
