@@ -23,12 +23,16 @@ const stubs = {
     emits: ['update:modelValue'],
     template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  'el-date-picker': { inheritAttrs: false, template: '<input data-testid="python-query-date-input" />' },
+  'el-date-picker': {
+    inheritAttrs: false,
+    props: ['modelValue', 'disabled'],
+    template: '<input data-testid="python-query-date-input" :value="modelValue" :disabled="disabled" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   'el-switch': {
     inheritAttrs: false,
     props: ['modelValue', 'disabled'],
-    emits: ['update:modelValue'],
-    template: '<input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+    emits: ['update:modelValue', 'change'],
+    template: '<input type="checkbox" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked); $emit(\'change\', $event.target.checked)" />',
   },
   ComponentDataPreview: { template: '<div data-testid="component-render-preview">组件预览 <slot /></div>' },
 }
@@ -235,7 +239,7 @@ describe('PythonResultDataDialog', () => {
     wrapper.unmount()
   })
 
-  it('按绑定筛选器固定操作符，并将时间范围呈现为开始和结束两个日期条件', async () => {
+  it('隐藏筛选操作符，并将时间范围合并为一行且共用启用开关', async () => {
     state.finalResultQueryConfig = {
       schemaFingerprint: 'test',
       confirmed: true,
@@ -251,11 +255,17 @@ describe('PythonResultDataDialog', () => {
     const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.findAll('[data-testid="python-query-filter-operator"]').map((cell) => cell.text())).toEqual(['>=', '<'])
-    expect(wrapper.findAll('[data-time-boundary="start"], [data-time-boundary="end"]')).toHaveLength(2)
+    expect(wrapper.find('thead').text()).not.toContain('操作符')
+    expect(wrapper.findAll('[data-testid="python-query-filter-operator"]')).toHaveLength(0)
+    expect(wrapper.findAll('[data-testid="python-query-filter-row"]')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="python-query-time-range"]')).toHaveLength(1)
     expect(wrapper.findAll('[data-testid="python-query-date-input"]')).toHaveLength(2)
+    expect(wrapper.findAll('input[type="checkbox"]')).toHaveLength(1)
     expect(wrapper.find('el-select').exists()).toBe(false)
-    expect(wrapper.text()).toContain('不包含结束时间')
+    expect(wrapper.get('[data-testid="python-query-date-input"]').attributes('placeholder')).toBe('选择开始时间')
+    expect(wrapper.findAll('[data-testid="python-query-date-input"]')[1].attributes('placeholder')).toContain('不包含')
+    await wrapper.get('input[type="checkbox"]').setValue(false)
+    expect(wrapper.findAll('[data-testid="python-query-date-input"]').every((input) => input.attributes('disabled') !== undefined)).toBe(true)
     wrapper.unmount()
   })
 

@@ -45,11 +45,10 @@
         </div>
         <div class="dd-table-wrap">
           <table class="dd-table dd-filter-table" data-testid="fixed-filter-table">
-            <thead><tr><th scope="col">字段</th><th scope="col">操作符</th><th scope="col">固定值</th></tr></thead>
+            <thead><tr><th scope="col">字段</th><th scope="col">固定值</th></tr></thead>
             <tbody>
               <tr v-for="(filter, index) in fixedFilters" :key="`${filter.field}-${index}`" data-testid="fixed-filter-row">
                 <td>{{ fieldTitle(filter.field) }} <code>{{ filter.field }}</code></td>
-                <td>{{ operatorLabel(filter.operator) }}</td>
                 <td>{{ filter.value === undefined ? '—' : Array.isArray(filter.value) ? filter.value.join('，') : filter.value }}</td>
               </tr>
             </tbody>
@@ -109,56 +108,101 @@
           <span class="dd-title">筛选器绑定</span>
           <div class="dd-filter-head-actions">
             <span v-if="hasTimeFilterRows" class="dd-hint">时间范围左闭右开：包含开始时间，不包含结束时间</span>
-            <label v-if="hasTimeFilterRows" class="dd-time-granularity">
-              <span>时间粒度</span>
-              <el-select v-model="timeGranularity" size="small" data-testid="time-granularity" aria-label="本次查询时间粒度">
-                <el-option v-for="option in TIME_GRANULARITY_OPTIONS" :key="option.value" :label="option.label" :value="option.value" />
-              </el-select>
-            </label>
           </div>
         </div>
-        <div v-if="queryFilterRows.length" class="dd-table-wrap dd-conditions">
+        <div v-if="queryFilterGroups.length" class="dd-table-wrap dd-conditions">
           <table class="dd-table dd-filter-table" data-testid="query-filter-table">
-            <thead><tr><th scope="col">筛选器</th><th scope="col">映射字段</th><th scope="col">操作符</th><th scope="col">本次查询值</th><th scope="col">启用</th></tr></thead>
+            <thead><tr><th scope="col">筛选器</th><th scope="col">映射字段</th><th scope="col">本次查询值</th><th scope="col">启用</th></tr></thead>
             <tbody>
               <tr
-                v-for="(row, index) in queryFilterRows"
-                :key="`${row.filterComponentId}-${row.field}-${row.parameterName}-${index}`"
+                v-for="group in queryFilterGroups"
+                :key="group.key"
                 data-testid="query-filter-row"
-                :data-time-boundary="row.timeBoundary"
+                :data-time-filter="group.kind === 'time' ? '' : undefined"
               >
-                <td class="dd-bound-filter">{{ row.timeBoundary ? `${row.filterTitle} · ${row.timeBoundary === 'start' ? '开始时间' : '结束时间'}` : row.filterTitle }}</td>
-                <td class="dd-bound-field">{{ row.fieldTitle }} <code>{{ row.field }}</code></td>
-                <td class="dd-fixed-operator" data-testid="query-filter-operator">{{ operatorLabel(row.operator) }}</td>
+                <template v-if="group.kind === 'time'">
+                  <td class="dd-bound-filter">{{ group.title }}</td>
+                  <td class="dd-bound-field">{{ group.start.fieldTitle }} <code>{{ group.start.field }}</code></td>
+                  <td>
+                    <div class="dd-time-range" data-testid="query-filter-time-range">
+                      <label class="dd-time-range-part">
+                        <span>开始时间</span>
+                        <el-date-picker
+                          v-model="group.start.value"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          class="dd-value"
+                          size="small"
+                          :disabled="!group.enabled"
+                          placeholder="选择开始时间"
+                          :aria-label="`${group.title}开始时间本次查询值`"
+                          data-testid="query-time-start"
+                        />
+                      </label>
+                      <label class="dd-time-range-part">
+                        <span>结束时间</span>
+                        <el-date-picker
+                          v-model="group.end.value"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          class="dd-value"
+                          size="small"
+                          :disabled="!group.enabled"
+                          placeholder="选择结束时间（不包含）"
+                          :aria-label="`${group.title}结束时间本次查询值`"
+                          data-testid="query-time-end"
+                        />
+                      </label>
+                      <label class="dd-time-range-part dd-time-granularity">
+                        <span>时间粒度</span>
+                        <el-select v-model="timeGranularity" size="small" data-testid="time-granularity" aria-label="本次查询时间粒度">
+                          <el-option v-for="option in TIME_GRANULARITY_OPTIONS" :key="option.value" :label="option.label" :value="option.value" />
+                        </el-select>
+                      </label>
+                    </div>
+                  </td>
+                  <td>
+                    <el-switch
+                      :model-value="group.enabled"
+                      data-testid="query-filter-enabled"
+                      :aria-label="`${group.title}筛选条件启用`"
+                      @change="setTimeFilterGroupEnabled(group, $event)"
+                    />
+                  </td>
+                </template>
+                <template v-else>
+                  <td class="dd-bound-filter">{{ group.row.filterTitle }}</td>
+                  <td class="dd-bound-field">{{ group.row.fieldTitle }} <code>{{ group.row.field }}</code></td>
                 <td>
                   <el-date-picker
-                    v-if="row.timeBoundary"
-                    v-model="row.value"
+                    v-if="group.row.timeBoundary"
+                    v-model="group.row.value"
                     type="date"
                     value-format="YYYY-MM-DD"
                     class="dd-value"
                     size="small"
-                    :disabled="!row.enabled"
-                    :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
-                    :aria-label="`${row.filterTitle}${row.timeBoundary === 'start' ? '开始时间' : '结束时间'}本次查询值`"
+                    :disabled="!group.row.enabled"
+                    :placeholder="group.row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
+                    :aria-label="`${group.row.filterTitle}本次查询值`"
                   />
                   <ViewDataFilterSelect
                     v-else
-                    v-model="row.value"
-                    :filter="filterOption(row.filterComponentId)"
-                    :disabled="!row.enabled || !operatorNeedsValue(row.operator)"
-                    :placeholder="operatorNeedsValue(row.operator) ? '选择本次查询值' : '无需取值'"
-                    :aria-label="`${row.filterTitle}本次查询值`"
+                    v-model="group.row.value"
+                    :filter="filterOption(group.row.filterComponentId)"
+                    :disabled="!group.row.enabled || !operatorNeedsValue(group.row.operator)"
+                    :placeholder="operatorNeedsValue(group.row.operator) ? '选择本次查询值' : '无需取值'"
+                    :aria-label="`${group.row.filterTitle}本次查询值`"
                   />
-                </td>
+                  </td>
                 <td>
                   <el-switch
-                    :model-value="row.enabled"
+                    :model-value="group.row.enabled"
                     data-testid="query-filter-enabled"
-                    :aria-label="`${row.filterTitle}${row.timeBoundary ? (row.timeBoundary === 'start' ? '开始时间' : '结束时间') : ''}筛选条件启用`"
-                    @change="setQueryFilterEnabled(row, $event)"
+                    :aria-label="`${group.row.filterTitle}筛选条件启用`"
+                    @change="setQueryFilterEnabled(group.row, $event)"
                   />
                 </td>
+                </template>
               </tr>
             </tbody>
           </table>
@@ -303,8 +347,6 @@ import { extractApiParameters, extractSqlParameters, type ExtractedParameter } f
 import { getCachedQuery, getCachedQueryState, setCachedQuery, setCachedQueryState } from './dataset-data-cache'
 import type { QueryDisplayField, QueryParameterBinding, QuerySortSpec } from '@/types'
 import {
-  GENERIC_OPERATORS,
-  normalizeOperator,
 } from '@/utils/filter-conditions'
 import {
   buildExecutionParameters,
@@ -456,6 +498,44 @@ const filterSupported = computed(() => props.dataset.sourceType !== 'file')
 
 const queryFilterRows = ref<PreviewQueryFilterRow[]>([])
 const hasTimeFilterRows = computed(() => queryFilterRows.value.some((row) => row.timeBoundary !== undefined))
+type QueryFilterGroup =
+  | { kind: 'value'; key: string; row: PreviewQueryFilterRow }
+  | { kind: 'time'; key: string; title: string; start: PreviewQueryFilterRow; end: PreviewQueryFilterRow; enabled: boolean }
+
+const queryFilterGroups = computed<QueryFilterGroup[]>(() => {
+  const groups: QueryFilterGroup[] = []
+  const rows = queryFilterRows.value
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    if (row.timeBoundary !== 'start') {
+      groups.push({ kind: 'value', key: `${row.filterComponentId}-${row.field}-${index}`, row })
+      continue
+    }
+    const endIndex = rows.findIndex((candidate, candidateIndex) =>
+      candidateIndex > index
+      && candidate.timeBoundary === 'end'
+      && candidate.filterComponentId === row.filterComponentId
+      && candidate.field === row.field,
+    )
+    if (endIndex < 0) {
+      groups.push({ kind: 'value', key: `${row.filterComponentId}-${row.field}-${index}`, row })
+      continue
+    }
+    const end = rows[endIndex]
+    const title = state.filterCatalog.find((filter) => filter.id === row.filterComponentId)?.title
+      || row.filterTitle.replace(/\s*·\s*开始时间$/, '')
+    groups.push({
+      kind: 'time',
+      key: `${row.filterComponentId}-${row.field}-time-range`,
+      title,
+      start: row,
+      end,
+      enabled: row.enabled && end.enabled,
+    })
+    index = endIndex
+  }
+  return groups
+})
 
 function resultDisplayFieldList(): QueryDisplayField[] {
   const timeFilterFields = new Set(queryFilterRows.value
@@ -482,11 +562,6 @@ function fieldTitle(field: string): string {
 
 function filterOption(filterComponentId: string) {
   return state.filterCatalog.find((filter) => filter.id === filterComponentId)
-}
-
-function operatorLabel(operator: QueryParameterBinding['operator']): string {
-  const normalized = normalizeOperator(operator)
-  return GENERIC_OPERATORS.find((option) => option.value === normalized)?.label ?? operator
 }
 
 function operatorNeedsValue(operator: QueryParameterBinding['operator']): boolean {
@@ -554,6 +629,15 @@ const initialTimeGranularity = computed<TimeGranularity>(() =>
 function setQueryFilterEnabled(row: PreviewQueryFilterRow, enabled: boolean): void {
   row.enabled = enabled
   if (!enabled) row.value = ''
+}
+
+function setTimeFilterGroupEnabled(group: Extract<QueryFilterGroup, { kind: 'time' }>, enabled: boolean): void {
+  group.start.enabled = enabled
+  group.end.enabled = enabled
+  if (!enabled) {
+    group.start.value = ''
+    group.end.value = ''
+  }
 }
 
 /* ── 结果区 ── */
@@ -971,16 +1055,32 @@ watch(() => ui.dataDialog.visible, (visible) => {
   gap: 12px;
   min-width: 0;
 }
-.dd-time-granularity {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
+.dd-time-range {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+.dd-time-range-part {
+  display: flex;
+  flex: 1 1 145px;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
   color: var(--db-text-secondary);
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
 }
-.dd-time-granularity :deep(.el-select) {
-  width: 112px;
+.dd-time-range-part :deep(.el-date-editor),
+.dd-time-range-part :deep(.el-select) {
+  width: 100%;
+}
+.dd-time-granularity {
+  flex: 0 1 112px;
+  min-width: 96px;
+}
+@media (max-width: 900px) {
+  .dd-time-range { flex-wrap: wrap; }
 }
 .dd-result-tabs {
   display: flex;

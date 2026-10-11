@@ -24,37 +24,59 @@
         <div class="dd-head"><span class="dd-title">筛选条件</span><span class="dd-hint">填写本次查看的实际参数</span></div>
         <div v-if="conditionRows.length" class="dd-table-wrap dd-conditions">
           <table class="dd-table dd-filter-table" data-testid="python-query-filter-table">
-            <thead><tr><th>筛选器</th><th>字段</th><th>操作符</th><th>本次查询值</th><th>启用</th></tr></thead>
+            <thead><tr><th>筛选器</th><th>字段</th><th>本次查询值</th><th>启用</th></tr></thead>
             <tbody>
-              <tr v-for="(row, index) in conditionRows" :key="`${row.filterComponentId ?? row.field}-${row.field}-${row.timeBoundary ?? 'value'}-${index}`" data-testid="python-query-filter-row" :data-time-boundary="row.timeBoundary">
-                <td>
-                  {{ row.filterTitle }}
-                  <span v-if="row.bindingError" class="dd-binding-error" role="alert">绑定的页面筛选器已失效，请先重新绑定</span>
-                  <span v-else-if="row.timeBoundary" class="dd-hint">{{ row.timeBoundary === 'start' ? '包含开始时间' : '不包含结束时间' }}</span>
-                </td>
-                <td>{{ row.title }} <code>{{ row.field }}</code></td>
-                <td data-testid="python-query-filter-operator">{{ row.op }}</td>
-                <td>
-                  <el-date-picker
-                    v-if="row.timeBoundary"
-                    v-model="row.value"
-                    type="date"
-                    value-format="YYYY-MM-DD"
-                    size="small"
-                    data-testid="python-query-date-input"
-                    :disabled="row.bindingError || !row.enabled"
-                    :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
-                  />
-                  <ViewDataFilterSelect
-                    v-else
-                    v-model="row.value"
-                    :filter="filterOption(row.filterComponentId)"
-                    :disabled="row.bindingError || !row.enabled || !needsValue(row.op)"
-                    placeholder="选择本次查询值"
-                    :aria-label="`${row.filterTitle}本次查询值`"
-                  />
-                </td>
-                <td><el-switch v-model="row.enabled" :disabled="row.bindingError" /></td>
+              <tr v-for="group in conditionGroups" :key="group.key" data-testid="python-query-filter-row">
+                <template v-if="group.kind === 'time'">
+                  <td>{{ group.title }}</td>
+                  <td>{{ group.start.title }} <code>{{ group.start.field }}</code></td>
+                  <td>
+                    <div class="dd-time-range" data-testid="python-query-time-range">
+                      <label class="dd-time-range-part">
+                        <span>开始时间</span>
+                        <el-date-picker
+                          v-model="group.start.value"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          size="small"
+                          data-testid="python-query-date-input"
+                          :disabled="group.start.bindingError || !group.enabled"
+                          placeholder="选择开始时间"
+                        />
+                      </label>
+                      <label class="dd-time-range-part">
+                        <span>结束时间</span>
+                        <el-date-picker
+                          v-model="group.end.value"
+                          type="date"
+                          value-format="YYYY-MM-DD"
+                          size="small"
+                          data-testid="python-query-date-input"
+                          :disabled="group.end.bindingError || !group.enabled"
+                          placeholder="选择结束时间（不包含）"
+                        />
+                      </label>
+                    </div>
+                  </td>
+                  <td><el-switch :model-value="group.enabled" data-testid="python-query-filter-enabled" @change="setTimeConditionEnabled(group, $event)" /></td>
+                </template>
+                <template v-else>
+                  <td>
+                    {{ group.row.filterTitle }}
+                    <span v-if="group.row.bindingError" class="dd-binding-error" role="alert">绑定的页面筛选器已失效，请先重新绑定</span>
+                  </td>
+                  <td>{{ group.row.title }} <code>{{ group.row.field }}</code></td>
+                  <td>
+                    <ViewDataFilterSelect
+                      v-model="group.row.value"
+                      :filter="filterOption(group.row.filterComponentId)"
+                      :disabled="group.row.bindingError || !group.row.enabled || !needsValue(group.row.op)"
+                      placeholder="选择本次查询值"
+                      :aria-label="`${group.row.filterTitle}本次查询值`"
+                    />
+                  </td>
+                  <td><el-switch v-model="group.row.enabled" :disabled="group.row.bindingError" data-testid="python-query-filter-enabled" /></td>
+                </template>
               </tr>
             </tbody>
           </table>
@@ -156,6 +178,43 @@ const paginationEnabled = computed(() => config.value?.paginationPolicy.enabled 
 const pageSize = computed(() => config.value?.paginationPolicy.defaultPageSize || 100)
 const page = ref(1)
 const conditionRows = ref<ReturnType<typeof createPythonResultFilterRows>>([])
+type PythonConditionGroup =
+  | { kind: 'field'; key: string; row: (typeof conditionRows.value)[number] }
+  | { kind: 'time'; key: string; title: string; start: (typeof conditionRows.value)[number]; end: (typeof conditionRows.value)[number]; enabled: boolean }
+const conditionGroups = computed<PythonConditionGroup[]>(() => {
+  const groups: PythonConditionGroup[] = []
+  const rows = conditionRows.value
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index]
+    if (row.timeBoundary !== 'start' || row.bindingError) {
+      groups.push({ kind: 'field', key: `${row.filterComponentId ?? row.field}-${row.field}-${index}`, row })
+      continue
+    }
+    const endIndex = rows.findIndex((candidate, candidateIndex) =>
+      candidateIndex > index
+      && candidate.timeBoundary === 'end'
+      && candidate.filterComponentId === row.filterComponentId
+      && candidate.field === row.field,
+    )
+    if (endIndex < 0) {
+      groups.push({ kind: 'field', key: `${row.filterComponentId ?? row.field}-${row.field}-${index}`, row })
+      continue
+    }
+    const end = rows[endIndex]
+    const title = state.filterCatalog.find((filter) => filter.id === row.filterComponentId)?.title
+      || row.filterTitle.replace(/\s*·\s*开始时间$/, '')
+    groups.push({
+      kind: 'time',
+      key: `${row.filterComponentId}-${row.field}-time-range`,
+      title,
+      start: row,
+      end,
+      enabled: row.enabled && end.enabled,
+    })
+    index = endIndex
+  }
+  return groups
+})
 const appliedConditions = ref<FilterCondition[]>([])
 const sortState = ref<QuerySortSpec | null>(null)
 const hasQueried = ref(false)
@@ -209,6 +268,15 @@ function fieldTitle(field: string): string {
 function filterOption(filterComponentId?: string) {
   if (!filterComponentId) return undefined
   return state.filterCatalog.find((filter) => filter.id === filterComponentId)
+}
+
+function setTimeConditionEnabled(group: Extract<PythonConditionGroup, { kind: 'time' }>, enabled: boolean): void {
+  group.start.enabled = enabled
+  group.end.enabled = enabled
+  if (!enabled) {
+    group.start.value = ''
+    group.end.value = ''
+  }
 }
 
 function updateDisplayName(field: string, title: string): void {
@@ -281,7 +349,11 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-hint { font-size: 12px; color: var(--db-text-muted); }
 .dd-table-wrap { overflow: auto; }
 .dd-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.dd-filter-table { min-width: 680px; }
 .dd-table th, .dd-table td { padding: 8px 10px; border-bottom: 1px solid var(--db-border); text-align: left; }
+.dd-time-range { display: flex; align-items: flex-end; gap: 10px; min-width: 0; }
+.dd-time-range-part { display: flex; flex: 1 1 145px; flex-direction: column; gap: 4px; min-width: 130px; color: var(--db-text-secondary); font-size: 11px; white-space: nowrap; }
+.dd-time-range-part :deep(.el-date-editor) { width: 100%; }
 .dd-table th { color: var(--db-text-muted); font-weight: 600; background: var(--db-muted); }
 .dd-field-name, .dd-bound-field code { font-family: var(--font-mono, monospace); }
 .dd-display-empty, .dd-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
