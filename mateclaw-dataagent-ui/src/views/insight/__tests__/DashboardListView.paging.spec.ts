@@ -6,8 +6,11 @@ import { createPinia, setActivePinia } from 'pinia'
 const mocks = vi.hoisted(() => ({
   listSummary: vi.fn(),
   create: vi.fn(),
+  remove: vi.fn(),
   selectDashboard: vi.fn(),
   push: vi.fn(),
+  canModifyResource: vi.fn(),
+  confirm: vi.fn(),
 }))
 
 vi.mock('@/api/insight-dashboard', () => ({
@@ -17,7 +20,7 @@ vi.mock('@/api/insight-dashboard', () => ({
   list: vi.fn(),
   get: vi.fn(),
   update: vi.fn(),
-  remove: vi.fn(),
+  remove: mocks.remove,
   copy: vi.fn(),
   saveAsTemplate: vi.fn(),
   streamAiChat: vi.fn(),
@@ -29,8 +32,13 @@ vi.mock('vue-router', () => ({
 }))
 
 vi.mock('@/composables/usePermission', () => ({
-  usePermission: () => ({ hasPermission: () => true, canModifyResource: () => true }),
+  usePermission: () => ({ hasPermission: () => true, canModifyResource: mocks.canModifyResource }),
   PERMISSION: { INSIGHT_CREATE: 'insight:create' },
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: { success: vi.fn(), error: vi.fn() },
+  ElMessageBox: { confirm: mocks.confirm },
 }))
 
 vi.mock('@/stores/useUserStore', () => ({
@@ -43,9 +51,9 @@ vi.mock('./DashboardPreviewView.vue', () => ({ default: { template: '<div />' } 
 import DashboardListView from '../DashboardListView.vue'
 
 /** 构造一页摘要响应 */
-function page(records: Array<{ id: string; name: string; status?: string }>, total: number, pageNo: number, size = 2) {
+function page(records: Array<{ id: string; name: string; status?: string; visibility?: string; ownerId?: number; templateMeta?: string }>, total: number, pageNo: number, size = 2) {
   return {
-    records: records.map((item) => ({ ...item, status: item.status ?? 'draft', visibility: 'private', chartKind: 'bar' })),
+    records: records.map((item) => ({ ...item, status: item.status ?? 'draft', visibility: item.visibility ?? 'private', chartKind: 'bar' })),
     total,
     page: pageNo,
     size,
@@ -61,6 +69,9 @@ describe('DashboardListView 服务端分页摘要', () => {
     vi.useFakeTimers()
     mocks.listSummary.mockReset()
     mocks.create.mockReset()
+    mocks.remove.mockReset().mockResolvedValue(undefined)
+    mocks.canModifyResource.mockReset().mockReturnValue(true)
+    mocks.confirm.mockReset().mockResolvedValue(true)
     mocks.push.mockReset()
   })
 
@@ -154,6 +165,42 @@ describe('DashboardListView 服务端分页摘要', () => {
     await flushPromises()
 
     expect(mocks.listSummary).toHaveBeenCalledWith(expect.objectContaining({ visibility: 'template,official', page: 1 }))
+  })
+
+  it('模板列表为当前用户可管理的非官方模板提供删除操作', async () => {
+    mocks.listSummary.mockImplementation(async ({ visibility }: { visibility?: string } = {}) =>
+      visibility === 'template,official'
+        ? page([{ id: 'template-1', name: '我的模板', visibility: 'template', ownerId: 1, templateMeta: '{"isOfficial":false}' }], 1, 1)
+        : page([], 0, 1),
+    )
+    await mountList()
+    await wrapper!.findAll('.main-tab')[1].trigger('click')
+    await flushPromises()
+
+    const deleteButton = wrapper!.find('.action-delete')
+    expect(deleteButton).toBeDefined()
+    await deleteButton!.trigger('click')
+    await flushPromises()
+
+    expect(mocks.confirm).toHaveBeenCalledOnce()
+    expect(mocks.remove).toHaveBeenCalledWith('template-1')
+  })
+
+  it('官方模板或当前用户无管理权限时不显示删除操作', async () => {
+    mocks.listSummary.mockImplementation(async ({ visibility }: { visibility?: string } = {}) =>
+      visibility === 'template,official'
+        ? page([
+          { id: 'official-1', name: '官方模板', visibility: 'official', ownerId: 1, templateMeta: '{"isOfficial":true}' },
+          { id: 'other-template', name: '他人模板', visibility: 'template', ownerId: 2, templateMeta: '{"isOfficial":false}' },
+        ], 2, 1)
+        : page([], 0, 1),
+    )
+    mocks.canModifyResource.mockReturnValue(false)
+    await mountList()
+    await wrapper!.findAll('.main-tab')[1].trigger('click')
+    await flushPromises()
+
+    expect(wrapper!.find('.action-delete').exists()).toBe(false)
   })
 
   it('翻页请求对应页码并展示该页记录', async () => {
