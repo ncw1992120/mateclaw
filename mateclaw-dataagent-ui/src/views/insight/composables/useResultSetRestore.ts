@@ -46,15 +46,25 @@ export function toComponentData(
   component: InsightComponent,
   rows: Record<string, unknown>[],
   fieldLabels?: Record<string, string>,
+  options: { projectKpiFromResult?: boolean } = {},
 ): InsightComponentData {
-  if (component.type === 'kpi') {
+  if (component.type === 'kpi' && !options.projectKpiFromResult) {
     const columns = [...new Set(rows.flatMap((row) => Object.keys(row)))].map((name) => ({ name }))
     reconcileKpiProjection(component, columns, readComponentDatasetPipeline(component))
   }
-  return rowsToComponentData(component.id, rows, renderTypeOf(component), kpiFieldsOf(component), fieldLabels, {
-    chartType: component.chartType,
-    config: component.config,
-  })
+  const data = rowsToComponentData(
+    component.id,
+    rows,
+    renderTypeOf(component),
+    options.projectKpiFromResult && component.type === 'kpi' ? [] : kpiFieldsOf(component),
+    fieldLabels,
+    {
+      chartType: component.chartType,
+      config: component.config,
+    },
+  )
+  if (options.projectKpiFromResult && component.type === 'kpi') data.resultFieldProjection = true
+  return data
 }
 
 /** 用持久化结果集字段修复旧 KPI 投影，保留已有指标的布局和样式。 */

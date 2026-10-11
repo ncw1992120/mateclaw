@@ -923,7 +923,12 @@ async function refreshPipelineComponent(
     const queryStatus = rows.length === 0 ? 'empty' : 'success'
     componentDataMap.value = {
       ...componentDataMap.value,
-      [component.id]: { ...toComponentData(component, rows, fieldLabels), queryStatus },
+      [component.id]: {
+        ...toComponentData(component, rows, fieldLabels, {
+          projectKpiFromResult: Boolean(script && component.type === 'kpi'),
+        }),
+        queryStatus,
+      },
     }
   } catch (error) {
     if (latestComponentRequest.get(component.id) !== requestId) return

@@ -98,6 +98,32 @@ describe('reconcileKpiProjection', () => {
     expect(data.kpiList?.map(({ value }) => value)).toEqual(['1250000', '128'])
   })
 
+  it('projects live Python KPI fields from the current result without mutating the saved KPI configuration', () => {
+    const component = {
+      id: 'strategy-contribution',
+      type: 'kpi',
+      config: { datasetPipeline: { datasetInputs: [], script: 'result = rows' } },
+      kpiMetrics: [{
+        fieldKey: '经纪个人场内公募非货加仓交易量', displayName: '经纪个人场内公募非货加仓交易量',
+        unit: '', helperText: '', visible: true, x: 0, y: 0, w: 160, h: 80, styles: defaultMetricStyles(),
+      }],
+    } as unknown as InsightComponent
+    const savedProjection = component.kpiMetrics
+
+    const data = toComponentData(component, [{
+      经纪个人场内公募非货交易量: 3890000,
+      '经纪个人场内公募非货交易量-转化人数': 400,
+    }], undefined, { projectKpiFromResult: true })
+
+    expect(data.kpiList?.map(({ fieldKey, value }) => [fieldKey, value])).toEqual([
+      ['经纪个人场内公募非货交易量', '3890000'],
+      ['经纪个人场内公募非货交易量-转化人数', '400'],
+    ])
+    expect(data.resultFieldProjection).toBe(true)
+    expect(component.kpiMetrics).toBe(savedProjection)
+    expect(component.kpiMetrics?.[0].fieldKey).toBe('经纪个人场内公募非货加仓交易量')
+  })
+
   it('恢复 Python KPI 时以 execution envelope 的实际列修正过期结果集列元数据', async () => {
     const component = {
       id: 'python-kpi-restore',
