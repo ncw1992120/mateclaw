@@ -125,6 +125,30 @@ class QueryPlannerTest {
     }
 
     @Test
+    @DisplayName("Python 输入计划同时合并数据集固定条件和页面筛选器绑定")
+    void fixedFiltersAndBoundFiltersAreBothAppliedToPythonInput() throws Exception {
+        String inputJson = QUERY_CONFIG_INPUT.replace(
+                "\"datasetId\": \"42\",",
+                "\"datasetId\": \"42\",\n" +
+                        "  \"filters\": [\n" +
+                        "    {\"field\": \"strategy_id\", \"op\": \"eq\", \"value\": \"STR-001\"},\n" +
+                        "    {\"field\": \"metric_date\", \"op\": \"gte\", \"value\": \"2026-09-01\"}\n" +
+                        "  ],");
+        JsonNode component = component(inputJson);
+        QueryContextDTO scopedContext = new QueryContextDTO(
+                "dashboard-001", "component-001", null, Map.of(),
+                Map.of("strategy_data", Map.of("strategy_ids", List.of("A", "B"))),
+                null, null, "run-test");
+
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component), scopedContext, true);
+
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("strategy_id", "eq", "STR-001"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-09-01"),
+                new DatasetQueryPlanDTO.FilterSpec("strategy_id", "in", List.of("A", "B")));
+    }
+
+    @Test
     @DisplayName("单个时间筛选器绑定也会展开为起始包含、结束日期次日排除")
     void singleTimeFilterBindingExpandsDateRange() throws Exception {
         String inputJson = QUERY_CONFIG_INPUT.replace(

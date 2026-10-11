@@ -115,6 +115,21 @@ public class QueryPlannerImpl implements QueryPlanner {
         // ---- 筛选：空选/全部 = 无过滤；显式空集合 = 短路空结果 ----
         boolean shortCircuitEmpty = false;
         List<DatasetQueryPlanDTO.FilterSpec> filters = new ArrayList<>();
+        // 固定筛选条件属于输入本身的静态查询定义，与运行时筛选器绑定同时生效（AND）。
+        // 旧版「查看数据」会单独应用 input.filters；Python 新链路统一走 Planner，必须在这里纳入计划。
+        for (JsonNode fixedFilter : input.path("filters")) {
+            String field = requiredText(fixedFilter, "field", "fixed filter field");
+            if (authoritative && !fieldRoles.containsKey(field)) {
+                throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED,
+                        "fixed filter references a field that is not registered: " + field);
+            }
+            String operator = readFixedFilterOperator(fixedFilter);
+            Object value = fixedFilterValue(fixedFilter, operator);
+            DatasetFilter validated = new DatasetFilter(
+                    field, fieldRoles.getOrDefault(field, "dimension"), operator, value);
+            filters.add(new DatasetQueryPlanDTO.FilterSpec(
+                    field, operator, normalizeFilterValue(operator, validated.value())));
+        }
         for (Binding binding : bindings) {
             if (!runtime.parameters().containsKey(binding.parameterName)) {
                 continue; // 参数未提供 = 不过滤
@@ -396,6 +411,57 @@ public class QueryPlannerImpl implements QueryPlanner {
             return true;
         }
         return value;
+    }
+
+    private String readFixedFilterOperator(JsonNode filter) {
+        JsonNode operatorNode = filter.hasNonNull("operator") ? filter.get("operator") : filter.get("op");
+        if (operatorNode == null || !operatorNode.isTextual() || operatorNode.asText().isBlank()) {
+            throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
+                    "fixed filter operator is required");
+        }
+        String operator = operatorNode.asText().trim().toLowerCase(java.util.Locale.ROOT);
+        return switch (operator) {
+            case "=", "==", "equal" -> "eq";
+            case "!=", "<>" -> "neq";
+            case ">" -> "gt";
+            case ">=" -> "gte";
+            case "<" -> "lt";
+            case "<=" -> "lte";
+            case "not in" -> "not_in";
+            case "is null" -> "is_null";
+            case "is not null" -> "is_not_null";
+            default -> operator;
+        };
+    }
+
+    private Object fixedFilterValue(JsonNode filter, String operator) {
+        if (operator.equals("is_null") || operator.equals("is_not_null")) return true;
+        JsonNode value = filter.get("value");
+        if (value == null || value.isNull()) {
+            throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
+                    "fixed filter value is required for operator: " + operator);
+        }
+        if ((operator.equals("in") || operator.equals("not_in") || operator.equals("between"))
+                && value.isTextual()) {
+            List<String> values = new ArrayList<>();
+            for (String part : value.asText().split(",")) {
+                if (!part.isBlank()) values.add(part.trim());
+            }
+            return values;
+        }
+        return mapperValue(value);
+    }
+
+    private Object mapperValue(JsonNode value) {
+        if (value.isArray()) {
+            List<Object> values = new ArrayList<>();
+            value.forEach(item -> values.add(mapperValue(item)));
+            return values;
+        }
+        if (value.isTextual()) return value.asText();
+        if (value.isNumber()) return value.numberValue();
+        if (value.isBoolean()) return value.booleanValue();
+        return value.asText();
     }
 
     private LocalDate dateRangeEndpoint(Object value, String parameterName) {
