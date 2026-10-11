@@ -5,6 +5,7 @@ import {
   buildFinalResultQueryConfig,
   reconcileFinalResultDisplayFields,
   preserveFinalResultQueryPreferences,
+  resolveFinalResultQueryConfigAfterExecution,
   finalResultQueryConfigStatus,
   isFinalResultQueryConfigured,
   normalizeFinalResultQueryContext,
@@ -85,6 +86,29 @@ describe('preserveFinalResultQueryPreferences', () => {
     }
 
     expect(preserveFinalResultQueryPreferences(undefined, discovered)).toEqual(discovered)
+  })
+})
+
+describe('resolveFinalResultQueryConfigAfterExecution', () => {
+  it('仅刷新 Python 结果时完整保留现有结果字段和筛选配置', () => {
+    const previous = {
+      schemaFingerprint: 'schema-old',
+      confirmed: true,
+      displayFields: [{ field: 'amount', title: '自定义金额', role: 'measure' as const, dataType: 'number' as const }],
+      filterFields: [{ field: 'region', title: '区域条件', dataType: 'string' as const, parameterName: 'region', operators: ['eq'] as const, filterComponentId: 'region-filter' }],
+      sortPolicy: { enabled: false, mode: 'single' as const, allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+    const discovered = buildFinalResultQueryConfig(resolveOutputSpec('table')!, schema([
+      { name: 'amount', title: 'amount', dataType: 'number', nullable: false },
+      { name: 'region', title: 'region', dataType: 'string', nullable: false },
+    ], 'schema-new'))
+
+    const result = resolveFinalResultQueryConfigAfterExecution(previous, discovered, false)
+
+    expect(result).toBe(previous)
+    expect(result?.displayFields).toBe(previous.displayFields)
+    expect(result?.filterFields).toBe(previous.filterFields)
   })
 })
 

@@ -34,7 +34,7 @@ import {
 import type { ChartType, ComponentDatasetPipeline, ComponentResultSet, ComponentVisualStyle, DashboardDatasetInput, DashboardExecutionPolicy, DashboardScriptFilterBinding, DashboardScriptFilterCondition, DatasetFilter, DatasetLastQueryState, DatasetQueryConfig, FinalResultQueryConfig, InsightComponent, InsightDashboardSchema, KpiMetricConfig } from '@/types'
 import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
-import { buildFinalResultQueryConfig, preserveFinalResultQueryPreferences, reconcileFinalResultDisplayFields } from '@/utils/final-result-query'
+import { buildFinalResultQueryConfig, reconcileFinalResultDisplayFields, resolveFinalResultQueryConfigAfterExecution } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
@@ -1717,7 +1717,7 @@ async function saveDashboard(): Promise<boolean> {
 }
 
 /** 使用当前未保存的组件 Schema 执行 Python 预览；预览本身不保存仪表盘。 */
-async function runComponentPreview(): Promise<{ ok: boolean; message: string }> {
+async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{ ok: boolean; message: string }> {
   if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
   state.backend.running = true
   const startedAt = Date.now()
@@ -1757,7 +1757,11 @@ async function runComponentPreview(): Promise<{ ok: boolean; message: string }> 
           })
           if (previewSpec) {
             const discoveredConfig = buildFinalResultQueryConfig(previewSpec, extractResultSchema(envelope))
-            state.finalResultQueryConfig = preserveFinalResultQueryPreferences(state.finalResultQueryConfig, discoveredConfig)
+            state.finalResultQueryConfig = resolveFinalResultQueryConfigAfterExecution(
+              state.finalResultQueryConfig,
+              discoveredConfig,
+              syncFinalResultQueryConfig,
+            )
           }
         } else if (envelope.kind === 'message') {
           commitResultSet({ source: 'script', rows: [], executionId, elapsedMs: Date.now() - startedAt })
@@ -1932,14 +1936,14 @@ async function loadDatasetPreview(datasetId: string): Promise<void> {
  * 与卡片共用同一个结果集：未就绪或已过期时先生成，再展示。
  * 这样预览所见即卡片所见，不再出现「弹窗里有数据、卡片却是空的」这种错位。
  */
-async function loadResultPreview(): Promise<void> {
+async function loadResultPreview(forceRefresh = false): Promise<void> {
   previewState.loading = true
   previewState.error = ''
   previewState.payload = null
   try {
-    // 已就绪且未过期时直接复用，避免重复执行有成本的脚本
-    if (state.resultSet.status !== 'ready') {
-      const { ok, message } = await generateResultSet()
+    // 显式点击“查询”时必须重新拉取上游输入并重跑 Python；仅弹窗初始化时复用已就绪结果。
+    if (forceRefresh || state.resultSet.status !== 'ready') {
+      const { ok, message } = await generateResultSet({ syncFinalResultQueryConfig: !forceRefresh })
       if (!ok) throw new Error(message)
     }
     let rows = state.resultSet.rows
@@ -1995,7 +1999,7 @@ async function loadResultPreview(): Promise<void> {
     state.resultSet.columns = columns.map((column) => ({ name: column.name, type: column.type }))
     state.resultSet.rows = rows
     state.resultSet.rowCount = rows.length
-    if (state.finalResultQueryConfig) {
+    if (!forceRefresh && state.finalResultQueryConfig) {
       state.finalResultQueryConfig = {
         ...state.finalResultQueryConfig,
         displayFields: reconcileFinalResultDisplayFields(columns, rows, state.finalResultQueryConfig.displayFields ?? []),
@@ -2097,7 +2101,7 @@ function failResultSet(source: 'dataset' | 'script', message: string): void {
  * 无脚本：结果集 = 单个数据集的查询结果（直通）；
  * 有脚本：结果集 = 组件级 Python 预处理的输出。
  */
-async function generateResultSet(): Promise<{ ok: boolean; message: string }> {
+async function generateResultSet(options: { syncFinalResultQueryConfig?: boolean } = {}): Promise<{ ok: boolean; message: string }> {
   if (resultSetRunning) return { ok: false, message: '结果集正在生成中' }
   if (!state.datasets.length) {
     resetResultSet('empty')
@@ -2105,7 +2109,9 @@ async function generateResultSet(): Promise<{ ok: boolean; message: string }> {
   }
   resultSetRunning = true
   try {
-    return state.hasPython ? await generateResultSetByScript() : await generateResultSetByDataset()
+    return state.hasPython
+      ? await generateResultSetByScript(options.syncFinalResultQueryConfig !== false)
+      : await generateResultSetByDataset()
   } finally {
     resultSetRunning = false
   }
@@ -2137,11 +2143,11 @@ async function generateResultSetByDataset(): Promise<{ ok: boolean; message: str
 }
 
 /** 有脚本：先保存 Schema 再提交执行，轮询取回输出 */
-async function generateResultSetByScript(): Promise<{ ok: boolean; message: string }> {
+async function generateResultSetByScript(syncFinalResultQueryConfig: boolean): Promise<{ ok: boolean; message: string }> {
   state.resultSet.status = 'running'
   state.resultSet.error = ''
   try {
-    const { ok, message } = await runComponentPreview()
+    const { ok, message } = await runComponentPreview(syncFinalResultQueryConfig)
     if (!ok) throw new Error(message)
     // runComponentPreview 已完成唯一一次执行、解析标准 envelope 并提交结果集。
     // 不再重复轮询/执行，否则会用旧的 rows 形状覆盖正确结果。

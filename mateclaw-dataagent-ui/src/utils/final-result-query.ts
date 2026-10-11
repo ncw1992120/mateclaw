@@ -85,6 +85,17 @@ export function preserveFinalResultQueryPreferences(
   }
 }
 
+/** 执行 Python 后按调用场景决定是否用新 Schema 同步查询配置。 */
+export function resolveFinalResultQueryConfigAfterExecution(
+  previous: FinalResultQueryConfig | undefined,
+  discovered: FinalResultQueryConfig,
+  syncDiscoveredConfig: boolean,
+): FinalResultQueryConfig | undefined {
+  return syncDiscoveredConfig
+    ? preserveFinalResultQueryPreferences(previous, discovered)
+    : previous
+}
+
 /** 查询刷新列元数据时按技术字段名恢复展示字段，并保留用户的展示名（包括显式清空）。 */
 export function reconcileFinalResultDisplayFields(
   columns: Array<{ name: string; type: string; title?: string }>,
