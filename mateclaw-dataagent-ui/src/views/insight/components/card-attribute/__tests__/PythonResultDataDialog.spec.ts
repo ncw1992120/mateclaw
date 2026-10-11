@@ -7,6 +7,11 @@ const { state, previewState } = useInsight()
 
 const stubs = {
   'el-dialog': { template: '<div><slot /></div>' },
+  ViewDataFilterSelect: {
+    inheritAttrs: false,
+    props: ['modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="alert">{{ title }}</div>' },

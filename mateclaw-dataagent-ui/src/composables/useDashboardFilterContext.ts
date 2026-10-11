@@ -36,7 +36,7 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined, maxRangeDays?: number): TimeRangeValue | undefined {
+export function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undefined, maxRangeDays?: number): TimeRangeValue | undefined {
   if (!preset) return undefined
 
   const now = new Date()

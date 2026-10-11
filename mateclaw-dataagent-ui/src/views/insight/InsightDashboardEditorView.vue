@@ -987,7 +987,7 @@ const panelComponent = computed<InsightComponent | null>(() => selectedChildComp
 function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
   const out: PanelFilterComponent[] = []
   const seen = new Set<string>()
-  // 筛选类组件的最小形态：id / type / title + 可选 config（取 selectionMode）
+  // 筛选类组件形态：保留完整 config，供属性面板查看数据时复用默认值与选项来源。
   type FilterLike = { id: unknown; type: InsightComponentType; title?: string; config?: Record<string, unknown> }
   const push = (item: FilterLike) => {
     if (!item.id || seen.has(String(item.id))) return
@@ -1004,6 +1004,7 @@ function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
       defaultTimeGranularity: item.type === 'timeFilter'
         ? (item.config?.defaultTimeGranularity as import('@/types').TimeGranularity | undefined)
         : undefined,
+      config: item.config,
     })
   }
   const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'

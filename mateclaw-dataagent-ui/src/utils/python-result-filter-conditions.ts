@@ -1,4 +1,6 @@
 import type { FinalResultFilterField, FilterCondition } from '@/types'
+import type { TimeFilterDefaultPreset } from '@/types'
+import { resolveTimeFilterDefault } from '@/composables/useDashboardFilterContext'
 import { completeConditions } from './filter-conditions'
 
 export interface PythonResultFilterOption {
@@ -6,6 +8,13 @@ export interface PythonResultFilterOption {
   title: string
   type?: string
   selectionMode?: 'single' | 'multiple'
+  optionSource?: 'static' | 'dynamic'
+  staticOptions?: Array<{ label: string; value: string }>
+  datasourceId?: string | number
+  field?: string
+  defaultValue?: string | string[] | null
+  defaultPreset?: TimeFilterDefaultPreset
+  maxRangeDays?: number
 }
 
 export interface PythonResultFilterRow extends FilterCondition {
@@ -25,14 +34,18 @@ export function createPythonResultFilterRows(
   // 历史版本会自动为所有输出列生成未绑定项；它们不是用户配置的筛选条件。
   return fields.filter((field) => Boolean(field.filterComponentId)).flatMap((field) => {
     const filter = filterOptions.find((item) => item.id === field.filterComponentId)
+    const timeRange = filter?.type === 'timeFilter'
+      ? resolveTimeFilterDefault(filter.defaultPreset, filter.maxRangeDays)
+      : undefined
+    const defaultValue = filter?.type === 'timeFilter' ? timeRange : filter?.defaultValue
     const base: PythonResultFilterRow = {
       field: field.field,
       title: field.title || field.field,
       filterTitle: filter?.title ?? '筛选器未绑定',
       filterComponentId: field.filterComponentId,
       op: filter?.selectionMode === 'multiple' ? 'in' : '=',
-      value: '',
-      enabled: false,
+      value: defaultValue == null ? '' : Array.isArray(defaultValue) ? [...defaultValue] : typeof defaultValue === 'object' ? '' : defaultValue,
+      enabled: defaultValue != null && (Array.isArray(defaultValue) ? defaultValue.length > 0 : String(defaultValue).trim() !== ''),
       bindingError: !filter,
     }
 
@@ -40,8 +53,8 @@ export function createPythonResultFilterRows(
     if (filter.type !== 'timeFilter') return [base]
 
     return [
-      { ...base, filterTitle: `${filter.title} · 开始时间`, op: '>=', timeBoundary: 'start' },
-      { ...base, filterTitle: `${filter.title} · 结束时间`, op: '<', timeBoundary: 'end' },
+      { ...base, value: timeRange?.start ?? '', enabled: Boolean(timeRange?.start), filterTitle: `${filter.title} · 开始时间`, op: '>=', timeBoundary: 'start' },
+      { ...base, value: timeRange?.end ?? '', enabled: Boolean(timeRange?.end), filterTitle: `${filter.title} · 结束时间`, op: '<', timeBoundary: 'end' },
     ]
   })
 }

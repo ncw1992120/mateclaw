@@ -45,7 +45,14 @@
                     :disabled="row.bindingError || !row.enabled"
                     :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
                   />
-                  <el-input v-else v-model="row.value" size="small" :disabled="row.bindingError || !row.enabled || !needsValue(row.op)" placeholder="填写本次查询值" />
+                  <ViewDataFilterSelect
+                    v-else
+                    v-model="row.value"
+                    :filter="filterOption(row.filterComponentId)"
+                    :disabled="row.bindingError || !row.enabled || !needsValue(row.op)"
+                    placeholder="选择本次查询值"
+                    :aria-label="`${row.filterTitle}本次查询值`"
+                  />
                 </td>
                 <td><el-switch v-model="row.enabled" :disabled="row.bindingError" /></td>
               </tr>
@@ -126,6 +133,7 @@ import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/u
 import type { InsightComponent, InsightComponentData } from '@/types'
 import { componentPreviewData } from '@/utils/component-preview-data'
 import ComponentDataPreview from '../ComponentDataPreview.vue'
+import ViewDataFilterSelect from './ViewDataFilterSelect.vue'
 
 const props = defineProps<{ component?: InsightComponent | null }>()
 const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
@@ -196,6 +204,11 @@ function fieldTitle(field: string): string {
   return displayFields.value.find((item) => item.field === field)?.title
     || previewState.payload?.dataColumns.find((column) => column.name === field)?.title
     || field
+}
+
+function filterOption(filterComponentId?: string) {
+  if (!filterComponentId) return undefined
+  return state.filterCatalog.find((filter) => filter.id === filterComponentId)
 }
 
 function updateDisplayName(field: string, title: string): void {

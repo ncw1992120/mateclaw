@@ -55,6 +55,10 @@ function queryConfig(parameterBindings: DatasetQueryConfig['parameterBindings'] 
 
 const stubs = {
   'el-dialog': { template: '<div class="stub-dialog"><slot /><slot name="footer" /></div>' },
+  ViewDataFilterSelect: {
+    props: ['modelValue'],
+    template: '<input class="dd-value" :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   'el-input': {
     props: ['modelValue'],
     template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
@@ -136,6 +140,28 @@ beforeEach(() => {
 })
 
 describe('查看数据弹窗 · 保留最近一次执行结果', () => {
+  it('筛选器默认值预填到本次查询条件，时间筛选器拆成日期输入并填入默认区间', async () => {
+    state.filterCatalog = [
+      { id: 'filter-region', title: '地区', type: 'filter', selectionMode: 'multiple', defaultValue: ['华东', '华南'] },
+      { id: 'filter-date', title: '日期范围', type: 'timeFilter', defaultPreset: 'today' },
+    ]
+    const wrapper = await openWith(metricViewDataset({
+      queryConfig: queryConfig([
+        { filterComponentId: 'filter-region', parameterName: 'region', field: 'region', operator: 'in' },
+        { filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' },
+      ]),
+    }))
+
+    const rows = wrapper.findAll('[data-testid="query-filter-row"]')
+    expect(rows).toHaveLength(3)
+    expect((rows[0].get('input').element as HTMLInputElement).value).toBe('华东,华南')
+    expect((rows[1].get('input').element as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    expect((rows[2].get('input').element as HTMLInputElement).value).toBe((rows[1].get('input').element as HTMLInputElement).value)
+    expect(rows[1].text()).toContain('开始时间')
+    expect(rows[2].text()).toContain('结束时间')
+    wrapper.unmount()
+  })
+
   async function runQuery(wrapper: ReturnType<typeof mount>) {
     await wrapper.find('[data-testid="query-filter-row"] input.dd-value').setValue('2026-09-01')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')

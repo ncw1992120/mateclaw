@@ -58,6 +58,8 @@ export interface PanelFilterComponent {
    */
   selectionMode?: 'single' | 'multiple'
   defaultTimeGranularity?: import('@/types').TimeGranularity
+  /** 完整筛选器配置；查看数据弹窗需据此呈现默认值和可选项。 */
+  config?: Record<string, unknown>
 }
 
 /** 正式组件类型 → 原型卡片类型 */
@@ -160,6 +162,7 @@ export function hydratePanel(
   }
   // 仪表盘可用筛选器组件；透传字段名、类型和选择方式供查询配置自动匹配与确定运算符。
   state.filterCatalog = filterComponents.map((c) => ({
+    ...(c.config ?? {}),
     id: String(c.id),
     title: c.title || String(c.id),
     type: c.type,

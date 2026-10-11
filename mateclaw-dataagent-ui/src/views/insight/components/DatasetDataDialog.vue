@@ -142,13 +142,12 @@
                     :placeholder="row.timeBoundary === 'start' ? '选择开始时间' : '选择结束时间（不包含）'"
                     :aria-label="`${row.filterTitle}${row.timeBoundary === 'start' ? '开始时间' : '结束时间'}本次查询值`"
                   />
-                  <el-input
+                  <ViewDataFilterSelect
                     v-else
                     v-model="row.value"
-                    class="dd-value"
-                    size="small"
+                    :filter="filterOption(row.filterComponentId)"
                     :disabled="!row.enabled || !operatorNeedsValue(row.operator)"
-                    :placeholder="operatorNeedsValue(row.operator) ? '填写本次查询值' : '无需取值'"
+                    :placeholder="operatorNeedsValue(row.operator) ? '选择本次查询值' : '无需取值'"
                     :aria-label="`${row.filterTitle}本次查询值`"
                   />
                 </td>
@@ -315,6 +314,8 @@ import {
 import { toFixedDatasetFilters } from '@/utils/fixed-dataset-filters'
 import { componentPreviewData } from '@/utils/component-preview-data'
 import ComponentDataPreview from './ComponentDataPreview.vue'
+import ViewDataFilterSelect from './card-attribute/ViewDataFilterSelect.vue'
+import { resolveTimeFilterDefault } from '@/composables/useDashboardFilterContext'
 
 const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
 const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
@@ -479,6 +480,10 @@ function fieldTitle(field: string): string {
     || field
 }
 
+function filterOption(filterComponentId: string) {
+  return state.filterCatalog.find((filter) => filter.id === filterComponentId)
+}
+
 function operatorLabel(operator: QueryParameterBinding['operator']): string {
   const normalized = normalizeOperator(operator)
   return GENERIC_OPERATORS.find((option) => option.value === normalized)?.label ?? operator
@@ -508,6 +513,10 @@ function createQueryFilterRows(): PreviewQueryFilterRow[] {
   return (props.dataset.queryConfig?.parameterBindings ?? []).flatMap((binding) => {
     const parameterName = binding.parameterName || binding.filterComponentId
     const filter = state.filterCatalog.find((item) => item.id === binding.filterComponentId)
+    const timeDefault = filter?.type === 'timeFilter'
+      ? resolveTimeFilterDefault(filter.defaultPreset, filter.maxRangeDays)
+      : undefined
+    const defaultValue = filter?.type === 'filter' ? filter.defaultValue : undefined
     const base: PreviewQueryFilterRow = {
       inputName: props.dataset.alias,
       field: binding.field,
@@ -517,16 +526,16 @@ function createQueryFilterRows(): PreviewQueryFilterRow[] {
       filterComponentId: binding.filterComponentId,
       filterTitle: filter?.title ?? binding.filterComponentId,
       fieldTitle: fieldTitle(binding.field),
-      value: '',
+      value: defaultValue == null ? '' : Array.isArray(defaultValue) ? [...defaultValue] : defaultValue,
       enabled: true,
     }
     if (filter?.type !== 'timeFilter') return [base]
 
     return [
-      { ...base, operator: 'gte', timeBoundary: 'start' },
+      { ...base, value: timeDefault?.start ?? '', operator: 'gte', timeBoundary: 'start' },
       // The persisted binding has one parameter name; the exclusive upper bound is
       // transmitted as a field filter only, without inventing a new schema parameter.
-      { ...base, operator: 'lt', parameterName: '', parameterNames: [], timeBoundary: 'end' },
+      { ...base, value: timeDefault?.end ?? '', operator: 'lt', parameterName: '', parameterNames: [], timeBoundary: 'end' },
     ]
   })
 }
