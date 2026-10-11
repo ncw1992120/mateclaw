@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -378,6 +379,35 @@ class LocalAloudataFixturesTest {
         assertEquals(1, data.get("total"));
         assertEquals("2026-09-01", columns.get("metric_time").getFirst().get("value"));
         assertEquals(1470, ((Number) columns.get("digo_distr_count_1").getFirst().get("value")).intValue());
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryRetainsMetricIdForFilteredStrategyContributionWdRows() {
+        List<String> filters = new ArrayList<>(List.of(
+                "[attribution_plan_id] = \"PLAN-001\"",
+                "[attribution_strategy_id] = \"STR-001\"",
+                "[platform_id] = \"SUB-001\"",
+                "[channel] = \"APP\"",
+                "[metric_name] = \"经纪个人客户场内公募非货当年净买入\""));
+        filters.addAll(AloudataFilterExpressions.combineMetricTimeExpressions(List.of(
+                AloudataFilterExpressions.of("metric_time", ">=", "2026-09-01", "DAY"),
+                AloudataFilterExpressions.of("metric_time", "<", "2026-09-03", "DAY"))));
+
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of(),
+                "dimensions", List.of("platform_name", "attribution_plan_id", "attribution_strategy_id",
+                        "platform_id", "channel", "metric_name", "metric_id"),
+                "filters", filters,
+                "limit", 100,
+                "offset", 0), null);
+
+        Map<String, Object> columns = (Map<String, Object>) ((Map<String, Object>) body.get("data"))
+                .get("table") instanceof Map<?, ?> table ? (Map<String, Object>) table.get("columns") : Map.of();
+        assertEquals(Boolean.TRUE, body.get("success"), body.toString());
+        assertEquals(1, ((List<?>) columns.get("metric_id")).size());
+        assertEquals("trd_fund_amt_inout_cy_jjgr",
+                ((Map<String, Object>) ((List<?>) columns.get("metric_id")).getFirst()).get("value"));
     }
 
     @Test

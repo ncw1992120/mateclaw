@@ -98,7 +98,8 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         Map<String, Object> config = config(dataset);
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
         List<String> configuredMetrics = strings(config.get("metrics"));
-        List<String> configuredDimensions = strings(config.get("dimensions"));
+        List<String> configuredDimensions = selectableDimensions(
+                dataset.getId(), dataset.getDatasourceId(), config, request.columns());
         // 指标仍使用数据集配置；分组维度只使用本次展示字段中的维度。
         // 隐藏维度可用于筛选，但不能继续参与 GROUP BY，否则 KPI 会被拆成多行。
         List<String> metrics = configuredMetrics;
@@ -156,6 +157,43 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
         if (requestedColumns == null || requestedColumns.isEmpty()) return configuredFields;
         Set<String> requested = new HashSet<>(requestedColumns);
         return configuredFields.stream().filter(requested::contains).toList();
+    }
+
+    /**
+     * sourceConfig 是创建数据集时的查询快照；后续在字段快照中新增的维度也应可被查询。
+     * 只从本数据集字段快照或数据源同步维度元数据扩展白名单，不接受任意请求列。
+     */
+    private List<String> selectableDimensions(long datasetId, Long datasourceId,
+                                              Map<String, Object> config, List<String> requestedColumns) {
+        LinkedHashSet<String> dimensions = new LinkedHashSet<>(strings(config.get("dimensions")));
+        try {
+            datasetFieldMapper.selectList(new LambdaQueryWrapper<DatasetFieldEntity>()
+                            .eq(DatasetFieldEntity::getDatasetId, datasetId)
+                            .eq(DatasetFieldEntity::getDeleted, 0))
+                    .stream()
+                    .filter(field -> "dimension".equalsIgnoreCase(field.getFieldCategory()))
+                    .map(DatasetFieldEntity::getColumnName)
+                    .filter(name -> name != null && !name.isBlank())
+                    .forEach(dimensions::add);
+        } catch (Exception e) {
+            log.warn("[Aloudata指标&维度] 读取数据集维度快照失败 datasetId={}: {}", datasetId, e.getMessage());
+        }
+        try {
+            if (datasourceId != null) {
+                aloudataDimensionMapper.selectList(new LambdaQueryWrapper<AloudataDimensionEntity>()
+                                .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
+                                .select(AloudataDimensionEntity::getDimName))
+                        .stream()
+                        .map(AloudataDimensionEntity::getDimName)
+                        .filter(name -> name != null && !name.isBlank())
+                        .forEach(dimensions::add);
+            }
+        } catch (Exception e) {
+            log.warn("[Aloudata指标&维度] 读取数据源维度元数据失败 datasourceId={}: {}", datasourceId, e.getMessage());
+        }
+        return requestedColumns == null || requestedColumns.isEmpty()
+                ? List.copyOf(dimensions)
+                : dimensions.stream().filter(new HashSet<>(requestedColumns)::contains).toList();
     }
 
     private DatasetEntity require(DatasetAccessContext context, long id) {

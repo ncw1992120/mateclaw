@@ -12,8 +12,10 @@ import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.model.AloudataDimensionEntity;
 import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasetEntity;
+import vip.mate.dataagent.model.DatasetFieldEntity;
 import vip.mate.dataagent.repository.AloudataDimensionMapper;
 import vip.mate.dataagent.repository.AloudataMetricMapper;
+import vip.mate.dataagent.repository.DatasetFieldMapper;
 import vip.mate.dataagent.repository.DatasetMapper;
 import vip.mate.dataagent.service.AloudataService;
 
@@ -53,6 +55,14 @@ class AloudataMetricsAdapterTest {
         return mapper;
     }
 
+    /** 新构造签名共用：字段表 mock（默认无快照，展示名回退同步表/技术名）。 */
+    @SuppressWarnings("unchecked")
+    private DatasetFieldMapper emptyFieldMapper() {
+        DatasetFieldMapper mapper = mock(DatasetFieldMapper.class);
+        when(mapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        return mapper;
+    }
+
     @Test
     void combinesMetricTimePartitionBoundsIntoOneFilterExpression() throws Exception {
         DatasetMapper mapper = mock(DatasetMapper.class);
@@ -67,7 +77,7 @@ class AloudataMetricsAdapterTest {
         when(mapper.selectById(7L)).thenReturn(dataset);
         when(service.queryMetrics(eq(3L), any())).thenReturn(null);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, new ObjectMapper());
         adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), new DatasetReadRequest(
                 7L, "metrics", List.of(), List.of(
                         new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
@@ -80,6 +90,73 @@ class AloudataMetricsAdapterTest {
                         + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-18 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
                 request.getValue().getFilters());
         assertNull(request.getValue().getTimeConstraint());
+    }
+
+    @Test
+    void queriesNewlyRegisteredDimensionEvenWhenSourceConfigSnapshotIsOlder() throws Exception {
+        DatasetMapper mapper = mock(DatasetMapper.class);
+        AloudataService service = mock(AloudataService.class);
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L);
+        dataset.setName("strategy_contribution_wd");
+        dataset.setSourceType("ALOUDATA_METRICS");
+        dataset.setDatasourceId(3L);
+        dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of(
+                "metrics", List.of(), "dimensions", List.of("platform_name", "metric_name"))));
+        when(mapper.selectById(7L)).thenReturn(dataset);
+
+        DatasetFieldMapper fields = mock(DatasetFieldMapper.class);
+        when(fields.selectList(any(Wrapper.class))).thenReturn(List.of(
+                datasetField("platform_name", "dimension"),
+                datasetField("metric_name", "dimension"),
+                datasetField("metric_id", "dimension")));
+
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(
+                mapper, emptyMetricMapper(), emptyDimensionMapper(), fields, service, new ObjectMapper());
+        adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), new DatasetReadRequest(
+                7L, "strategy_contribution_wd",
+                List.of("platform_name", "metric_name", "metric_id"), List.of(), 20, 0, Map.of()));
+
+        ArgumentCaptor<AloudataMetricQueryRequest> request = ArgumentCaptor.forClass(AloudataMetricQueryRequest.class);
+        verify(service).queryMetrics(eq(3L), request.capture());
+        assertEquals(List.of("platform_name", "metric_name", "metric_id"), request.getValue().getDimensions());
+    }
+
+    @Test
+    void queriesSyncedAloudataDimensionMissingFromLegacyDatasetConfig() throws Exception {
+        DatasetMapper mapper = mock(DatasetMapper.class);
+        AloudataService service = mock(AloudataService.class);
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L);
+        dataset.setSourceType("ALOUDATA_METRICS");
+        dataset.setDatasourceId(3L);
+        dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of(
+                "metrics", List.of(), "dimensions", List.of("platform_name", "metric_name"))));
+        when(mapper.selectById(7L)).thenReturn(dataset);
+
+        AloudataDimensionEntity syncedMetricId = new AloudataDimensionEntity();
+        syncedMetricId.setDatasourceId(3L);
+        syncedMetricId.setDimName("metric_id");
+        AloudataDimensionMapper dimensions = mock(AloudataDimensionMapper.class);
+        when(dimensions.selectList(any(Wrapper.class))).thenReturn(List.of(syncedMetricId));
+
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(
+                mapper, emptyMetricMapper(), dimensions, emptyFieldMapper(), service, new ObjectMapper());
+        adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), new DatasetReadRequest(
+                7L, "strategy_contribution_wd", List.of("platform_name", "metric_name", "metric_id"),
+                List.of(), 20, 0, Map.of()));
+
+        ArgumentCaptor<AloudataMetricQueryRequest> request = ArgumentCaptor.forClass(AloudataMetricQueryRequest.class);
+        verify(service).queryMetrics(eq(3L), request.capture());
+        assertEquals(List.of("platform_name", "metric_name", "metric_id"), request.getValue().getDimensions());
+    }
+
+    private DatasetFieldEntity datasetField(String name, String category) {
+        DatasetFieldEntity field = new DatasetFieldEntity();
+        field.setColumnName(name);
+        field.setFieldCategory(category);
+        field.setDeleted(0);
+        return field;
     }
 
     @Test
@@ -98,7 +175,7 @@ class AloudataMetricsAdapterTest {
                 AloudataMetricQueryResponse.class);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, new ObjectMapper());
         DatasetReadException error = assertThrows(DatasetReadException.class, () -> adapter.read(
                 new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "metrics", List.of("revenue"), List.of(), 20, 0, Map.of())));
@@ -123,7 +200,7 @@ class AloudataMetricsAdapterTest {
                 AloudataMetricQueryResponse.class);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, new ObjectMapper());
         DatasetReadException error = assertThrows(DatasetReadException.class, () -> adapter.read(
                 new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "metrics", List.of("revenue"), List.of(), 20, 0, Map.of())));
@@ -158,7 +235,7 @@ class AloudataMetricsAdapterTest {
         response.setData(data);
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, objectMapper);
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, objectMapper);
         DatasetBatch batch = adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
                 new DatasetReadRequest(7L, "strategy metrics", List.of(), List.of(), 10, 0, Map.of()));
 
@@ -183,7 +260,7 @@ class AloudataMetricsAdapterTest {
         when(mapper.selectById(7L)).thenReturn(dataset);
         AloudataMetricQueryResponse response = new AloudataMetricQueryResponse();
         when(service.queryMetrics(eq(3L), any())).thenReturn(response);
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, new ObjectMapper());
         DatasetInputDescriptor descriptor = adapter.describe(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), 7L);
         assertEquals(List.of("region", "revenue"), descriptor.schema().stream().map(DatasetColumn::name).toList());
         // 无同步元数据时展示名回退技术名
@@ -212,7 +289,7 @@ class AloudataMetricsAdapterTest {
         metricTimeMeta.setDatasourceId(3L); metricTimeMeta.setDimName("metric_time"); metricTimeMeta.setDimDisplayName(null);
         when(dimensionMetaMapper.selectList(any(Wrapper.class))).thenReturn(List.of(regionMeta, metricTimeMeta));
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, metricMetaMapper, dimensionMetaMapper, service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, metricMetaMapper, dimensionMetaMapper, emptyFieldMapper(), service, new ObjectMapper());
         DatasetInputDescriptor descriptor = adapter.describe(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), 7L);
 
         Map<String, String> titles = new HashMap<>();

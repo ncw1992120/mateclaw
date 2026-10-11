@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -70,7 +71,7 @@ public class LocalAloudataFixtures {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /** 原始夹具缓存（只读，禁止就地修改；每次返回前深拷贝）。 */
-    private final Map<String, Map<String, Object>> rawCache = new HashMap<>();
+    private final Map<String, Map<String, Object>> rawCache = new ConcurrentHashMap<>();
 
     /** 按端点名分发，返回可直接作为响应体的可变 Map。 */
     public Map<String, Object> payload(String endpointName, Map<String, Object> params, String authValue) {
