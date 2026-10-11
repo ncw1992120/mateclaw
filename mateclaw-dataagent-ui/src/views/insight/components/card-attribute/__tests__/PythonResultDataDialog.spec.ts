@@ -148,6 +148,36 @@ describe('PythonResultDataDialog', () => {
     wrapper.unmount()
   })
 
+  it('点击查询只筛选已加载的 Python 结果，不重新执行并保留字段及筛选配置', async () => {
+    state.datasets = [{ datasetId: 'dataset-1', inputName: 'table_ab' }] as any
+    state.finalResultQueryConfig = {
+      schemaFingerprint: 'stable-schema',
+      confirmed: true,
+      displayFields: [{ field: 'result', title: '自定义结果名', role: 'dimension' }],
+      filterFields: [
+        { field: 'result', title: '自定义结果名', dataType: 'string', parameterName: 'result', operators: ['eq'], filterComponentId: 'result-filter' },
+      ],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    }
+    state.filterCatalog = [{ id: 'result-filter', title: '结果筛选器', type: 'filter', selectionMode: 'single' }]
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    await flushPromises()
+    const configBeforeQuery = JSON.parse(JSON.stringify(state.finalResultQueryConfig))
+
+    await wrapper.find('.dd-filter-table input:not([type="checkbox"])').setValue('rendered')
+    await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewState.error).toBe('')
+    expect(state.finalResultQueryConfig).toEqual(configBeforeQuery)
+    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(1)
+    expect(wrapper.findAll('[data-testid="python-query-filter-row"]')).toHaveLength(1)
+    expect(wrapper.find('.result-table').exists()).toBe(true)
+    state.datasets = []
+    wrapper.unmount()
+  })
+
   it('loads the existing result when mounted while already visible', async () => {
     const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()
