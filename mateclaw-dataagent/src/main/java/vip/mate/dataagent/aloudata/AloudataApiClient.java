@@ -341,6 +341,11 @@ public class AloudataApiClient {
             log.info("[Aloudata] API 调用成功: endpoint={}, method={}, status={}, costMs={}",
                     endpointName, method, response.getStatusCode().value(),
                     System.currentTimeMillis() - startMs);
+            if ("metrics_query".equals(endpointName)) {
+                Object hitMvType = extractHitMvType(response.getBody());
+                log.info("[Aloudata] metrics/query 响应: data.hitMvType={}",
+                        hitMvType == null ? "<未返回>" : hitMvType);
+            }
             return response;
         } catch (CallNotPermittedException e) {
             log.warn("[Protection] [Aloudata] API 熔断拦截（快速失败）: endpoint={}, method={}, costMs={}",
@@ -351,6 +356,12 @@ public class AloudataApiClient {
                     endpointName, method, System.currentTimeMillis() - startMs, e.getMessage());
             throw e;
         }
+    }
+
+    static Object extractHitMvType(Map<?, ?> responseBody) {
+        if (responseBody == null) return null;
+        Object data = responseBody.get("data");
+        return data instanceof Map<?, ?> dataMap ? dataMap.get("hitMvType") : null;
     }
 
     /**

@@ -18,6 +18,21 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 class AloudataApiClientTest {
 
     @Test
+    void extractsHitMvTypeFromMetricsQueryDataResponse() {
+        Map<String, Object> response = Map.of("data", Map.of("hitMvType", "aggregate_mv"));
+
+        org.junit.jupiter.api.Assertions.assertEquals("aggregate_mv",
+                AloudataApiClient.extractHitMvType(response));
+    }
+
+    @Test
+    void returnsNullWhenMetricsQueryResponseHasNoHitMvType() {
+        Map<String, Object> response = Map.of("data", Map.of("rows", List.of()));
+
+        org.junit.jupiter.api.Assertions.assertNull(AloudataApiClient.extractHitMvType(response));
+    }
+
+    @Test
     void requestLogShowsMethodUrlAndParamsWithoutHeaders() {
         AloudataApiClient.PreparedRequest request = new AloudataApiClient.PreparedRequest(
                 "metrics_query", HttpMethod.POST, "/semantic/api/v1.1/metrics/query",
