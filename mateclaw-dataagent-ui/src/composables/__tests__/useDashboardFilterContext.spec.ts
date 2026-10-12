@@ -149,6 +149,24 @@ describe('useDashboardFilterContext runtime state', () => {
     expect(context.filterContext.value.timeRange).toEqual(expected)
   })
 
+  it('resolves the day-before-yesterday default across a month boundary using local dates', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 2, 1, 12, 0, 0))
+    const dateFilter = makeFilter('date-filter', {
+      field: 'metric_time',
+      defaultPreset: 'dayBeforeYesterday',
+    }, 'timeFilter')
+    const context = useDashboardFilterContext(() => [dateFilter], () => undefined)
+
+    context.initializeDefaults()
+
+    expect(context.filterContext.value.timeRange).toEqual({
+      preset: 'custom',
+      start: '2026-02-27',
+      end: '2026-02-27',
+    })
+  })
+
   it('clamps the resolved default range to the configured max span', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 8, 29, 12, 0, 0))

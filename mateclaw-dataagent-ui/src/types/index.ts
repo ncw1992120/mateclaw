@@ -2226,7 +2226,7 @@ export interface ComponentTabData {
 export type TimeRangePreset = 'today' | '7d' | '30d' | '90d' | 'custom'
 
 /** 时间筛选器按当前日期动态解析的默认范围。 */
-export type TimeFilterDefaultPreset = 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
+export type TimeFilterDefaultPreset = 'dayBeforeYesterday' | 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
 
 /** 时间范围筛选值 */
 export interface TimeRangeValue {

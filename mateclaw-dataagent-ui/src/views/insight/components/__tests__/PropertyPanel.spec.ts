@@ -336,10 +336,10 @@ describe('PropertyPanel', () => {
       select.attributes('aria-label') === 'insight.property.timeFilterDefault',
     )
     expect(defaultSelect).toBeDefined()
-    await defaultSelect!.setValue('monthToDate')
+    await defaultSelect!.setValue('dayBeforeYesterday')
 
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({
-      config: { field: 'metric_time', defaultPreset: 'monthToDate' },
+      config: { field: 'metric_time', defaultPreset: 'dayBeforeYesterday' },
     })
     expect(JSON.stringify(wrapper.emitted('change')?.at(-1)?.[0])).not.toContain('2026-')
   })

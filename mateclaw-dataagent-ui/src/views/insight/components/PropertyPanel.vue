@@ -653,6 +653,7 @@
             style="width: 100%"
             @change="emitTimeFilterConfigChange"
           >
+            <el-option value="dayBeforeYesterday" :label="t('insight.timeRange.dayBeforeYesterday')" />
             <el-option value="yesterday" :label="t('insight.timeRange.yesterday')" />
             <el-option value="today" :label="t('insight.timeRange.today')" />
             <el-option value="monthToDate" :label="t('insight.timeRange.monthToDate')" />

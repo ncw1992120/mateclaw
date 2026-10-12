@@ -2002,6 +2002,7 @@ export default {
       granularityMonth: 'Month',
       granularityQuarter: 'Quarter',
       granularityYear: 'Year',
+      dayBeforeYesterday: 'Day Before Yesterday',
       yesterday: 'Yesterday',
       today: 'Today',
       monthToDate: 'Month to Date',

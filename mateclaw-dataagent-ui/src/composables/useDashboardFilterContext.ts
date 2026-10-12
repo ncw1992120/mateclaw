@@ -44,7 +44,11 @@ export function resolveTimeFilterDefault(preset: TimeFilterDefaultPreset | undef
   let start = today
   let end = today
 
-  if (preset === 'yesterday') {
+  if (preset === 'dayBeforeYesterday') {
+    start = new Date(today)
+    start.setDate(start.getDate() - 2)
+    end = start
+  } else if (preset === 'yesterday') {
     start = new Date(today)
     start.setDate(start.getDate() - 1)
     end = start

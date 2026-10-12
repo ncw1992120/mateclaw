@@ -332,7 +332,7 @@ const state = reactive({
     staticOptions?: Array<{ label: string; value: string }>
     datasourceId?: string | number
     defaultValue?: string | string[] | null
-    defaultPreset?: 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
+    defaultPreset?: 'dayBeforeYesterday' | 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
     maxRangeDays?: number
     defaultTimeGranularity?: TimeGranularity
   }>,

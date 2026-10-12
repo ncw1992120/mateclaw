@@ -2047,6 +2047,7 @@ export default {
       granularityMonth: '月',
       granularityQuarter: '季度',
       granularityYear: '年',
+      dayBeforeYesterday: '前天',
       yesterday: '昨天',
       today: '今天',
       monthToDate: '本月',
