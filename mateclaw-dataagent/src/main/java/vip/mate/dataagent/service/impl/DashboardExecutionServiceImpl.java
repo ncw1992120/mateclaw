@@ -360,6 +360,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
 
     private void updateFromRunner(DashboardExecutionEntity execution, Map<String, Object> result) {
         if (result == null) return;
+        PersistedExecutionState previous = persistedState(execution);
         Object status = result.get("status");
         if (status != null) execution.setStatus(String.valueOf(status));
         execution.setLogs(stringValue(result.get("output")));
@@ -374,7 +375,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 execution.setOutputJson(null);
                 execution.setOutputRefJson(null);
                 execution.setErrorMessage(writeJson(e.asMap()));
-                executionMapper.updateById(execution);
+                persistIfChanged(execution, previous);
                 return;
             }
         } else {
@@ -386,8 +387,20 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         execution.setErrorMessage(error instanceof Map<?, ?> ? writeJson(error) : stringValue(error));
         Object returnCode = result.get("stats") instanceof Map<?, ?> stats ? stats.get("returncode") : result.get("returncode");
         if (returnCode instanceof Number number) execution.setReturnCode(number.intValue());
-        executionMapper.updateById(execution);
+        persistIfChanged(execution, previous);
     }
+
+    private PersistedExecutionState persistedState(DashboardExecutionEntity execution) {
+        return new PersistedExecutionState(execution.getStatus(), execution.getLogs(), execution.getOutputJson(),
+                execution.getOutputRefJson(), execution.getErrorMessage(), execution.getReturnCode());
+    }
+
+    private void persistIfChanged(DashboardExecutionEntity execution, PersistedExecutionState previous) {
+        if (!previous.equals(persistedState(execution))) executionMapper.updateById(execution);
+    }
+
+    private record PersistedExecutionState(String status, String logs, String outputJson, String outputRefJson,
+                                           String errorMessage, Integer returnCode) { }
 
     private Map<String, Object> response(DashboardExecutionEntity execution, Map<String, Object> result) {
         Map<String, Object> response = new LinkedHashMap<>();

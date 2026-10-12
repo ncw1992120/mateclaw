@@ -207,6 +207,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
                     try {
                         response = objectMapper.readValue(responseFile.toFile(), new TypeReference<>() {});
                         status = text(response.get("status"));
+                        logPythonPhaseTimings(state.taskId, response.get("stats"));
                         if (status == null || !TERMINAL.contains(status)) {
                             status = "FAILED";
                             error = "Python Worker returned an invalid task status";
@@ -464,6 +465,18 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
 
     private static long elapsedMillis(long startedAtNanos, long finishedAtNanos) {
         return Math.max(0, (finishedAtNanos - startedAtNanos) / 1_000_000L);
+    }
+
+    private static void logPythonPhaseTimings(String taskId, Object rawStats) {
+        if (!(rawStats instanceof Map<?, ?> stats)) return;
+        LOGGER.info("[dashboard-perf] stage=python-phases taskId={} compileMs={} executeMs={} normalizeMs={} serializeMs={}",
+                taskId, numberOrMinusOne(stats.get("script_compile_ms")),
+                numberOrMinusOne(stats.get("script_execute_ms")), numberOrMinusOne(stats.get("result_normalize_ms")),
+                numberOrMinusOne(stats.get("result_serialize_ms")));
+    }
+
+    private static long numberOrMinusOne(Object value) {
+        return value instanceof Number number ? number.longValue() : -1L;
     }
 
     private void pruneCompletedTasks() {

@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +47,29 @@ class InsightDashboardServiceImplTest {
         assertTrue(InsightDashboardServiceImpl.matchesExpectedUpdateTime("2026-09-22T10:00", "2026-09-22T10:00"));
         assertFalse(InsightDashboardServiceImpl.matchesExpectedUpdateTime("2026-09-22T10:00", "2026-09-22T10:01"));
         assertFalse(InsightDashboardServiceImpl.matchesExpectedUpdateTime("2026-09-22T10:00", null));
+    }
+
+    @Test
+    void dashboardDetailLoadsItsEntityOnceWhileCheckingOwnership() {
+        InsightDashboardMapper mapper = mock(InsightDashboardMapper.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        InsightDashboardEntity entity = new InsightDashboardEntity();
+        entity.setId(42L);
+        entity.setWorkspaceId(7L);
+        entity.setOwnerId(8L);
+        entity.setDeleted(0);
+        entity.setName("performance-test");
+        entity.setSchemaJson("{}");
+        when(mapper.selectById(42L)).thenReturn(entity);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        var service = new InsightDashboardServiceImpl(mapper, guard, null, null, null,
+                new ObjectMapper(), null);
+
+        InsightDashboardVO result = service.getDashboard(42L);
+
+        assertEquals("performance-test", result.getName());
+        verify(mapper, times(1)).selectById(42L);
+        verify(guard).requireResourceOwner(8L);
     }
 
     @Test

@@ -57,6 +57,16 @@ def test_worker_cli_writes_versioned_result_response(tmp_path):
     assert response["result"]["meta"]["rowCount"] == 1
 
 
+def test_worker_response_records_python_execution_phase_timings(tmp_path):
+    completed, response = run_worker(tmp_path, task_request("result = [{'amount': 12.5}]"))
+
+    assert completed.returncode == 0
+    stats = response["stats"]
+    for phase in ("script_compile_ms", "script_execute_ms", "result_normalize_ms", "result_serialize_ms"):
+        assert isinstance(stats[phase], int)
+        assert stats[phase] >= 0
+
+
 def test_worker_keeps_user_stdout_separate_from_response_json(tmp_path):
     completed, response = run_worker(tmp_path, task_request("print('user log')\nresult = 7"))
 

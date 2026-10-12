@@ -477,9 +477,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
     @Override
     public InsightDashboardVO getDashboard(Long id) {
-        requireOwnership(id);
-        InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
-        return toVO(entity);
+        return toVO(requireOwnership(id));
     }
 
     @Override
@@ -2167,7 +2165,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      * 写操作归属校验：存在性 + workspaceId 一致性 + 归属
      * （仅创建者本人 或 工作区 admin/owner 可修改/删除；历史无主数据仅管理员层级可维护）。
      */
-    private void requireOwnership(Long id) {
+    private InsightDashboardEntity requireOwnership(Long id) {
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
         if (entity == null || (entity.getDeleted() != null && entity.getDeleted() == 1)) {
             throw new BusinessException(404, "仪表盘不存在: " + id);
@@ -2178,6 +2176,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             throw new BusinessException(403, "无权访问该仪表盘");
         }
         workspaceGuard.requireResourceOwner(entity.getOwnerId());
+        return entity;
     }
 
     /**

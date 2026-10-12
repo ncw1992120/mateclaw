@@ -7,12 +7,74 @@ import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.objectref.ObjectRefService;
 import vip.mate.dataagent.service.DatasetManageService;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class ScriptTaskPreparationServiceTest {
+    @Test void materializesIndependentInputsConcurrentlyAndKeepsInputOrder() {
+        DatasetManageService datasets = mock(DatasetManageService.class);
+        DatasetSourceAdapter adapter = mock(DatasetSourceAdapter.class);
+        when(adapter.supports(DatasetSourceType.JDBC_TABLE)).thenReturn(true);
+        for (long datasetId : List.of(3L, 4L)) {
+            when(datasets.getInputDescriptor(any(), eq(datasetId), any()))
+                    .thenAnswer(invocation -> new DatasetInputDescriptor(datasetId,
+                            invocation.getArgument(2), DatasetSourceType.JDBC_TABLE, List.of(), null, Map.of(), null));
+        }
+        CountDownLatch readsStarted = new CountDownLatch(2);
+        AtomicInteger readCount = new AtomicInteger();
+        when(adapter.read(any(), any())).thenAnswer(invocation -> {
+            int read = readCount.incrementAndGet();
+            readsStarted.countDown();
+            assertTrue(readsStarted.await(2, TimeUnit.SECONDS), "independent input reads should overlap");
+            String alias = invocation.<DatasetReadRequest>getArgument(1).inputName();
+            return new DatasetBatch(List.of(Map.of("source", alias)), null, 1, true, null);
+        });
+        var service = new ScriptTaskPreparationService(datasets, new ScriptTaskInputRegistry(),
+                new ScriptDatasetReadTokenService("secret"), List.of(adapter), mock(ObjectRefService.class));
+        Map<String, Long> inputs = new LinkedHashMap<>();
+        inputs.put("first", 3L);
+        inputs.put("second", 4L);
+        Map<String, DatasetQueryPlanDTO> plans = new LinkedHashMap<>();
+        plans.put("first", emptyPlan(3L, "first"));
+        plans.put("second", emptyPlan(4L, "second"));
+
+        var prepared = service.prepare("parallel-task", 7L, 9L, inputs, "result = []", Map.of(), plans);
+
+        assertEquals(List.of("first", "second"), new ArrayList<>(prepared.preparedInputs().keySet()));
+        assertEquals("first", prepared.preparedInputs().get("first").inlineRows().getFirst().get("source"));
+        assertEquals("second", prepared.preparedInputs().get("second").inlineRows().getFirst().get("source"));
+        assertEquals(2, readCount.get());
+    }
+
+    @Test void validatesAllPlannedAliasesBeforeStartingAnySourceRead() {
+        DatasetManageService datasets = mock(DatasetManageService.class);
+        DatasetSourceAdapter adapter = mock(DatasetSourceAdapter.class);
+        when(adapter.supports(DatasetSourceType.JDBC_TABLE)).thenReturn(true);
+        when(datasets.getInputDescriptor(any(), eq(3L), eq("known"))).thenReturn(
+                new DatasetInputDescriptor(3L, "known", DatasetSourceType.JDBC_TABLE, List.of(), null, Map.of(), null));
+        var service = new ScriptTaskPreparationService(datasets, new ScriptTaskInputRegistry(),
+                new ScriptDatasetReadTokenService("secret"), List.of(adapter), mock(ObjectRefService.class));
+        Map<String, Long> inputs = Map.of("known", 3L);
+        Map<String, DatasetQueryPlanDTO> plans = new LinkedHashMap<>();
+        plans.put("known", emptyPlan(3L, "known"));
+        plans.put("unknown", emptyPlan(4L, "unknown"));
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.prepare("invalid-plan", 7L, 9L, inputs, "result = []", Map.of(), plans));
+
+        verify(adapter, after(500).never()).read(any(), any());
+    }
+
+    private DatasetQueryPlanDTO emptyPlan(long datasetId, String alias) {
+        return new DatasetQueryPlanDTO(String.valueOf(datasetId), alias, List.of(), List.of(), List.of(), null,
+                new DatasetQueryPlanDTO.PushdownSpec(false, false, false), List.of(), false, null);
+    }
+
     @Test void materializesKnownStrategyReadoutFixtureWithoutJdbcAdapter() {
         long datasetId = StrategyReadoutDemoDatasetFixtures.DIMENSION_DATASET_ID;
         var fixtures = new StrategyReadoutDemoDatasetFixtures();

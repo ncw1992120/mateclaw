@@ -15,6 +15,7 @@ import vip.mate.dataagent.service.impl.DashboardExecutionServiceImpl;
 import vip.mate.dataagent.service.impl.QueryPlannerImpl;
 import vip.mate.dataagent.repository.DashboardExecutionMapper;
 import vip.mate.dataagent.objectref.ObjectRefService;
+import vip.mate.dataagent.model.DashboardExecutionEntity;
 
 import java.util.List;
 import java.util.Map;
@@ -222,6 +223,36 @@ class DashboardExecutionServiceTest {
                 mock(PythonExecutionService.class), mock(WorkspaceGuard.class), new ObjectMapper(), mock(DashboardExecutionMapper.class), mock(ObjectRefService.class),
                 new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://mateclaw-server:18088");
         assertThrows(IllegalArgumentException.class, () -> service.status("dashboard-42-unknown"));
+    }
+
+    @Test
+    void skipsDatabaseWriteWhenPolledRunnerSnapshotHasNotChanged() {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        DashboardExecutionEntity execution = new DashboardExecutionEntity();
+        execution.setExecutionId("dashboard-42-task");
+        execution.setWorkspaceId(7L);
+        execution.setDashboardId(42L);
+        execution.setStatus("RUNNING");
+        execution.setLogs("progress");
+        execution.setOutputRefJson("{}");
+        when(executionMapper.selectOne(any())).thenReturn(execution);
+        when(runner.getStatus("dashboard-42-task")).thenReturn(
+                Map.of("status", "RUNNING", "output", "progress", "outputRef", Map.of()),
+                Map.of("status", "RUNNING", "output", "progress\nmore", "outputRef", Map.of()));
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard, new ObjectMapper(),
+                executionMapper, mock(ObjectRefService.class), new vip.mate.dataagent.service.code.ScriptResultContractService(),
+                "http://mateclaw-dataagent:18089/dataagent/api/");
+
+        service.status("dashboard-42-task");
+        service.status("dashboard-42-task");
+
+        verify(executionMapper, times(1)).updateById(execution);
+        assertEquals("progress\nmore", execution.getLogs());
     }
 
     @Test

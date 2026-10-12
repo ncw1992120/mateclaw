@@ -8,6 +8,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 import traceback
 import urllib.request
 from pathlib import Path
@@ -118,16 +119,29 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
     result: dict[str, Any] | None = None
     error: str | None = None
     return_code = 0
+    phase_timings: dict[str, int] = {}
 
     try:
         with contextlib.redirect_stdout(_Tee(sys.stdout, stdout_buffer)), contextlib.redirect_stderr(sys.stderr):
-            exec(compile(request.script, "user_script.py", "exec"), namespace, namespace)
+            phase_started = time.perf_counter_ns()
+            try:
+                compiled_script = compile(request.script, "user_script.py", "exec")
+            finally:
+                phase_timings["script_compile_ms"] = (time.perf_counter_ns() - phase_started) // 1_000_000
+            phase_started = time.perf_counter_ns()
+            try:
+                exec(compiled_script, namespace, namespace)
+            finally:
+                phase_timings["script_execute_ms"] = (time.perf_counter_ns() - phase_started) // 1_000_000
+            phase_started = time.perf_counter_ns()
             try:
                 result = normalize_result(namespace.get("result"))
             except ResultContractError as exc:
                 status = "OUTPUT_CONTRACT_ERROR"
                 error = json.dumps(exc.as_dict(), ensure_ascii=False)
                 return_code = 1
+            finally:
+                phase_timings["result_normalize_ms"] = (time.perf_counter_ns() - phase_started) // 1_000_000
     except BaseException as exc:
         status = "FAILED"
         error = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-10_000:]
@@ -140,7 +154,9 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
         result = None
         error = "stdout exceeded configured byte limit"
     elif status == "SUCCEEDED" and result is not None:
+        phase_started = time.perf_counter_ns()
         encoded_result = json.dumps(result, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        phase_timings["result_serialize_ms"] = (time.perf_counter_ns() - phase_started) // 1_000_000
         if len(encoded_result) > request.limits.max_result_bytes:
             if request.resultUploadEndpoint and result.get("kind") == "table":
                 reference = _upload_table_result(result, request.resultUploadEndpoint, request.readToken, directory)
@@ -151,7 +167,7 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
                         output=output.replace(request.readToken, "[REDACTED]"),
                         outputRef=reference,
                         error=stderr.replace(request.readToken, "[REDACTED]") or None,
-                        stats={"returncode": return_code},
+                        stats={"returncode": return_code, **phase_timings},
                     )
             status = "RESULT_LIMIT"
             result = None
@@ -163,7 +179,7 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
         output=output.replace(request.readToken, "[REDACTED]"),
         result=result if status == "SUCCEEDED" else None,
         error=error.replace(request.readToken, "[REDACTED]") if error else None,
-        stats={"returncode": return_code},
+        stats={"returncode": return_code, **phase_timings},
     )
 
 

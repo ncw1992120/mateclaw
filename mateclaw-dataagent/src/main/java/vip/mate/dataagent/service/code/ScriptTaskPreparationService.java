@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.code;
 
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PreDestroy;
 import vip.mate.dataagent.dataset.*;
 import vip.mate.dataagent.dataset.demo.StrategyReadoutDemoDatasetFixtures;
 import vip.mate.dataagent.dto.DatasetQueryPlanDTO;
@@ -10,6 +11,14 @@ import vip.mate.dataagent.objectref.ObjectRefService;
 import vip.mate.dataagent.service.DatasetManageService;
 
 import java.util.*;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /** 在提交 Runner 前固化输入别名、权限上下文和短期读取令牌；有查询计划时物化 prepared input。 */
 @Service
@@ -20,9 +29,15 @@ public class ScriptTaskPreparationService {
     private static final int PAGE_SIZE = 10_000;
     private static final int MAX_PAGES = 10;
     private static final long PREPARED_INPUT_TTL_MS = 900_000L;
+    private static final int MAX_CONCURRENT_INPUT_READS = 4;
 
     private final DatasetManageService datasets; private final ScriptTaskInputRegistry registry; private final ScriptDatasetReadTokenService tokens;
     private final List<DatasetSourceAdapter> adapters; private final ObjectRefService objectRefs;
+    private final Semaphore inputReadPermits = new Semaphore(MAX_CONCURRENT_INPUT_READS);
+    private final ThreadPoolExecutor inputReadExecutor = new ThreadPoolExecutor(
+            MAX_CONCURRENT_INPUT_READS, MAX_CONCURRENT_INPUT_READS, 0L, TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(MAX_CONCURRENT_INPUT_READS), daemonThreadFactory(),
+            new ThreadPoolExecutor.AbortPolicy());
     private StrategyReadoutDemoDatasetFixtures strategyReadoutFixtures;
     public ScriptTaskPreparationService(DatasetManageService datasets, ScriptTaskInputRegistry registry,
                                         ScriptDatasetReadTokenService tokens, List<DatasetSourceAdapter> adapters,
@@ -52,20 +67,41 @@ public class ScriptTaskPreparationService {
         Map<String,DatasetInputDescriptor> descriptors=new LinkedHashMap<>(); inputDatasets.forEach((alias,id)->descriptors.put(alias,datasets.getInputDescriptor(context,id,alias))); registry.register(taskId,descriptors);
         String token=tokens.issue(taskId,workspaceId,900);
         Map<String, ScriptTaskInputRegistry.PreparedInput> prepared = new LinkedHashMap<>();
+        Map<String, CompletableFuture<ScriptTaskInputRegistry.PreparedInput>> pending = new LinkedHashMap<>();
         try {
+            for (String alias : plans.keySet()) {
+                if (!descriptors.containsKey(alias)) {
+                    throw new IllegalArgumentException("plan references unknown input: " + alias);
+                }
+            }
             for (Map.Entry<String, DatasetQueryPlanDTO> entry : plans.entrySet()) {
                 String alias = entry.getKey();
                 DatasetQueryPlanDTO plan = entry.getValue();
                 DatasetInputDescriptor descriptor = descriptors.get(alias);
-                if (descriptor == null) throw new IllegalArgumentException("plan references unknown input: " + alias);
-                long inputStarted = System.nanoTime();
-                ScriptTaskInputRegistry.PreparedInput input = materialize(context, alias, descriptor, plan);
-                prepared.put(alias, input);
-                LOGGER.info("[dashboard-perf] stage=input-materialize taskId={} input={} datasetId={} rows={} elapsedMs={}",
-                        taskId, alias, descriptor.datasetId(), input.rowCount(), elapsedMillis(inputStarted));
+                acquireInputReadPermit();
+                try {
+                    pending.put(alias, CompletableFuture.supplyAsync(() -> {
+                        long inputStarted = System.nanoTime();
+                        try {
+                            ScriptTaskInputRegistry.PreparedInput input = materialize(context, alias, descriptor, plan);
+                            LOGGER.info("[dashboard-perf] stage=input-materialize taskId={} input={} datasetId={} rows={} elapsedMs={}",
+                                    taskId, alias, descriptor.datasetId(), input.rowCount(), elapsedMillis(inputStarted));
+                            return input;
+                        } finally {
+                            inputReadPermits.release();
+                        }
+                    }, inputReadExecutor));
+                } catch (RejectedExecutionException exception) {
+                    inputReadPermits.release();
+                    throw exception;
+                }
             }
+            CompletableFuture.allOf(pending.values().toArray(CompletableFuture[]::new)).join();
+            pending.forEach((alias, future) -> prepared.put(alias, future.join()));
         } catch (RuntimeException e) {
             registry.remove(taskId); // 失败不留半注册状态
+            Throwable cause = e instanceof CompletionException && e.getCause() != null ? e.getCause() : e;
+            if (cause instanceof RuntimeException runtimeException) throw runtimeException;
             throw e;
         }
         prepared.values().forEach(input -> registry.registerPreparedInput(taskId, input));
@@ -76,6 +112,28 @@ public class ScriptTaskPreparationService {
 
     private static long elapsedMillis(long startedAtNanos) {
         return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    }
+
+    private static ThreadFactory daemonThreadFactory() {
+        return runnable -> {
+            Thread thread = new Thread(runnable, "dashboard-input-read");
+            thread.setDaemon(true);
+            return thread;
+        };
+    }
+
+    private void acquireInputReadPermit() {
+        try {
+            inputReadPermits.acquire();
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("interrupted while waiting to prepare dashboard inputs", exception);
+        }
+    }
+
+    @PreDestroy
+    public void close() {
+        inputReadExecutor.shutdown();
     }
     public record PreparedTask(String taskId,String script,Map<String,DatasetInputDescriptor> inputCatalog,Map<String,Object> parameters,String readToken,
                                Map<String, ScriptTaskInputRegistry.PreparedInput> preparedInputs) {
