@@ -69,13 +69,13 @@ export function execute(id: string, parameters: Record<string, unknown> = {}) {
 }
 
 /** 按组件级 datasetPipeline 创建执行任务。 */
-export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string, queryContext?: QueryContext) {
-  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext })
+export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string, queryContext?: QueryContext, requestOptions?: { timeout?: number }) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext }, requestOptions)
 }
 
 /** 查询脚本执行状态 */
-export function getExecutionStatus(executionId: string) {
-  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`)
+export function getExecutionStatus(executionId: string, requestOptions?: { timeout?: number }) {
+  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`, requestOptions)
 }
 
 /** 查询执行日志（标准输出与受限错误信息） */
@@ -84,9 +84,9 @@ export function getExecutionLogs(executionId: string) {
 }
 
 /** 读取执行结果预览（大结果由 DataAgent 受控读取 ObjectRef 后返回受限行集） */
-export function getExecutionResult(executionId: string) {
+export function getExecutionResult(executionId: string, requestOptions?: { timeout?: number }) {
   // 统一结构化结果：envelope 为 table/scalar/message 标准信封（内联与 ObjectRef 引用同构）
-  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`)
+  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`, requestOptions)
 }
 
 /** 对 Worker 的完整输出结果应用已确认的最终结果查询配置。 */

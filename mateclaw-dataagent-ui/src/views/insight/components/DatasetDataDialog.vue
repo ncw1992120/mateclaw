@@ -804,7 +804,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           offset,
           parameters,
           ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
-        })
+        }, { timeout: 0 })
       : await previewDatasetDraft({
           ...request,
           columns: requestedColumns,
@@ -814,7 +814,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           limit,
           offset,
           ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
-        })
+        }, { timeout: 0 })
     // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
     if (currentRequest !== requestSequence) return
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []

@@ -188,7 +188,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
         { field: 'status', role: 'dimension', operator: 'eq', value: 'ACTIVE' },
         { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
       ],
-    }))
+    }), { timeout: 0 })
     wrapper.unmount()
   })
 
@@ -298,7 +298,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ requestTotalCount: true }))
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ requestTotalCount: true }), { timeout: 0 })
     expect(wrapper.get('[data-testid="component-preview-validation"]').text()).toContain('返回 2 行')
     expect(wrapper.emitted('render')).toBeUndefined()
     wrapper.unmount()
@@ -485,7 +485,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
         columns: ['trade_date', 'cust_type', 'amount'],
         filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '机构' }],
-      }))
+      }), { timeout: 0 })
       expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
         componentId: 'table-no-bindings',
         table: { columns: ['trade_date', 'cust_type', 'amount'] },
@@ -522,7 +522,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="component-render"]').trigger('click')
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }))
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }), { timeout: 0 })
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-first-open',
       table: { columns: ['trade_date', 'cust_type', 'amount'] },
@@ -892,12 +892,12 @@ describe('查看数据弹窗 · 限制条数', () => {
 
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 10000, offset: 0 }))
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 10000, offset: 0 }), { timeout: 0 })
 
     await limitInput.setValue('200000')
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100000, offset: 0 }))
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100000, offset: 0 }), { timeout: 0 })
     wrapper.unmount()
   })
 
@@ -912,7 +912,7 @@ describe('查看数据弹窗 · 限制条数', () => {
     expect(wrapper.get('[data-testid="query-limit"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 5, offset: 0 }))
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 5, offset: 0 }), { timeout: 0 })
     wrapper.unmount()
   })
 })

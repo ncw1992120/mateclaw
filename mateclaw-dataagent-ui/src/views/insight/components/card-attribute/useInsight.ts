@@ -1780,18 +1780,19 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
         state.backend.componentId,
         buildPipeline().datasetInputs,
       ),
+      { timeout: 0 },
     )
     state.backend.executionId = executionId
-    // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
-    for (let attempt = 0; attempt < 120; attempt++) {
+    // 一直轮询到后端返回终态；长时间运行的查询不应被前端固定 60 秒截止。
+    while (true) {
       await new Promise((resolve) => setTimeout(resolve, 500))
       // 结果接口在执行仍为 RUNNING 时会返回 409。先查询状态接口，让 DataAgent
       // 同步 Runner 的终态，再读取结果，避免把正常的异步执行误报成预览失败。
-      const statusResponse = await backend.fetchExecutionStatus(executionId)
+      const statusResponse = await backend.fetchExecutionStatus(executionId, { timeout: 0 })
       const status = String(statusResponse.status || '').toUpperCase()
       if (status === 'RUNNING' || status === 'SUBMITTING' || !status) continue
       if (status === 'SUCCEEDED' || status === 'RESULT_REF' || status === 'COMPLETED' || status === 'FINISHED') {
-        const response = await getExecutionResult(executionId)
+        const response = await getExecutionResult(executionId, { timeout: 0 })
         const envelope = parseScriptResultEnvelope(response.envelope)
         const previewCard = state.cards.find((c) => c.id === state.activeCardId) ?? state.cards[0]
         const previewSpec = previewCard ? resolveOutputSpec(previewCard.type, previewCard.chartType) : null
@@ -1824,8 +1825,6 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
       failResultSet('script', message)
       return { ok: false, message }
     }
-    failResultSet('script', '执行超时：未在预期时间内完成')
-    return { ok: false, message: '执行超时' }
   } catch (e) {
     const msg = (e as Error)?.message || '执行提交失败'
     state.backend.lastError = msg
@@ -1998,7 +1997,7 @@ async function loadResultPreview(forceRefresh = false): Promise<void> {
     let columns: PreviewPayload['dataColumns'] = state.resultSet.columns
     if (state.resultSet.source === 'script' && state.resultSet.executionId) {
       try {
-        const response = await getExecutionResult(state.resultSet.executionId)
+        const response = await getExecutionResult(state.resultSet.executionId, { timeout: 0 })
         const envelope = parseScriptResultEnvelope(response.envelope)
         if (envelope.kind === 'table') {
           rows = envelope.data.rows

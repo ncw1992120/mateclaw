@@ -100,8 +100,8 @@ export async function confirmDatasetDraft(
 }
 
 /** 预览数据集草稿（不落库，返回受控预览行 + 字段结构） */
-export async function previewDatasetDraft(req: datasetApi.DatasetComposerDraftRequest) {
-  return (await datasetApi.previewDraft(req)) as unknown as {
+export async function previewDatasetDraft(req: datasetApi.DatasetComposerDraftRequest, requestOptions?: { timeout?: number }) {
+  return (await datasetApi.previewDraft(req, requestOptions)) as unknown as {
     columns?: string[]
     schema?: string[]
     rows?: Record<string, unknown>[]
@@ -119,16 +119,17 @@ export async function submitComponentExecution(
   parameters: Record<string, unknown> = {},
   schemaJson?: string,
   queryContext?: QueryContext,
+  requestOptions?: { timeout?: number },
 ): Promise<{ executionId: string; status?: string }> {
-  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters, schemaJson, queryContext)) as unknown as {
+  return (await dashboardApi.executeComponent(dashboardId, componentId, parameters, schemaJson, queryContext, requestOptions)) as unknown as {
     executionId: string
     status?: string
   }
 }
 
 /** 查询执行状态 */
-export async function fetchExecutionStatus(executionId: string): Promise<{ status?: string; result?: string; error?: string }> {
-  return (await dashboardApi.getExecutionStatus(executionId)) as unknown as {
+export async function fetchExecutionStatus(executionId: string, requestOptions?: { timeout?: number }): Promise<{ status?: string; result?: string; error?: string }> {
+  return (await dashboardApi.getExecutionStatus(executionId, requestOptions)) as unknown as {
     status?: string
     result?: string
     error?: string
@@ -145,8 +146,8 @@ export async function fetchExecutionLogs(executionId: string): Promise<{ status?
 }
 
 /** 查询执行结果预览（表格行） */
-export async function fetchExecutionResult(executionId: string) {
-  return (await dashboardApi.getExecutionResult(executionId)) as unknown as {
+export async function fetchExecutionResult(executionId: string, requestOptions?: { timeout?: number }) {
+  return (await dashboardApi.getExecutionResult(executionId, requestOptions)) as unknown as {
     rows?: { columns?: string[]; rows?: unknown[][] } | unknown
     inline?: boolean
     status?: string

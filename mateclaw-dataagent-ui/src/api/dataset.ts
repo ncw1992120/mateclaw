@@ -52,8 +52,8 @@ export function getInputDescriptor(datasetId: string, inputName: string = 'datas
 }
 
 /** 使用统一 DatasetSourceAdapter 预览数据，并返回下推审计结果 */
-export function previewInput(request: DatasetReadRequest) {
-  return api.post<DatasetBatch>(`${BASE_URL}/preview`, request)
+export function previewInput(request: DatasetReadRequest, requestOptions?: { timeout?: number }) {
+  return api.post<DatasetBatch>(`${BASE_URL}/preview`, request, requestOptions)
 }
 
 /** 查询计划预览请求：datasetId + 运行时 QueryContext +（可选）未保存的查询配置草稿 */
@@ -105,9 +105,9 @@ export interface DatasetComposerDraftRequest {
   parameters?: Record<string, unknown>
 }
 
-export function previewDraft(request: DatasetComposerDraftRequest) {
+export function previewDraft(request: DatasetComposerDraftRequest, requestOptions?: { timeout?: number }) {
   return api.post<DatasetBatch & { executionId?: string }>(
-    '/dataagent/api/v1/dataset-composer/drafts/preview', request,
+    '/dataagent/api/v1/dataset-composer/drafts/preview', request, requestOptions,
   )
 }
 
