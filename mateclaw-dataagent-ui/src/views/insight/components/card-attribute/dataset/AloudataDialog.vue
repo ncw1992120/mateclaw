@@ -217,7 +217,7 @@
 
     <template #footer>
       <el-button @click="ui.aloudata.visible = false">取消</el-button>
-      <el-button type="primary" :disabled="!datasourceId || selectionConflict || selectedMetricRelationsUnverified" @click="confirmAloudata">确定</el-button>
+      <el-button type="primary" :loading="confirmingSelection" :disabled="confirmingSelection || !datasourceId || selectionConflict || selectedMetricRelationsUnverified" @click="confirmSelection">确定</el-button>
     </template>
   </el-dialog>
 </template>
@@ -252,6 +252,23 @@ import { clampPickerDragOffset, getPickerViewportLayout, resizePickerBounds } fr
 import type { PickerOffset, PickerPanelBounds, PickerPlacement, PickerResizeHandle } from './aloudata-picker-layout'
 
 const { state, confirmAloudata } = useInsight()
+const confirmingSelection = ref(false)
+
+async function confirmSelection() {
+  if (confirmingSelection.value) return
+  const labels: Record<string, string> = {}
+  state.ui.aloudata.dims.forEach((name) => { labels[name] = dimLabel(name) })
+  state.ui.aloudata.metrics.forEach((name) => { labels[name] = metricLabel(name) })
+  state.ui.aloudata.displayNames = labels
+  confirmingSelection.value = true
+  try {
+    await confirmAloudata()
+  } catch (error) {
+    ElMessage.error((error as Error)?.message || '数据集保存失败，请重试')
+  } finally {
+    confirmingSelection.value = false
+  }
+}
 const ui = state.ui
 const aloudataTitle = computed(() =>
   ui.aloudata.mode === 'metric-view' ? 'Aloudata · 指标视图' : 'Aloudata · 指标&维度',

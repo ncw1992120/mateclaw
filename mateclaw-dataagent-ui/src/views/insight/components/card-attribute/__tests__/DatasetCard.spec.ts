@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DatasetCard from '../DatasetCard.vue'
 
@@ -33,7 +33,10 @@ const stubs = {
     methods: { focus: vi.fn() },
     template: '<input v-bind="$attrs" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
-  'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
+  'el-button': {
+    props: ['loading', 'disabled'],
+    template: '<button v-bind="$attrs" :disabled="disabled || loading" @click="$emit(\'click\', $event)"><slot /></button>',
+  },
 }
 
 beforeEach(() => {
@@ -96,6 +99,26 @@ describe('DatasetCard', () => {
     await wrapper.findAll('button').find((button) => button.text().includes('查询配置'))!.trigger('click')
 
     expect(actions.openQueryConfig).toHaveBeenCalledWith('dataset-1')
+    wrapper.unmount()
+  })
+
+  it('查询配置仍在同步字段时显示忙碌状态并阻止重复点击', async () => {
+    let finishSync!: () => void
+    actions.openQueryConfig.mockReturnValueOnce(new Promise<void>((resolve) => { finishSync = resolve }))
+    const wrapper = mount(DatasetCard, { props: { dataset }, global: { stubs } })
+    const queryButton = wrapper.findAll('button').find((button) => button.text().includes('查询配置'))!
+
+    await queryButton.trigger('click')
+
+    expect(queryButton.attributes('disabled')).toBeDefined()
+    expect(queryButton.text()).toContain('正在读取展示字段')
+    await queryButton.trigger('click')
+    expect(actions.openQueryConfig).toHaveBeenCalledTimes(1)
+
+    finishSync()
+    await flushPromises()
+    await wrapper.vm.$nextTick()
+    expect((queryButton.element as HTMLButtonElement).disabled).toBe(false)
     wrapper.unmount()
   })
 })

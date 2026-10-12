@@ -30,7 +30,9 @@
          「查询配置」打开查询配置弹窗：展示字段、筛选器绑定、允许排序、分页。
          「查看数据」打开统一数据查看弹窗：按查询配置展示字段与筛选绑定，填写本次值后查询。 -->
     <div class="ds-actions" @click.stop>
-      <el-button size="small" text bg @click="openQueryConfig(dataset.id)">查询配置</el-button>
+      <el-button size="small" text bg :loading="queryConfigSyncing" :disabled="queryConfigSyncing" @click="handleOpenQueryConfig">
+        {{ queryConfigSyncing ? '正在读取展示字段…' : '查询配置' }}
+      </el-button>
       <el-button
         size="small"
         text bg
@@ -46,12 +48,26 @@
 
 <script setup lang="ts">
 import { nextTick, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Edit } from '@element-plus/icons-vue'
 import { useInsight } from './useInsight'
 import type { DatasetConfig } from './useInsight'
 
 const props = defineProps<{ dataset: DatasetConfig }>()
 const { openQueryConfig, openDataDialog, removeDataset, reconfigureDataset, renameDataset } = useInsight()
+const queryConfigSyncing = ref(false)
+
+async function handleOpenQueryConfig(): Promise<void> {
+  if (queryConfigSyncing.value) return
+  queryConfigSyncing.value = true
+  try {
+    await openQueryConfig(props.dataset.id)
+  } catch (error) {
+    ElMessage.error((error as Error)?.message || '读取数据集展示字段失败')
+  } finally {
+    queryConfigSyncing.value = false
+  }
+}
 
 /* ---- 别名内联编辑 ---- */
 const editingAlias = ref(false)

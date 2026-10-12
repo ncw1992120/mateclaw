@@ -19,7 +19,6 @@ import { reactive, computed } from 'vue'
 import * as backend from './useInsightBackend'
 import * as datasetApi from '@/api/dataset'
 import * as datasourceApi from '@/api/datasource'
-import { listAloudataMetrics, listAloudataDimensions } from '@/api/semantic-model'
 import {
   fieldMetasFromMappings,
   normalizeLegacyFieldRefs,
@@ -94,7 +93,7 @@ export interface DatasetConfig {
   unresolvedFields?: string[]
   // 各类型专属配置（由对应配置弹窗填充，均来自真实后端）
   jdbc?: { db: string; sql: string }
-  aloudata?: { mode: 'metric-dim' | 'metric-view'; datasourceId?: string; metricView?: string; metrics?: string[]; dims?: string[] }
+  aloudata?: { mode: 'metric-dim' | 'metric-view'; datasourceId?: string; metricView?: string; metrics?: string[]; dims?: string[]; displayNames?: Record<string, string> }
   api?: { host: string; path: string; method: string; timeout: number; headers: string; params: string }
   file?: {
     fileName: string
@@ -146,7 +145,7 @@ interface UiState {
   editingDatasetId: string | null // 正在编辑（重新配置）的数据集 id；null=新增
   // 各配置弹窗状态
   jdbc: { visible: boolean; db: string; sql: string }
-  aloudata: { visible: boolean; mode: 'metric-dim' | 'metric-view'; datasourceId: string; metricView: string; metrics: string[]; dims: string[] }
+  aloudata: { visible: boolean; mode: 'metric-dim' | 'metric-view'; datasourceId: string; metricView: string; metrics: string[]; dims: string[]; displayNames: Record<string, string> }
   api: { visible: boolean; host: string; path: string; method: string; timeout: number; headers: string; params: string }
   file: {
     visible: boolean
@@ -365,7 +364,7 @@ const state = reactive({
     treeVisible: false,
     editingDatasetId: null as string | null,
     jdbc: { visible: false, db: '', sql: '' },
-    aloudata: { visible: false, mode: 'metric-dim', datasourceId: '', metricView: '', metrics: [], dims: [] },
+    aloudata: { visible: false, mode: 'metric-dim', datasourceId: '', metricView: '', metrics: [], dims: [], displayNames: {} },
     api: { visible: false, host: 'https://api.example.com', path: '/v1/strategies', method: 'POST', timeout: 5000, headers: '', params: '' },
     file: { visible: false, fileType: 'Excel', fileName: '', objectId: '', fileRef: undefined, columns: [], rows: [] },
     fieldMapping: { visible: false, datasetId: '' },
@@ -489,7 +488,7 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
       // 指标&维度可在不请求后端的情况下确定字段集合。先同步查询配置，避免用户
       // 在 schema 异步刷新前打开配置弹窗时仍看到旧字段。
       if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
-        const selectedSchema = buildAloudataMetricDimSchema(ds.aloudata.metrics ?? [], ds.aloudata.dims ?? [])
+        const selectedSchema = buildAloudataMetricDimSchema(ds.aloudata.metrics ?? [], ds.aloudata.dims ?? [], ds.aloudata.displayNames)
         if (selectedSchema.length) {
           ds.fields = reconcileFieldMetas(selectedSchema, ds.fields, ds.schema)
           reconcileDatasetQueryConfig(ds, selectedSchema)
@@ -514,15 +513,26 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
     // 不再调 /synced-metrics、/synced-dimensions 接口。失败不阻塞添加：
     // 保持草稿状态，保存/查看数据时仍会兜底落库并按旧路径回显。
     persistOnCreate = true
-    void (async () => {
+    const creationTask = (async () => {
       try {
         const existingDatasets = await datasetApi.list()
         await persistDatasetInputOnce(created, existingDatasets)
       } catch (e) {
-        state.backend.lastError = `数据集「${created.alias}」自动落库失败：${(e as Error)?.message || '未知错误'}；保存时将自动重试`
+        state.backend.lastError = `数据集「${created.alias}」自动落库失败：${(e as Error)?.message || '未知错误'}`
+        throw e
       }
-      void refreshDatasetSchema(id, { silent: true })
     })()
+    datasetCreationTasks.set(id, creationTask)
+    void creationTask.then(
+      () => {
+        datasetCreationTasks.delete(id)
+        // Aloudata 指标&维度的确认响应已经包含展示字段表 descriptor；其他来源仍沿用 schema 预取。
+        if (created.sourceType !== 'aloudata' || created.aloudata?.mode !== 'metric-dim') {
+          void refreshDatasetSchema(id, { silent: true })
+        }
+      },
+      () => datasetCreationTasks.delete(id),
+    )
   }
   state.ui.editingDatasetId = null
   // 配置确定后异步预取数据集 schema，自动生成「字段名称」映射；
@@ -640,14 +650,27 @@ function confirmJdbc() {
 
 /* ---- Aloudata ---- */
 function confirmAloudata() {
-  const { mode, datasourceId, metricView, metrics, dims } = state.ui.aloudata
+  const { mode, datasourceId, metricView, metrics, dims, displayNames } = state.ui.aloudata
   const label = mode === 'metric-view' ? 'Aloudata · 指标视图' : 'Aloudata · 指标&维度'
-  commitDataset({
+  const isNewDataset = !state.ui.editingDatasetId
+  const id = commitDataset({
     sourceType: 'aloudata',
     sourceLabel: label,
-    aloudata: { mode, datasourceId, metricView, metrics: [...metrics], dims: [...dims] },
+    aloudata: { mode, datasourceId, metricView, metrics: [...metrics], dims: [...dims], displayNames: { ...displayNames } },
   })
+  if (isNewDataset) {
+    const creationTask = datasetCreationTasks.get(id)
+    if (creationTask) {
+      return creationTask.catch((error) => {
+        removeDataset(id)
+        throw error
+      }).then(() => {
+        state.ui.aloudata.visible = false
+      })
+    }
+  }
   state.ui.aloudata.visible = false
+  return Promise.resolve()
 }
 
 /* ---- 接口 ---- */
@@ -738,41 +761,6 @@ function viewDisplayNameMap(detail: unknown): Record<string, string> {
   take(source?.metrics)
   take(source?.dimensions)
   return map
-}
-
-/**
- * 已同步语义层的名称 → 显示名映射（失败只影响描述列，不影响字段名）。
- * 后端 `aloudata/synced-metrics|dimensions` 按更新时间倒序返回且同步表可达数千条，
- * 单页拉取会截断早期同步的维度/指标（展示名丢失回退技术名），因此循环翻页直到覆盖全部目标名。
- */
-async function aloudataLabelMap(
-  datasourceId: string,
-  names: string[],
-  kind: 'metric' | 'dimension',
-): Promise<Record<string, string>> {
-  if (!datasourceId || !names.length) return {}
-  try {
-    const wanted = new Set(names.map((name) => String(name)))
-    const map: Record<string, string> = {}
-    const pageSize = 1000
-    for (let pageNumber = 1; pageNumber <= 10; pageNumber += 1) {
-      const res = (kind === 'metric'
-        ? await listAloudataMetrics(datasourceId, pageNumber, pageSize)
-        : await listAloudataDimensions(datasourceId, pageNumber, pageSize)) as unknown
-      const records: Record<string, unknown>[] = Array.isArray(res)
-        ? (res as Record<string, unknown>[])
-        : ((res as { records?: Record<string, unknown>[] })?.records ?? [])
-      records.forEach((row) => {
-        const name = kind === 'metric' ? row.metricName : row.dimName
-        const display = kind === 'metric' ? row.metricDisplayName : row.dimDisplayName
-        if (name && display && wanted.has(String(name)) && !map[String(name)]) map[String(name)] = String(display)
-      })
-      if (records.length < pageSize || [...wanted].every((name) => map[name])) break
-    }
-    return map
-  } catch {
-    return {}
-  }
 }
 
 /**
@@ -930,24 +918,16 @@ async function fetchDatasetSchema(ds: DatasetConfig): Promise<DatasetSchemaField
     const metrics = ds.aloudata?.metrics ?? []
     const dims = ds.aloudata?.dims ?? []
     if (!metrics.length && !dims.length) return []
-    // 已持久化数据集：descriptor 的字段标题优先取创建时冻结的展示名快照
-    // （字段表 columnAlias），旧数据集回退同步表实时值；无分页截断，优先使用
-    if (ds.backendDatasetId) {
-      try {
-        const descriptor = await datasetApi.getInputDescriptor(ds.backendDatasetId) as unknown as datasetApi.DatasetInputDescriptor
-        const labels: Record<string, string> = {}
-        ;(descriptor?.schema ?? []).forEach((column) => {
-          const title = (column.title ?? '').trim()
-          if (column.name && title) labels[String(column.name)] = title
-        })
-        if (Object.keys(labels).length) return buildAloudataMetricDimSchema(metrics, dims, labels)
-      } catch { /* descriptor 获取失败时回退分页标签 */ }
-    }
-    const [metricLabels, dimLabels] = await Promise.all([
-      aloudataLabelMap(datasourceId, metrics, 'metric'),
-      aloudataLabelMap(datasourceId, dims, 'dimension'),
-    ])
-    return buildAloudataMetricDimSchema(metrics, dims, { ...metricLabels, ...dimLabels })
+    // 展示名只从本数据集字段表（dataagent_dataset_field.columnAlias）读取。
+    // 未落库或 descriptor 查询失败时拒绝把选择器缓存/技术名伪装成字段表回显。
+    if (!ds.backendDatasetId) throw new Error('数据集尚未写入展示字段表')
+    const descriptor = await datasetApi.getInputDescriptor(ds.backendDatasetId) as unknown as datasetApi.DatasetInputDescriptor
+    const labels: Record<string, string> = {}
+    ;(descriptor?.schema ?? []).forEach((column) => {
+      const title = (column.title ?? '').trim()
+      if (column.name && title) labels[String(column.name)] = title
+    })
+    return buildAloudataMetricDimSchema(metrics, dims, labels)
   }
 
   if (ds.sourceType === 'file') {
@@ -995,13 +975,17 @@ async function refreshDatasetSchema(
 async function syncDatasetFieldLabels(id: string): Promise<void> {
   const ds = getDataset(id)
   if (!ds || !canFetchDatasetSchema(ds)) return
-  try {
-    const schema = await fetchDatasetSchema(ds)
-    if (schema.length) {
-      ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
-      ds.schema = schema
-    }
-  } catch { /* 静默兜底 */ }
+  if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
+    // 若用户在自动落库结束前打开配置，只等待确认按钮已启动的创建任务；这里不另起创建，
+    // 也不读 Aloudata 同步元数据表。
+    await datasetCreationTasks.get(ds.id)
+    if (!ds.backendDatasetId) throw new Error('数据集尚未写入展示字段表')
+  }
+  const schema = await fetchDatasetSchema(ds)
+  if (schema.length) {
+    ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
+    ds.schema = schema
+  }
 }
 
 /* ---- 字段注册表（唯一事实源） ---- */
@@ -1195,12 +1179,25 @@ function getLoadedDashboardSchema(): InsightDashboardSchema | null {
 }
 
 /** 打开「查询配置」弹窗（展示字段 / 筛选器绑定 / 排序 / 分页）。
- *  Aloudata 数据集先静默刷新字段注册表：展示名默认跟随平台中文名
- *  （metricDisplayName/dimDisplayName），旧配置里未定制的技术名默认值随之自愈。 */
+ *  Aloudata 数据集先读取其自身字段表 descriptor；打开时不查询同步元数据表。 */
 async function openQueryConfig(datasetId: string): Promise<void> {
   const ds = state.datasets.find((item) => item.id === datasetId || item.backendDatasetId === datasetId)
-  if (ds && ds.sourceType === 'aloudata') await syncDatasetFieldLabels(ds.id)
   state.ui.queryConfigDialog = { visible: true, datasetId }
+  if (!ds || ds.sourceType !== 'aloudata') return
+
+  // 弹窗先显示，字段表读取在后台完成；同一数据集的并发打开共享一次 descriptor 请求。
+  const existingTask = queryConfigLabelSyncTasks.get(ds.id)
+  if (existingTask) return existingTask
+
+  const task = Promise.resolve().then(() => syncDatasetFieldLabels(ds.id))
+  queryConfigLabelSyncTasks.set(ds.id, task)
+  try {
+    await task
+  } finally {
+    if (queryConfigLabelSyncTasks.get(ds.id) === task) {
+      queryConfigLabelSyncTasks.delete(ds.id)
+    }
+  }
 }
 function closeQueryConfig(): void {
   state.ui.queryConfigDialog.visible = false
@@ -1396,6 +1393,9 @@ export function datasetFromInput(input: DashboardDatasetInput, index = 0): Datas
       metricView: cfg.analysisViewId != null ? String(cfg.analysisViewId) : undefined,
       metrics: cfg.metrics,
       dims: cfg.dimensions,
+      displayNames: cfg.displayNames && typeof cfg.displayNames === 'object'
+        ? cfg.displayNames as Record<string, string>
+        : {},
     }
   } else if (sourceType === 'api') {
     ds.api = {
@@ -1652,6 +1652,30 @@ type BackendDatasetList = Awaited<ReturnType<typeof datasetApi.list>>
 
 /** 进行中的落库任务按 ds.id 去重：避免「添加即落库」与保存流程并发触发重复 confirmDraft（同名 400）。 */
 const datasetPersistTasks = new Map<string, Promise<void>>()
+/** 添加 Aloudata 数据集的确认任务：确认弹窗和查询配置都等待这次字段快照落库。 */
+const datasetCreationTasks = new Map<string, Promise<void>>()
+const queryConfigLabelSyncTasks = new Map<string, Promise<void>>()
+
+/** 将后端 descriptor（数据集字段表快照）同步到前端字段注册表。 */
+function applyDatasetDescriptor(ds: DatasetConfig, descriptor: datasetApi.DatasetInputDescriptor): void {
+  const columns = descriptor?.schema ?? []
+  const labels = new Map(columns.map((column) => [column.name, column.title?.trim() ?? '']))
+  if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
+    const selectedNames = [...(ds.aloudata.dims ?? []), ...(ds.aloudata.metrics ?? [])]
+    const missing = selectedNames.filter((name) => !labels.has(name) || !labels.get(name))
+    if (missing.length) {
+      throw new Error(`展示字段表未包含已选字段或展示名：${missing.join('、')}`)
+    }
+    const schema = buildAloudataMetricDimSchema(
+      ds.aloudata.metrics ?? [],
+      ds.aloudata.dims ?? [],
+      Object.fromEntries(labels),
+    )
+    ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
+    ds.schema = schema
+    reconcileDatasetQueryConfig(ds, schema)
+  }
+}
 
 /**
  * 落库单个数据集草稿：按名称和来源配置复用已有后端数据集，否则 confirmDraft 创建。
@@ -1679,6 +1703,10 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
   })
   if (existing) {
     ds.backendDatasetId = String(existing.id)
+    if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
+      const descriptor = await datasetApi.getInputDescriptor(ds.backendDatasetId) as unknown as datasetApi.DatasetInputDescriptor
+      applyDatasetDescriptor(ds, descriptor)
+    }
     return
   }
 
@@ -1688,6 +1716,9 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
     description: `仪表盘组件输入数据集：${ds.alias}`,
   })
   ds.backendDatasetId = String(result.datasetId)
+  if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
+    applyDatasetDescriptor(ds, result.descriptor)
+  }
 }
 
 /** 带并发去重的落库入口：同一数据集的重复触发共享同一个任务。 */
@@ -1744,7 +1775,11 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
       state.backend.componentId,
       {},
       JSON.stringify(executableSchema),
-      createComponentPreviewQueryContext(state.backend.dashboardId, state.backend.componentId),
+      createComponentPreviewQueryContext(
+        state.backend.dashboardId,
+        state.backend.componentId,
+        buildPipeline().datasetInputs,
+      ),
     )
     state.backend.executionId = executionId
     // 轮询到终态（约 60s），然后走统一 envelope 解析 —— 预览与正式预览共用同一解析规则
@@ -1845,7 +1880,7 @@ export function draftRequestForDataset(ds: DatasetConfig): datasetApi.DatasetCom
     case 'aloudata':
       return ds.aloudata?.mode === 'metric-view'
         ? { sourceType: 'ALOUDATA_ANALYSIS_VIEW', datasourceId: ds.aloudata.datasourceId, sourceConfig: { analysisViewId: ds.aloudata.metricView }, filters: sourceFilters }
-        : { sourceType: 'ALOUDATA_METRICS', datasourceId: ds.aloudata.datasourceId, sourceConfig: { metrics: ds.aloudata.metrics, dimensions: ds.aloudata.dims }, filters: sourceFilters }
+        : { sourceType: 'ALOUDATA_METRICS', datasourceId: ds.aloudata.datasourceId, sourceConfig: { metrics: ds.aloudata.metrics, dimensions: ds.aloudata.dims, displayNames: ds.aloudata.displayNames }, filters: sourceFilters }
     case 'file':
       return ds.file?.objectId
         ? { sourceType: 'FILE', sourceConfig: fileSourceConfig(ds.file), filters: sourceFilters }

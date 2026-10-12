@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据集来源的类型化定义。连接凭据仍保存在数据源连接上，定义只保存可复用的数据集引用。
@@ -57,11 +58,17 @@ public sealed interface DatasetSourceDefinition
         @Override public String sourceType() { return "ALOUDATA_ANALYSIS_VIEW"; }
     }
 
-    record AloudataMetricsDefinition(Long datasourceId, List<String> metrics, List<String> dimensions) implements DatasetSourceDefinition {
+    record AloudataMetricsDefinition(Long datasourceId, List<String> metrics, List<String> dimensions,
+                                     Map<String, String> displayNames) implements DatasetSourceDefinition {
+        public AloudataMetricsDefinition(Long datasourceId, List<String> metrics, List<String> dimensions) {
+            this(datasourceId, metrics, dimensions, Map.of());
+        }
+
         public AloudataMetricsDefinition {
             requireDatasource(datasourceId);
             metrics = metrics == null ? List.of() : List.copyOf(metrics);
             dimensions = dimensions == null ? List.of() : List.copyOf(dimensions);
+            displayNames = displayNames == null ? Map.of() : Map.copyOf(displayNames);
             if (metrics.isEmpty() && dimensions.isEmpty()) {
                 throw new IllegalArgumentException("Aloudata metrics or dimensions are required");
             }

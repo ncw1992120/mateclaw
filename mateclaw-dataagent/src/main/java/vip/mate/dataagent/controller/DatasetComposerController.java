@@ -319,7 +319,8 @@ public class DatasetComposerController {
             // 产品入口不会直接创建“未选表”的 JDBC_TABLE；已有表数据集走 datasetId 选择。
             case "JDBC_TABLE" -> throw new IllegalArgumentException("JDBC table source requires an existing dataset or tableIds");
             case "ALOUDATA_ANALYSIS_VIEW" -> new DatasetSourceDefinition.AloudataViewDefinition(longId(request.datasourceId), String.valueOf(config.getOrDefault("analysisViewId", "")));
-            case "ALOUDATA_METRICS" -> new DatasetSourceDefinition.AloudataMetricsDefinition(longId(request.datasourceId), strings(config.get("metrics")), strings(config.get("dimensions")));
+            case "ALOUDATA_METRICS" -> new DatasetSourceDefinition.AloudataMetricsDefinition(
+                    longId(request.datasourceId), strings(config.get("metrics")), strings(config.get("dimensions")), stringMap(config.get("displayNames")));
             case "HTTP_API" -> new DatasetSourceDefinition.HttpApiDefinition(longId(request.datasourceId), String.valueOf(config.getOrDefault("apiDefinitionId", "")));
             case "FILE" -> new DatasetSourceDefinition.FileDefinition(String.valueOf(config.getOrDefault("objectId", "")), String.valueOf(config.getOrDefault("format", "CSV")), 1);
             default -> throw new IllegalArgumentException("unsupported dataset source type: " + request.sourceType);
@@ -349,6 +350,7 @@ public class DatasetComposerController {
 
     private long longId(String value) { try { return Long.parseLong(value); } catch (Exception e) { throw new IllegalArgumentException("datasourceId is required"); } }
     private List<String> strings(Object value) { return value == null ? List.of() : mapper.convertValue(value, new TypeReference<>() {}); }
+    private Map<String, String> stringMap(Object value) { return value == null ? Map.of() : mapper.convertValue(value, new TypeReference<>() {}); }
     private Map<String, Object> parseObject(Object value) { if (value == null) return new LinkedHashMap<>(); if (value instanceof Map<?, ?> map) return mapper.convertValue(map, new TypeReference<>() {}); try { return mapper.readValue(String.valueOf(value), new TypeReference<>() {}); } catch (Exception e) { return new LinkedHashMap<>(); } }
     private Map<String, String> parseStringMap(Object value) { Map<String, Object> raw = parseObject(value); Map<String, String> result = new LinkedHashMap<>(); raw.forEach((k, v) -> result.put(k, String.valueOf(v))); return result; }
 
