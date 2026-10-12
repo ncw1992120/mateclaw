@@ -271,26 +271,23 @@
           </div>
         </div>
         <template v-if="!component || resultTab === 'raw'">
-        <div ref="scrollRef" class="dd-result-body" @scroll="onScroll">
-          <el-table
-            v-if="columns.length"
-            :data="rows"
-            :default-sort="sortState ? { prop: sortState.field, order: sortState.direction === 'asc' ? 'ascending' : 'descending' } : undefined"
-            border
-            size="small"
-            @sort-change="onSortChange"
-          >
-            <el-table-column
-              v-for="column in columns"
-              :key="column"
-              :prop="column"
-              :label="fieldTitle(column)"
-              min-width="120"
-              show-overflow-tooltip
-              :sortable="isFieldSortable(column) ? 'custom' : false"
-              :sort-orders="['ascending', 'descending', null]"
-            />
-          </el-table>
+        <div ref="scrollRef" class="dd-result-body">
+          <el-auto-resizer v-if="columns.length">
+            <template #default="{ width, height }">
+              <el-table-v2
+                :data="rawTableRows"
+                :columns="rawTableColumns"
+                :width="width"
+                :height="height"
+                row-key="__ddRowKey"
+                :row-height="38"
+                :header-height="40"
+                :sort-by="virtualSortBy"
+                @column-sort="onVirtualSort"
+                @end-reached="onVirtualEndReached"
+              />
+            </template>
+          </el-auto-resizer>
           <el-empty v-else-if="loading" description="查询中…" />
           <el-empty v-else :description="error || '点「查询」获取数据'" />
         </div>
@@ -334,7 +331,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { ElAutoResizer, ElTableV2 } from 'element-plus'
+import { computed, nextTick, reactive, ref, shallowRef, watch } from 'vue'
 import type { InsightComponent, InsightComponentData, TimeGranularity } from '@/types'
 import { useInsight } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
@@ -383,14 +381,31 @@ const error = ref('')
 const componentValidationError = ref('')
 /** 结果区页签：原始数据 / 组件渲染 */
 const resultTab = ref<'raw' | 'render'>('raw')
+const componentRenderData = shallowRef<InsightComponentData>()
 const elapsed = ref('')
 const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
+const rawTableRows = computed(() => rows.value.map((row, index) => ({ ...row, __ddRowKey: index })))
+/** 虚拟化行并固定列宽，避免宽表渲染所有行且横向内容被压缩。 */
+const rawTableColumns = computed(() => columns.value.map((field) => ({
+  key: field,
+  dataKey: field,
+  title: fieldTitle(field),
+  width: 160,
+  flexShrink: 0,
+  sortable: isFieldSortable(field),
+})))
+const virtualSortBy = computed(() => ({
+  key: sortState.value?.field ?? '',
+  // TableV2 首次点击切换为 sortBy.order 的相反方向，默认 desc 可保持首击升序。
+  order: sortState.value?.direction ?? 'desc',
+}))
 const hasMore = ref(false)
 const totalCount = ref<number | null>(null)
 const scrollRef = ref<HTMLElement | null>(null)
 /** 表头三态排序（升序 → 降序 → 取消）；变化时页码回 1 */
 const sortState = ref<QuerySortSpec | null>(null)
+const virtualSortWasClicked = ref(false)
 const currentPage = ref(1)
 const currentPageSize = ref(DEFAULT_BATCH_SIZE)
 const pageDraft = ref('1')
@@ -718,14 +733,11 @@ const cacheStale = computed(() => {
   return queriedAt.value > 0 && queriedSignature.value !== currentSignature.value
 })
 const hasCurrentResult = computed(() => queriedAt.value > 0 && !cacheStale.value && !loading.value && !error.value)
-const componentRenderData = computed(() => props.component && columns.value.length
-  ? componentPreviewData(props.component, rows.value, componentPreviewColumns.value)
-  : undefined)
 /** 「组件渲染」页签可用条件：有组件、结果新鲜且通过组件校验 */
 const canRenderComponent = computed(() => Boolean(props.component)
   && hasCurrentResult.value
   && !componentValidationError.value
-  && !!componentRenderData.value)
+  && columns.value.length > 0)
 
 const resultHint = computed(() => {
   if (loading.value) return '查询中…'
@@ -744,6 +756,7 @@ async function fetchRows(reset: boolean): Promise<void> {
   if (reset) {
     componentValidationError.value = ''
     resultTab.value = 'raw'
+    componentRenderData.value = undefined
   }
   const started = Date.now()
   try {
@@ -880,7 +893,8 @@ async function fetchRows(reset: boolean): Promise<void> {
 
 /** 将最近一次有效查询结果显式应用到画布，并在「组件渲染」页签展示同一份组件数据。 */
 function renderComponent(): void {
-  if (!props.component || !hasCurrentResult.value || componentValidationError.value || !componentRenderData.value) return
+  if (!props.component || !hasCurrentResult.value || componentValidationError.value || !columns.value.length) return
+  componentRenderData.value ??= componentPreviewData(props.component, rows.value, componentPreviewColumns.value)
   emit('render', componentRenderData.value)
 }
 
@@ -902,6 +916,19 @@ function onSortChange({ prop, order }: { prop: string; order: 'ascending' | 'des
     pageDraft.value = '1'
     void fetchRows(true)
   }
+}
+
+/** 虚拟表格排序仍走原服务端排序链路，并保留升序 → 降序 → 取消的三态行为。 */
+function onVirtualSort({ key, order }: { key: string; order: 'asc' | 'desc' }): void {
+  const isClearing = virtualSortWasClicked.value
+    && sortState.value?.field === key
+    && sortState.value.direction === 'desc'
+    && order === 'asc'
+  virtualSortWasClicked.value = !isClearing
+  onSortChange({
+    prop: key,
+    order: isClearing ? null : order === 'asc' ? 'ascending' : 'descending',
+  })
 }
 
 function elOrderToSortState(prop: string, order: 'ascending' | 'descending'): QuerySortSpec {
@@ -946,10 +973,8 @@ function onPageSizeChange(event: Event): void {
   void fetchRows(true)
 }
 
-/** 滚动到底部按 offset 拉下一页 */
-function onScroll(event: Event): void {
-  const el = event.target as HTMLElement
-  if (el.scrollHeight - el.scrollTop - el.clientHeight > 24) return
+/** 非分页模式下，虚拟表格滚动到底时按批次继续追加数据。 */
+function onVirtualEndReached(): void {
   if (paginationEnabled.value || !hasMore.value || loading.value) return
   void fetchRows(false)
 }
@@ -965,6 +990,7 @@ async function open(): Promise<void> {
   queryFilterRows.value = createQueryFilterRows()
   timeGranularity.value = initialTimeGranularity.value
   sortState.value = sortPolicy.value?.enabled ? sortPolicy.value.defaultSort ?? null : null
+  virtualSortWasClicked.value = false
   currentPage.value = 1
   pageDraft.value = '1'
   queryLimit.value = DEFAULT_QUERY_LIMIT

@@ -33,6 +33,7 @@ vi.mock('@/api/dataset', async (importOriginal) => {
 })
 
 import DatasetDataDialog from '../DatasetDataDialog.vue'
+import * as componentPreviewUtils from '@/utils/component-preview-data'
 import { clearAllCachedQueries, getCachedQuery, setCachedQuery } from '../dataset-data-cache'
 import { useInsight } from '../card-attribute/useInsight'
 import type { DatasetConfig } from '../card-attribute/useInsight'
@@ -83,14 +84,13 @@ const stubs = {
       '<input type="checkbox" :checked="modelValue" v-bind="$attrs" @change="$emit(\'update:modelValue\', $event.target.checked); $emit(\'change\', $event.target.checked)" />',
   },
   'el-button': { template: '<button type="button" :disabled="$attrs.disabled" v-bind="$attrs"><slot /></button>' },
-  'el-table': {
-    props: ['data'],
-    emits: ['sort-change'],
-    template: '<div class="stub-table"><button data-testid="sort-amount-desc" @click="$emit(\'sort-change\', { prop: \'amount\', order: \'descending\' })">模拟排序</button><slot /></div>',
+  'el-auto-resizer': {
+    template: '<div class="stub-auto-resizer"><slot :width="960" :height="300" /></div>',
   },
-  'el-table-column': {
-    props: ['prop', 'label', 'sortable'],
-    template: '<div class="stub-table-column" :data-prop="prop" :data-label="label" :data-sortable="String(sortable)" />',
+  'el-table-v2': {
+    props: ['data', 'columns', 'width', 'height', 'sortBy', 'rowKey'],
+    emits: ['column-sort', 'end-reached'],
+    template: '<div class="stub-table" :data-row-key="rowKey"><button data-testid="sort-amount" @click="$emit(\'column-sort\', { key: \'amount\', order: sortBy.order === \'asc\' ? \'desc\' : \'asc\' })">模拟排序</button><button data-testid="end-reached" @click="$emit(\'end-reached\')">滚动到底</button><div v-for="column in columns" :key="column.key" class="stub-table-column" :data-prop="column.dataKey" :data-label="column.title" :data-sortable="String(column.sortable)" :data-flex-shrink="String(column.flexShrink)" /><div v-for="row in data" :key="row[rowKey]" class="stub-table-row" :data-row-id="row[rowKey]" /></div>',
   },
   'el-empty': { props: ['description'], template: '<div class="stub-empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
@@ -194,6 +194,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
 
   it('查询后等待手动点击组件渲染，再更新画布并展示组件预览', async () => {
     const component = { id: 'table-1', type: 'table', title: '订单明细' }
+    const buildPreviewData = vi.spyOn(componentPreviewUtils, 'componentPreviewData')
     const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }), component)
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
@@ -201,8 +202,10 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     expect(wrapper.emitted('render')).toBeUndefined()
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeUndefined()
+    expect(buildPreviewData).not.toHaveBeenCalled()
     await wrapper.get('[data-testid="component-render"]').trigger('click')
 
+    expect(buildPreviewData).toHaveBeenCalledTimes(1)
     expect(wrapper.emitted('render')).toHaveLength(1)
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-1',
@@ -595,7 +598,10 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(columns.map((column) => column.attributes('data-prop'))).toEqual(['cust_type', 'amount'])
     expect(columns[0].attributes('data-label')).toBe('客户类型')
     expect(columns[1].attributes('data-label')).toBe('金额')
-    expect(columns[1].attributes('data-sortable')).toBe('custom')
+    expect(columns[1].attributes('data-sortable')).toBe('true')
+    expect(columns[1].attributes('data-flex-shrink')).toBe('0')
+    expect(wrapper.get('.stub-table').attributes('data-row-key')).toBe('__ddRowKey')
+    expect(wrapper.get('.stub-table-row').attributes('data-row-id')).toBe('0')
     wrapper.unmount()
   })
 
@@ -685,10 +691,17 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect((previewInput.mock.calls.at(-1)?.[0] as { offset?: number }).offset).toBe(0)
     expect((previewInput.mock.calls.at(-1)?.[0] as { requestTotalCount?: boolean }).requestTotalCount).toBe(true)
 
-    await wrapper.find('[data-testid="sort-amount-desc"]').trigger('click')
+    await wrapper.find('[data-testid="sort-amount"]').trigger('click')
+    await flushPromises()
+    expect((previewInput.mock.calls.at(-1)?.[0] as { orders?: unknown[] }).orders).toEqual([{ field: 'amount', direction: 'asc' }])
+    expect((previewInput.mock.calls.at(-1)?.[0] as { offset?: number }).offset).toBe(0)
+
+    await wrapper.find('[data-testid="sort-amount"]').trigger('click')
     await flushPromises()
     expect((previewInput.mock.calls.at(-1)?.[0] as { orders?: unknown[] }).orders).toEqual([{ field: 'amount', direction: 'desc' }])
-    expect((previewInput.mock.calls.at(-1)?.[0] as { offset?: number }).offset).toBe(0)
+    await wrapper.find('[data-testid="sort-amount"]').trigger('click')
+    await flushPromises()
+    expect((previewInput.mock.calls.at(-1)?.[0] as { orders?: unknown[] }).orders).toEqual([])
 
     await wrapper.find('[data-testid="page-next"]').trigger('click')
     await flushPromises()
@@ -703,6 +716,23 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(reopened.find('[data-testid="pagination-status"]').text()).toContain('第 2 页')
     expect(reopened.find('.dd-result .dd-hint').text()).not.toContain('条件已变更')
     reopened.unmount()
+  })
+
+  it('配置了默认降序时首次点击应切换为升序，而不是清除排序', async () => {
+    const dataset = metricViewDataset({ backendDatasetId: '123' })
+    dataset.queryConfig = {
+      ...queryConfig([]),
+      sortPolicy: { enabled: true, mode: 'single', allowedFields: ['amount'], defaultSort: { field: 'amount', direction: 'desc' } },
+      paginationPolicy: { enabled: true, defaultPageSize: 2, maxPageSize: 5, returnTotalCount: true },
+    }
+    const wrapper = await openWith(dataset)
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    await wrapper.find('[data-testid="sort-amount"]').trigger('click')
+    await flushPromises()
+    expect((previewInput.mock.calls.at(-1)?.[0] as { orders?: unknown[] }).orders).toEqual([{ field: 'amount', direction: 'asc' }])
+    wrapper.unmount()
   })
 
   it('查询配置筛选器绑定是唯一条件来源，操作符只读且默认启用', async () => {
@@ -949,13 +979,7 @@ describe('查看数据弹窗 · 限制条数', () => {
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), { timeout: 0 })
 
-    const resultBody = wrapper.get('.dd-result-body').element
-    Object.defineProperties(resultBody, {
-      scrollHeight: { configurable: true, value: 200 },
-      clientHeight: { configurable: true, value: 100 },
-      scrollTop: { configurable: true, value: 100 },
-    })
-    resultBody.dispatchEvent(new Event('scroll'))
+    await wrapper.get('[data-testid="end-reached"]').trigger('click')
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 30, offset: 50 }), { timeout: 0 })
     expect(wrapper.get('.dd-result-actions').text()).not.toContain('可滚动加载更多')
