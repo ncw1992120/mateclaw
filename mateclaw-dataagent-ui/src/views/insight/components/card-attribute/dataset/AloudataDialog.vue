@@ -78,7 +78,7 @@
                       </template>
                     </AloudataFieldDirectory>
                     <div v-if="!dimensionsLoading && !dimensionPickerTree.length" class="directory-empty">
-                      {{ hideUnavailable && dimensionPage.records.length ? '已隐藏不可分析的维度' : '没有匹配的维度' }}
+                      {{ dimensionLoadError || (hideUnavailable && dimensionPage.records.length ? '已隐藏不可分析的维度' : '没有匹配的维度') }}
                     </div>
                     <el-pagination
                       v-if="dimensionKeyword && dimensionPage.total > pageSize"
@@ -152,7 +152,7 @@
                     </template>
                   </AloudataFieldDirectory>
                   <div v-if="!metricsLoading && !metricPickerTree.length" class="directory-empty">
-                    {{ hideUnavailable && metricPage.records.length ? '已隐藏不可分析的指标' : '没有匹配的指标' }}
+                    {{ metricLoadError || (hideUnavailable && metricPage.records.length ? '已隐藏不可分析的指标' : '没有匹配的指标') }}
                   </div>
                   <el-pagination
                     v-if="metricKeyword && metricPage.total > pageSize"
@@ -299,6 +299,8 @@ const metricKeyword = ref('')
 const dimensionKeyword = ref('')
 const metricsLoading = ref(false)
 const dimensionsLoading = ref(false)
+const metricLoadError = ref('')
+const dimensionLoadError = ref('')
 const hideUnavailable = ref(false)
 const metricCategories = ref<AloudataCategoryTreeNode[]>([])
 const dimensionCategories = ref<AloudataCategoryTreeNode[]>([])
@@ -385,6 +387,8 @@ watch(
 )
 
 function open() {
+  metricRequestSequence += 1
+  dimensionRequestSequence += 1
   datasourceId.value = ui.aloudata.datasourceId
   metricPickerVisible.value = false
   dimensionPickerVisible.value = false
@@ -395,6 +399,8 @@ function open() {
   metricPage.total = 0
   dimensionPage.records = []
   dimensionPage.total = 0
+  metricLoadError.value = ''
+  dimensionLoadError.value = ''
   metricCategories.value = []
   dimensionCategories.value = []
   Object.keys(metricCategoryFields).forEach((key) => delete metricCategoryFields[key])
@@ -809,41 +815,57 @@ async function loadMoreDimensionCategory(category: DirectoryCategory) {
 
 async function loadMetrics(page: number) {
   if (!datasourceId.value) return
+  const requestId = ++metricRequestSequence
+  const keyword = metricKeyword.value.trim()
   metricsLoading.value = true
+  metricLoadError.value = ''
+  metricPage.records = []
+  metricPage.total = 0
   try {
     const data = await pageAloudataMetrics(datasourceId.value, {
       pageNumber: page,
       pageSize,
-      keyword: metricKeyword.value.trim() || undefined,
+      keyword: keyword || undefined,
     })
+    if (requestId !== metricRequestSequence || keyword !== metricKeyword.value.trim()) return
     Object.assign(metricPage, data)
     data.records.forEach((item) => { metricLabelMap[item.metricName] = item.metricDisplayName || item.metricName })
   } catch {
+    if (requestId !== metricRequestSequence || keyword !== metricKeyword.value.trim()) return
     metricPage.records = []
     metricPage.total = 0
+    metricLoadError.value = '加载失败，请重试'
     ElMessage.error('加载 Aloudata 指标失败')
   } finally {
-    metricsLoading.value = false
+    if (requestId === metricRequestSequence) metricsLoading.value = false
   }
 }
 
 async function loadDimensions(page: number) {
   if (!datasourceId.value) return
+  const requestId = ++dimensionRequestSequence
+  const keyword = dimensionKeyword.value.trim()
   dimensionsLoading.value = true
+  dimensionLoadError.value = ''
+  dimensionPage.records = []
+  dimensionPage.total = 0
   try {
     const data = await pageAloudataDimensions(datasourceId.value, {
       pageNumber: page,
       pageSize,
-      keyword: dimensionKeyword.value.trim() || undefined,
+      keyword: keyword || undefined,
     })
+    if (requestId !== dimensionRequestSequence || keyword !== dimensionKeyword.value.trim()) return
     Object.assign(dimensionPage, data)
     data.records.forEach((item) => { dimLabelMap[item.dimName] = item.dimDisplayName || item.dimName })
   } catch {
+    if (requestId !== dimensionRequestSequence || keyword !== dimensionKeyword.value.trim()) return
     dimensionPage.records = []
     dimensionPage.total = 0
+    dimensionLoadError.value = '加载失败，请重试'
     ElMessage.error('加载 Aloudata 维度失败')
   } finally {
-    dimensionsLoading.value = false
+    if (requestId === dimensionRequestSequence) dimensionsLoading.value = false
   }
 }
 
@@ -859,13 +881,25 @@ function toggleSelection(type: 'metrics' | 'dimensions', name: string, checked: 
 
 let metricKeywordTimer: ReturnType<typeof setTimeout> | undefined
 let dimensionKeywordTimer: ReturnType<typeof setTimeout> | undefined
+let metricRequestSequence = 0
+let dimensionRequestSequence = 0
 function onMetricKeywordInput() {
+  metricRequestSequence += 1
+  metricPage.records = []
+  metricPage.total = 0
+  metricLoadError.value = ''
+  metricsLoading.value = true
   if (metricKeywordTimer) clearTimeout(metricKeywordTimer)
   metricKeywordTimer = setTimeout(() => {
     loadMetrics(1)
   }, 300)
 }
 function onDimensionKeywordInput() {
+  dimensionRequestSequence += 1
+  dimensionPage.records = []
+  dimensionPage.total = 0
+  dimensionLoadError.value = ''
+  dimensionsLoading.value = true
   if (dimensionKeywordTimer) clearTimeout(dimensionKeywordTimer)
   dimensionKeywordTimer = setTimeout(() => {
     loadDimensions(1)

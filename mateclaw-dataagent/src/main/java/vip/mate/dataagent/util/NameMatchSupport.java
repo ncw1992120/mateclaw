@@ -61,6 +61,26 @@ public final class NameMatchSupport {
     }
 
     /**
+     * 去除首尾空白，覆盖半角空格、全角空格（U+3000）、不间断空格（U+00A0）、
+     * 零宽字符（U+FEFF）以及制表/换行等 Unicode 空白。
+     * <p>
+     * 背景：Aloudata 平台的指标/维度展示名与用户搜索词都可能携带首尾空格
+     * （平台侧复制粘贴、中文输入法全角空格等），平台 keyword 检索在「输入与名称
+     * 等长精确比对」时空格会导致失配——表现为完整名搜不到、删掉末字符反而命中。
+     * 搜索转发、同步落库前统一调用本方法收口。
+     *
+     * @param text 原始文本，可为 null
+     * @return 去除首尾空白后的文本；null 输入返回 null
+     */
+    public static String trimSpaces(String text) {
+        if (text == null || text.isEmpty()) {
+            return text;
+        }
+        String normalized = text.replace('\u00A0', ' ').replace('\uFEFF', ' ');
+        return normalized.strip();
+    }
+
+    /**
      * 标点不敏感 LIKE 模式。
      * <p>
      * 将文本拆分为连续「字母/数字/汉字」段，段间用 LIKE 通配符 {@code %} 连接：

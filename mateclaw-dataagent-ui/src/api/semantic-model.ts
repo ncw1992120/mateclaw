@@ -125,6 +125,7 @@ export function pageAloudataMetrics(
 ) {
   return api.get<AloudataMetricPage>(`/v1/datasources/${datasourceId}/aloudata/metrics/page`, {
     params,
+    timeout: 0,
   })
 }
 
@@ -140,6 +141,7 @@ export function pageAloudataDimensions(
 ) {
   return api.get<AloudataDimensionPage>(`/v1/datasources/${datasourceId}/aloudata/dimensions/page`, {
     params,
+    timeout: 0,
   })
 }
 
@@ -161,6 +163,7 @@ export function getAloudataDimensionDetail(datasourceId: string, dimName: string
 export function listAloudataCategoryCounts(datasourceId: string, categoryType: string) {
   return api.get<AloudataCategoryCount[]>(`/v1/datasources/${datasourceId}/aloudata/categories/counts`, {
     params: { categoryType },
+    timeout: 0,
   })
 }
 

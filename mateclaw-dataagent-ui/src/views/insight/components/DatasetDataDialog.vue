@@ -775,8 +775,10 @@ async function fetchRows(reset: boolean): Promise<void> {
       : []
     // 已落库数据集优先复用统一读取接口：仪表盘 Schema 只保存 datasetId，
     // 数据定义在查看数据弹窗中只读；已落库数据集统一走输入读取接口。
+    const isAloudataMetricDimension = props.dataset.sourceType === 'aloudata'
+      && props.dataset.aloudata?.mode === 'metric-dim'
     let savedDefinitionUnchanged = false
-    if (isPersistedBackendDatasetId(props.dataset.backendDatasetId)) {
+    if (!isAloudataMetricDimension && isPersistedBackendDatasetId(props.dataset.backendDatasetId)) {
       const backendDatasetId = props.dataset.backendDatasetId
       let available = persistedDatasetAvailability.get(backendDatasetId)
       if (available === undefined) {

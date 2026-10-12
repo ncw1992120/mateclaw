@@ -45,7 +45,12 @@ public class AloudataApiClient {
 
     private final AloudataEndpointService endpointService;
     private final RestTemplate restTemplate;
+    private final RestTemplate pickerRestTemplate;
     private final CircuitBreaker circuitBreaker;
+
+    private static final Set<String> UNBOUNDED_PICKER_ENDPOINTS = Set.of(
+            "category_list", "metric_tree", "metric_list", "dimension_list",
+            "metric_dimensions", "metric_all_dimensions", "metric_batch_detail", "dimension_detail");
 
     /**
      * 构造客户端：按保护配置初始化 HTTP 超时，并从 Resilience4j 注册表获取
@@ -64,6 +69,7 @@ public class AloudataApiClient {
         factory.setConnectTimeout(protectionProperties.getAloudata().getConnectTimeoutMs());
         factory.setReadTimeout(protectionProperties.getAloudata().getReadTimeoutMs());
         this.restTemplate = new RestTemplate(factory);
+        this.pickerRestTemplate = createUnboundedPickerRestTemplate();
         this.circuitBreaker = circuitBreakerRegistry
                 .circuitBreaker(DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA);
     }
@@ -72,7 +78,15 @@ public class AloudataApiClient {
     public AloudataApiClient(AloudataEndpointService endpointService) {
         this.endpointService = endpointService;
         this.restTemplate = new RestTemplate();
+        this.pickerRestTemplate = createUnboundedPickerRestTemplate();
         this.circuitBreaker = CircuitBreaker.ofDefaults(DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA);
+    }
+
+    private RestTemplate createUnboundedPickerRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(0);
+        factory.setReadTimeout(0);
+        return new RestTemplate(factory);
     }
 
     /**
@@ -315,6 +329,13 @@ public class AloudataApiClient {
         return restTemplate.exchange(url, method, entity, Map.class);
     }
 
+    private ResponseEntity<Map> exchange(String endpointName, String url, HttpMethod method, HttpEntity<?> entity) {
+        if (UNBOUNDED_PICKER_ENDPOINTS.contains(endpointName)) {
+            return pickerRestTemplate.exchange(url, method, entity, Map.class);
+        }
+        return exchange(url, method, entity);
+    }
+
     /**
      * 带熔断保护的 HTTP 执行
      * <p>
@@ -337,7 +358,7 @@ public class AloudataApiClient {
         long startMs = System.currentTimeMillis();
         try {
             ResponseEntity<Map> response = circuitBreaker.executeSupplier(
-                    () -> exchange(url, method, entity));
+                    () -> exchange(endpointName, url, method, entity));
             log.info("[Aloudata] API 调用成功: endpoint={}, method={}, status={}, costMs={}",
                     endpointName, method, response.getStatusCode().value(),
                     System.currentTimeMillis() - startMs);

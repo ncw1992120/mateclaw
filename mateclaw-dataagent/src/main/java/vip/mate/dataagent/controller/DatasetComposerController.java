@@ -93,8 +93,15 @@ public class DatasetComposerController {
     private Map<String, Object> previewAloudataMetrics(DraftRequest request) {
         Map<String, Object> config = request.sourceConfig == null ? Map.of() : request.sourceConfig;
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
-        List<String> metrics = strings(config.get("metrics"));
+        List<String> metrics = requestedFields(strings(config.get("metrics")), request.columns);
         List<String> dimensions = requestedFields(strings(config.get("dimensions")), request.columns);
+        if (request.columns != null && request.columns.isEmpty()) {
+            Map<String, Object> empty = new LinkedHashMap<>();
+            empty.put("rows", List.of()); empty.put("schema", List.of()); empty.put("rowCount", 0);
+            empty.put("hasNext", false); empty.put("last", true);
+            empty.put("executionId", "draft-" + UUID.randomUUID());
+            return empty;
+        }
         query.setMetrics(metrics); query.setDimensions(dimensions);
         // filters 必须是 Aloudata 表达式字符串（如 ["[region] = \"华东\""]）；统一由
         // AloudataFilterExpressions 生成 —— 历史的 `[f] EQ ("v")` 与结构化对象在真实服务都会失败。
@@ -216,7 +223,7 @@ public class DatasetComposerController {
     }
 
     private List<String> requestedFields(List<String> configuredFields, List<String> requestedColumns) {
-        if (requestedColumns == null || requestedColumns.isEmpty()) return configuredFields;
+        if (requestedColumns == null) return configuredFields;
         Set<String> requested = new HashSet<>(requestedColumns);
         return configuredFields.stream().filter(requested::contains).toList();
     }

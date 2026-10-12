@@ -517,6 +517,77 @@ describe('Aloudata 指标&维度选择', () => {
     expect(pageAloudataMetrics).toHaveBeenLastCalledWith('aloudata-1', expect.objectContaining({ keyword: 'technical_rate' }))
   })
 
+  it('ignores an older slow search response after the latest full-name search has completed', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.metric-selection-box').trigger('click')
+    await flushPromises()
+
+    let resolveOld!: (value: any) => void
+    let resolveLatest!: (value: any) => void
+    pageAloudataMetrics.mockImplementation((_datasourceId: string, params?: { keyword?: string }) => {
+      if (params?.keyword === '完整指标名称') return new Promise((resolve) => { resolveOld = resolve })
+      if (params?.keyword === '指标名称') return new Promise((resolve) => { resolveLatest = resolve })
+      return Promise.resolve({ records: [], total: 0, current: 1, size: 20, pages: 0 })
+    })
+
+    const search = wrapper.find('.metric-picker-popup input')
+    await search.setValue('完整指标名称')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await search.setValue('指标名称')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    resolveLatest({ records: [{
+      metricName: 'latest_metric', metricDisplayName: '指标名称',
+      metricCategoryId: 'metric-child', metricCategoryName: '转化指标',
+    }], total: 1, current: 1, size: 20, pages: 1 })
+    await flushPromises()
+    resolveOld({ records: [{ metricName: 'stale_metric', metricDisplayName: '完整指标名称' }], total: 1, current: 1, size: 20, pages: 1 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-field-code="latest_metric"]').exists()).toBe(true)
+    expect(wrapper.find('[data-field-code="stale_metric"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('does not display a stale dimension search response after the keyword changes', async () => {
+    const wrapper = mount(AloudataDialog, { global: { stubs } })
+    state.ui.aloudata.visible = true
+    await flushPromises()
+    await wrapper.find('.dimension-selection-box').trigger('click')
+    await flushPromises()
+
+    let resolveOld!: (value: any) => void
+    let resolveLatest!: (value: any) => void
+    pageAloudataDimensions.mockImplementation((_datasourceId: string, params?: { keyword?: string }) => {
+      if (params?.keyword === '完整维度名称') return new Promise((resolve) => { resolveOld = resolve })
+      if (params?.keyword === '维度名称') return new Promise((resolve) => { resolveLatest = resolve })
+      return Promise.resolve({ records: [], total: 0, current: 1, size: 20, pages: 0 })
+    })
+
+    const search = wrapper.find('.dimension-picker-popup input')
+    await search.setValue('完整维度名称')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await search.setValue('维度名称')
+    await new Promise((resolve) => setTimeout(resolve, 350))
+
+    resolveLatest({ records: [{
+      dimName: 'latest_dimension', dimDisplayName: '维度名称',
+      categoryId: 'dim-child', categoryName: '客户维度',
+    }], total: 1, current: 1, size: 20, pages: 1 })
+    await flushPromises()
+    resolveOld({ records: [{
+      dimName: 'stale_dimension', dimDisplayName: '完整维度名称',
+      categoryId: 'dim-child', categoryName: '客户维度',
+    }], total: 1, current: 1, size: 20, pages: 1 })
+    await flushPromises()
+
+    expect(wrapper.find('[data-field-code="latest_dimension"]').exists()).toBe(true)
+    expect(wrapper.find('[data-field-code="stale_dimension"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
   it('disables dimensions that are not supported by every selected metric and explains why', async () => {
     state.ui.aloudata.metrics = ['metric_a', 'technical_rate']
     const wrapper = mount(AloudataDialog, { global: { stubs } })

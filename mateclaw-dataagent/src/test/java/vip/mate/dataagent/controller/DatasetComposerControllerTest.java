@@ -13,6 +13,8 @@ import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasetManageService;
+import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Map;
 import java.util.List;
@@ -76,6 +78,52 @@ class DatasetComposerControllerTest {
         assertEquals(2, schema.size());
         assertTrue(schema.contains("metric_time"));
         assertTrue(schema.contains("digo_touch_cnt_1"));
+    }
+
+    @Test
+    void aloudataMetricsDraftPreviewQueriesOnlyConfiguredDisplayFields() {
+        AloudataService aloudata = mock(AloudataService.class);
+        when(aloudata.queryMetrics(eq(3L), any())).thenReturn(new AloudataMetricQueryResponse());
+        DatasetComposerController controller = new DatasetComposerController(
+                mock(DatasetManageService.class), mock(SqlValidationService.class), new ObjectMapper(),
+                mock(WorkspaceGuard.class), mock(DatasourceMapper.class), new HttpApiRequestPolicy(true),
+                aloudata, mock(HttpApiDatasetAdapter.class), mock(FileDatasetAdapter.class),
+                mock(AloudataAnalysisViewAdapter.class));
+        DatasetComposerController.DraftRequest request = new DatasetComposerController.DraftRequest();
+        request.setSourceType("ALOUDATA_METRICS");
+        request.setDatasourceId("3");
+        request.setSourceConfig(Map.of("metrics", List.of("new_metric", "removed_metric"),
+                "dimensions", List.of("new_dimension", "removed_dimension")));
+        request.setColumns(List.of("new_dimension", "new_metric"));
+
+        controller.preview(request);
+
+        ArgumentCaptor<AloudataMetricQueryRequest> query = ArgumentCaptor.forClass(AloudataMetricQueryRequest.class);
+        verify(aloudata).queryMetrics(eq(3L), query.capture());
+        assertEquals(List.of("new_metric"), query.getValue().getMetrics());
+        assertEquals(List.of("new_dimension"), query.getValue().getDimensions());
+    }
+
+    @Test
+    void aloudataMetricsDraftPreviewReturnsEmptyWhenEveryDisplayFieldWasRemoved() {
+        AloudataService aloudata = mock(AloudataService.class);
+        DatasetComposerController controller = new DatasetComposerController(
+                mock(DatasetManageService.class), mock(SqlValidationService.class), new ObjectMapper(),
+                mock(WorkspaceGuard.class), mock(DatasourceMapper.class), new HttpApiRequestPolicy(true),
+                aloudata, mock(HttpApiDatasetAdapter.class), mock(FileDatasetAdapter.class),
+                mock(AloudataAnalysisViewAdapter.class));
+        DatasetComposerController.DraftRequest request = new DatasetComposerController.DraftRequest();
+        request.setSourceType("ALOUDATA_METRICS");
+        request.setDatasourceId("3");
+        request.setSourceConfig(Map.of("metrics", List.of("removed_metric"),
+                "dimensions", List.of("removed_dimension")));
+        request.setColumns(List.of());
+
+        Map<String, Object> preview = controller.preview(request).getData();
+
+        assertEquals(List.of(), preview.get("rows"));
+        assertEquals(0, preview.get("rowCount"));
+        verifyNoInteractions(aloudata);
     }
 
     @Test

@@ -236,6 +236,50 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     wrapper.unmount()
   })
 
+  it('相同条件下每次点击查询都会重新请求数据源，不使用已缓存行代替查询', async () => {
+    const wrapper = await openWith(metricViewDataset())
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewDatasetDraft).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('已落库的 Aloudata 指标维度配置按当前选择发起草稿查询并遵从展示字段', async () => {
+    const dataset = metricViewDataset({
+      backendDatasetId: '123',
+      aloudata: {
+        mode: 'metric-dim',
+        datasourceId: '2097582897597468673',
+        metricView: '',
+        metrics: ['new_metric', 'hidden_metric'],
+        dims: ['new_dimension'],
+      },
+      queryConfig: {
+        ...queryConfig(),
+        displayFields: [
+          { field: 'new_dimension', title: '新增维度', role: 'dimension' },
+          { field: 'new_metric', title: '新增指标', role: 'measure' },
+        ],
+      },
+    })
+    const wrapper = await openWith(dataset)
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewInput).not.toHaveBeenCalled()
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
+      sourceType: 'ALOUDATA_METRICS',
+      sourceConfig: expect.objectContaining({ metrics: ['new_metric', 'hidden_metric'], dimensions: ['new_dimension'] }),
+      columns: ['new_dimension', 'new_metric'],
+    }), { timeout: 0 })
+    wrapper.unmount()
+  })
+
   it('指标卡查询返回多行时提示校验错误、保留原始结果并阻止画布渲染', async () => {
     previewDatasetDraft.mockResolvedValueOnce({
       rows: [

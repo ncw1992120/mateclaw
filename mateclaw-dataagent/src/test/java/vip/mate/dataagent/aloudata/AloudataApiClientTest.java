@@ -5,6 +5,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import vip.mate.dataagent.dto.AloudataConfigDTO;
 
 import java.util.List;
@@ -16,6 +17,39 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class AloudataApiClientTest {
+
+    @Test
+    void pickerRestTemplateDoesNotApplyConnectOrReadTimeout() {
+        AloudataApiClient client = new AloudataApiClient(mock(AloudataEndpointService.class));
+        RestTemplate picker = (RestTemplate) ReflectionTestUtils.getField(client, "pickerRestTemplate");
+        SimpleClientHttpRequestFactory factory = (SimpleClientHttpRequestFactory) picker.getRequestFactory();
+
+        org.junit.jupiter.api.Assertions.assertEquals(0, ReflectionTestUtils.getField(factory, "connectTimeout"));
+        org.junit.jupiter.api.Assertions.assertEquals(0, ReflectionTestUtils.getField(factory, "readTimeout"));
+    }
+
+    @Test
+    void metadataPickerEndpointsUseTheUnboundedRestTemplate() {
+        AloudataEndpointService endpoints = mock(AloudataEndpointService.class);
+        when(endpoints.getEndpoint("metric_list")).thenReturn(new AloudataApiProperties.ApiEndpoint(
+                "semantic", "/metrics/list", "GET", "metric list", List.of(), List.of()));
+        AloudataApiClient client = new AloudataApiClient(endpoints);
+        RestTemplate picker = (RestTemplate) ReflectionTestUtils.getField(client, "pickerRestTemplate");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(picker).build();
+        server.expect(requestTo("https://semantic.example:8085/metrics/list"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("{\"success\":true,\"data\":{}}",
+                        org.springframework.http.MediaType.APPLICATION_JSON));
+        AloudataConfigDTO config = new AloudataConfigDTO();
+        config.setSemanticHost("https://semantic.example");
+        config.setTenantId("tn-test");
+        config.setAuthType("UID");
+        config.setAuthValue("uid-test");
+
+        client.callWithParams("metric_list", config, Map.of());
+
+        server.verify();
+    }
 
     @Test
     void extractsHitMvTypeFromMetricsQueryDataResponse() {
