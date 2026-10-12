@@ -111,6 +111,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
 
     private void runTask(TaskState state, Map<String, Object> request) {
         if (isTerminal(state.status)) return;
+        state.workerStartedAtNanos = System.nanoTime();
+        LOGGER.info("[dashboard-perf] stage=worker-start taskId={} queueWaitMs={}",
+                state.taskId, elapsedMillis(state.submittedAtNanos, state.workerStartedAtNanos));
         try {
             Path workerHome = resolveWorkerHome();
             String pythonCommand = requirePythonCommand(workerHome);
@@ -128,6 +131,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             processBuilder.directory(workerHome.toFile());
             prepareEnvironment(processBuilder, workerHome);
             Process process = processBuilder.start();
+            state.processStartedAtNanos = System.nanoTime();
+            LOGGER.info("[dashboard-perf] stage=process-start taskId={} startupMs={}",
+                    state.taskId, elapsedMillis(state.workerStartedAtNanos, state.processStartedAtNanos));
             synchronized (state) {
                 if (isTerminal(state.status)) {
                     terminateTree(process);
@@ -436,6 +442,14 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             state.completedAt = System.currentTimeMillis();
             snapshot = state.snapshot();
         }
+        long finishedAtNanos = System.nanoTime();
+        long processStartedAtNanos = state.processStartedAtNanos;
+        LOGGER.info("[dashboard-perf] stage=worker-complete taskId={} status={} queueWaitMs={} startupMs={} processMs={} totalMs={}",
+                state.taskId, status,
+                elapsedMillis(state.submittedAtNanos, state.workerStartedAtNanos == 0 ? finishedAtNanos : state.workerStartedAtNanos),
+                state.workerStartedAtNanos == 0 || processStartedAtNanos == 0 ? -1 : elapsedMillis(state.workerStartedAtNanos, processStartedAtNanos),
+                processStartedAtNanos == 0 ? -1 : elapsedMillis(processStartedAtNanos, finishedAtNanos),
+                elapsedMillis(state.submittedAtNanos, finishedAtNanos));
         try {
             // Spring's default event multicaster is synchronous: the database listener finishes
             // before this task is eligible for cache eviction.
@@ -446,6 +460,10 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
                     .error("Could not persist terminal Python Worker snapshot for task {}", state.taskId, exception);
         }
         pruneCompletedTasks();
+    }
+
+    private static long elapsedMillis(long startedAtNanos, long finishedAtNanos) {
+        return Math.max(0, (finishedAtNanos - startedAtNanos) / 1_000_000L);
     }
 
     private void pruneCompletedTasks() {
@@ -539,6 +557,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
         private volatile int returnCode = -1;
         private volatile long completedAt;
         private volatile boolean persisted;
+        private final long submittedAtNanos = System.nanoTime();
+        private volatile long workerStartedAtNanos;
+        private volatile long processStartedAtNanos;
 
         private TaskState(String taskId, String token, int maxStdoutBytes, int maxStderrBytes) {
             this.taskId = taskId;

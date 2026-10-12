@@ -668,6 +668,8 @@ async function pollScriptExecution(
   requestId: number,
   requestOwner: string,
 ): Promise<{ status: string; envelope: unknown }> {
+  const pollingStartedAt = performance.now()
+  let pollCount = 0
   for (let attempt = 0; attempt < 120; attempt += 1) {
     // 每次唤醒先检查：视图已卸载或执行已被新请求替代时，放弃本轮等待（旧结果不再回写）
     if (attempt > 0 && (previewDisposed || latestComponentRequest.get(requestOwner) !== requestId)) {
@@ -676,11 +678,20 @@ async function pollScriptExecution(
     const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
       status?: string; result?: string; error?: string
     }
+    pollCount += 1
     if (status.status === 'SUCCEEDED') {
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'poll-complete', executionId, requestId, requestOwner,
+        polls: pollCount, elapsedMs: Math.round(performance.now() - pollingStartedAt), status: status.status,
+      }))
       return { status: status.status, envelope: status.result ? JSON.parse(status.result) : undefined }
     }
     if (status.status === 'RESULT_REF') {
       const result = await insightDashboardApi.getExecutionResult(executionId) as unknown as { envelope?: unknown }
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'poll-complete', executionId, requestId, requestOwner,
+        polls: pollCount, elapsedMs: Math.round(performance.now() - pollingStartedAt), status: status.status,
+      }))
       return { status: status.status, envelope: result.envelope }
     }
     if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
@@ -859,6 +870,7 @@ async function refreshPipelineComponent(
 ): Promise<void> {
   const pipeline = readComponentDatasetPipeline(component)
   if (!pipeline?.datasetInputs?.length) return
+  const componentStartedAt = performance.now()
   const requestId = ++queryRequestSequence
   latestComponentRequest.set(component.id, requestId)
   writeComponentQueryState(component, 'loading')
@@ -878,9 +890,15 @@ async function refreshPipelineComponent(
     let fieldLabels: Record<string, string> | undefined
     const script = pipeline.script?.trim()
     if (script) {
+      const submitStartedAt = performance.now()
       const created = await insightDashboardApi.executeComponent(
         props.dashboardId, component.id, {}, JSON.stringify(schema), queryContext,
       ) as unknown as { executionId?: string }
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'submit-response', dashboardId: props.dashboardId, componentId: component.id,
+        requestId, executionId: created.executionId,
+        elapsedMs: Math.round(performance.now() - submitStartedAt),
+      }))
       if (!created.executionId) throw new Error('未获取到组件执行 ID')
       const polled = await pollScriptExecution(created.executionId, requestId, component.id)
       if (polled.status === '__abandoned__') return
@@ -894,10 +912,15 @@ async function refreshPipelineComponent(
         outputConfig ? extractResultSchema(parsed) : undefined,
       )
       if (outputConfig && outputConfigStatus !== 'conflict') {
+        const resultQueryStartedAt = performance.now()
         const result = await insightDashboardApi.previewExecutionResult(created.executionId, {
           parameters: finalResultFilterParameters(component, effectiveFilters), requestId: String(requestId),
           finalResultQueryConfig: outputConfig,
         }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[] }
+        console.info('[dashboard-perf]', JSON.stringify({
+          stage: 'final-result-query', executionId: created.executionId, componentId: component.id,
+          requestId, elapsedMs: Math.round(performance.now() - resultQueryStartedAt), rowCount: result.rows?.length ?? 0,
+        }))
         rows = result.rows ?? []
         const configured = pipeline.finalResultQueryConfig?.displayFields ?? []
         fieldLabels = Object.fromEntries(configured.map((field) => [field.field, field.title]))
@@ -930,6 +953,11 @@ async function refreshPipelineComponent(
         queryStatus,
       },
     }
+    console.info('[dashboard-perf]', JSON.stringify({
+      stage: 'component-complete', dashboardId: props.dashboardId, componentId: component.id,
+      requestId, elapsedMs: Math.round(performance.now() - componentStartedAt), rowCount: rows.length,
+      hasPython: Boolean(script),
+    }))
   } catch (error) {
     if (latestComponentRequest.get(component.id) !== requestId) return
     componentDataMap.value = {
@@ -941,6 +969,11 @@ async function refreshPipelineComponent(
         error: error instanceof Error ? error.message : String(error),
       },
     }
+    console.info('[dashboard-perf]', JSON.stringify({
+      stage: 'component-failed', dashboardId: props.dashboardId, componentId: component.id,
+      requestId, elapsedMs: Math.round(performance.now() - componentStartedAt),
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+    }))
   }
 }
 

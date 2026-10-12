@@ -33,6 +33,7 @@ import java.util.*;
  */
 @Service
 public class DashboardExecutionServiceImpl implements DashboardExecutionService {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(DashboardExecutionServiceImpl.class);
     private static final String DEFAULT_TIMEOUT_SECONDS = "60";
     private static final String DEFAULT_MAX_OUTPUT_BYTES = "50000";
     private static final int RESULT_PREVIEW_MAX_ROWS = 10;
@@ -88,7 +89,11 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
 
     @Override
     public Map<String, Object> submit(long dashboardId, DashboardExecutionRequest request) {
+        long submitStarted = System.nanoTime();
+        long dashboardLookupStarted = System.nanoTime();
         InsightDashboardVO dashboard = dashboards.getDashboard(dashboardId);
+        long dashboardLookupMillis = elapsedMillis(dashboardLookupStarted);
+        long configurationStarted = System.nanoTime();
         // 预览可携带临时 Schema；不落库、不改变仪表盘，只复用其权限与执行上下文。
         JsonNode schema = parseSchema(request != null && request.schemaJson() != null
                 ? request.schemaJson() : dashboard.getSchemaJson());
@@ -102,17 +107,22 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         validateFilterBindings(executionSchema.path("scriptFilterBindings"), inputs.keySet());
         Map<String, Object> parameters = resolveParameters(
                 executionSchema.path("parameters"), request == null ? Map.of() : request.parameters());
+        long configurationMillis = elapsedMillis(configurationStarted);
         // 新链路：queryContext 只用于 Planner 生成查询计划，不进入 Runner 的 parameters/datasets.params
+        long planningStarted = System.nanoTime();
         Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> plans =
                 buildPlans(request == null ? null : request.queryContext(), schema, pipeline, inputs,
                         script != null && !script.isBlank());
+        long planningMillis = elapsedMillis(planningStarted);
         String taskId = "dashboard-" + dashboardId + "-" + UUID.randomUUID();
         // 存量契约（无 queryContext）保持原 prepare 调用；新链路才物化 prepared inputs
+        long preparationStarted = System.nanoTime();
         ScriptTaskPreparationService.PreparedTask prepared = plans.isEmpty()
                 ? preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                         inputs, script, parameters)
                 : preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                         inputs, script, parameters, plans);
+        long preparationMillis = elapsedMillis(preparationStarted);
 
         // 新版组件编排把执行策略随 pipeline 持久化；旧版仪表盘仍放在根级。
         // 根级为空时回退到实际执行的 pipeline，避免编辑器保存后丢失超时/输出限制。
@@ -142,11 +152,22 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         execution.setUserId(workspaceGuard.currentUserId());
         execution.setStatus("SUBMITTING");
         execution.setParametersJson(writeJson(prepared.parameters()));
+        long executionInsertStarted = System.nanoTime();
         executionMapper.insert(execution);
+        long executionInsertMillis = elapsedMillis(executionInsertStarted);
         Map<String, Object> result;
         try {
+            long runnerSubmitStarted = System.nanoTime();
             result = runner.submit(runnerRequest);
+            long runnerSubmitMillis = elapsedMillis(runnerSubmitStarted);
+            long executionUpdateStarted = System.nanoTime();
             updateFromRunner(execution, result);
+            long executionUpdateMillis = elapsedMillis(executionUpdateStarted);
+            LOGGER.info("[dashboard-perf] stage=submit dashboardId={} componentId={} taskId={} dashboardLookupMs={} configurationMs={} planningMs={} preparationMs={} executionInsertMs={} runnerSubmitMs={} executionUpdateMs={} totalSubmitMs={} inputs={} status={}",
+                    dashboardId, request == null ? null : request.componentId(), taskId,
+                    dashboardLookupMillis, configurationMillis, planningMillis, preparationMillis,
+                    executionInsertMillis, runnerSubmitMillis, executionUpdateMillis,
+                    elapsedMillis(submitStarted), inputs.size(), result.getOrDefault("status", "RUNNING"));
         } catch (RuntimeException e) {
             execution.setStatus("FAILED");
             execution.setErrorMessage(e.getMessage());
@@ -158,6 +179,10 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         response.put("dashboardId", dashboardId);
         response.put("status", result.getOrDefault("status", "RUNNING"));
         return response;
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
 
     /** 组件级数据集编排优先，旧仪表盘继续从根级 Schema 执行。 */

@@ -14,6 +14,7 @@ import java.util.*;
 /** 在提交 Runner 前固化输入别名、权限上下文和短期读取令牌；有查询计划时物化 prepared input。 */
 @Service
 public class ScriptTaskPreparationService {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(ScriptTaskPreparationService.class);
     /** prepared input 内联行数上限；超过则转 ObjectRef，由 SDK 受控批次读取。 */
     static final int INLINE_MAX_ROWS = 10_000;
     private static final int PAGE_SIZE = 10_000;
@@ -45,6 +46,7 @@ public class ScriptTaskPreparationService {
      */
     public PreparedTask prepare(String taskId, Long workspaceId, Long userId, Map<String,Long> inputDatasets,
                                 String script, Map<String,Object> parameters, Map<String, DatasetQueryPlanDTO> plans) {
+        long prepareStarted = System.nanoTime();
         if (inputDatasets==null||inputDatasets.isEmpty()||script==null||script.isBlank()) throw new IllegalArgumentException("task inputs and script are required");
         DatasetAccessContext context=new DatasetAccessContext(workspaceId,userId,taskId,new HashSet<>(inputDatasets.values()));
         Map<String,DatasetInputDescriptor> descriptors=new LinkedHashMap<>(); inputDatasets.forEach((alias,id)->descriptors.put(alias,datasets.getInputDescriptor(context,id,alias))); registry.register(taskId,descriptors);
@@ -56,14 +58,24 @@ public class ScriptTaskPreparationService {
                 DatasetQueryPlanDTO plan = entry.getValue();
                 DatasetInputDescriptor descriptor = descriptors.get(alias);
                 if (descriptor == null) throw new IllegalArgumentException("plan references unknown input: " + alias);
-                prepared.put(alias, materialize(context, alias, descriptor, plan));
+                long inputStarted = System.nanoTime();
+                ScriptTaskInputRegistry.PreparedInput input = materialize(context, alias, descriptor, plan);
+                prepared.put(alias, input);
+                LOGGER.info("[dashboard-perf] stage=input-materialize taskId={} input={} datasetId={} rows={} elapsedMs={}",
+                        taskId, alias, descriptor.datasetId(), input.rowCount(), elapsedMillis(inputStarted));
             }
         } catch (RuntimeException e) {
             registry.remove(taskId); // 失败不留半注册状态
             throw e;
         }
         prepared.values().forEach(input -> registry.registerPreparedInput(taskId, input));
+        LOGGER.info("[dashboard-perf] stage=prepare-complete taskId={} inputs={} elapsedMs={}",
+                taskId, inputDatasets.size(), elapsedMillis(prepareStarted));
         return new PreparedTask(taskId,script,descriptors,parameters==null?Map.of():Map.copyOf(parameters),token,prepared);
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
     }
     public record PreparedTask(String taskId,String script,Map<String,DatasetInputDescriptor> inputCatalog,Map<String,Object> parameters,String readToken,
                                Map<String, ScriptTaskInputRegistry.PreparedInput> preparedInputs) {
