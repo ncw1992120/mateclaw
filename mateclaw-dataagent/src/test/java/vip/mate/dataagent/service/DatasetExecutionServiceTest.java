@@ -57,7 +57,11 @@ class DatasetExecutionServiceTest {
                 List.of(adapter), mock(ScriptTaskPreparationService.class), catalog);
 
         assertSame(descriptor, service.descriptor(context, 9L, "orders"));
-        verify(adapter).describe(context, 9L);
+        if (sourceType == DatasetSourceType.ALOUDATA_METRICS) {
+            verifyNoInteractions(adapter);
+        } else {
+            verify(adapter).describe(context, 9L);
+        }
         verify(adapter, never()).read(any(), any());
     }
 

@@ -38,6 +38,7 @@ class AloudataMetricsAdapterTest {
         MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
         TableInfoHelper.initTableInfo(assistant, AloudataMetricEntity.class);
         TableInfoHelper.initTableInfo(assistant, AloudataDimensionEntity.class);
+        TableInfoHelper.initTableInfo(assistant, DatasetFieldEntity.class);
     }
 
     /** 新构造签名共用：mock 元数据 mapper（默认无同步数据，展示名回退技术名）。 */
@@ -271,31 +272,34 @@ class AloudataMetricsAdapterTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void describePrefersPlatformDisplayNamesOverTechnicalNames() throws Exception {
+    void describeUsesDatasetFieldSnapshotWithoutScanningSyncedMetadata() throws Exception {
         DatasetMapper mapper = mock(DatasetMapper.class); AloudataService service = mock(AloudataService.class);
         DatasetEntity dataset = new DatasetEntity(); dataset.setId(7L); dataset.setName("sales metrics"); dataset.setSourceType("ALOUDATA_METRICS"); dataset.setDatasourceId(3L);
         dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of("dimensions", List.of("metric_time", "region"), "metrics", List.of("revenue"))));
         when(mapper.selectById(7L)).thenReturn(dataset);
 
         AloudataMetricMapper metricMetaMapper = mock(AloudataMetricMapper.class);
-        AloudataMetricEntity metricMeta = new AloudataMetricEntity();
-        metricMeta.setDatasourceId(3L); metricMeta.setMetricName("revenue"); metricMeta.setMetricDisplayName("收入金额");
-        when(metricMetaMapper.selectList(any(Wrapper.class))).thenReturn(List.of(metricMeta));
         AloudataDimensionMapper dimensionMetaMapper = mock(AloudataDimensionMapper.class);
-        AloudataDimensionEntity regionMeta = new AloudataDimensionEntity();
-        regionMeta.setDatasourceId(3L); regionMeta.setDimName("region"); regionMeta.setDimDisplayName("地区");
-        // 平台未配置中文名的维度（如系统分区字段）不进映射，回退技术名
-        AloudataDimensionEntity metricTimeMeta = new AloudataDimensionEntity();
-        metricTimeMeta.setDatasourceId(3L); metricTimeMeta.setDimName("metric_time"); metricTimeMeta.setDimDisplayName(null);
-        when(dimensionMetaMapper.selectList(any(Wrapper.class))).thenReturn(List.of(regionMeta, metricTimeMeta));
+        DatasetFieldMapper fields = mock(DatasetFieldMapper.class);
+        when(fields.selectList(any(Wrapper.class))).thenReturn(List.of(
+                datasetFieldWithAlias("metric_time", "指标日期", "dimension"),
+                datasetFieldWithAlias("region", "地区", "dimension"),
+                datasetFieldWithAlias("revenue", "收入金额", "measure")));
 
-        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, metricMetaMapper, dimensionMetaMapper, emptyFieldMapper(), service, new ObjectMapper());
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(mapper, metricMetaMapper, dimensionMetaMapper, fields, service, new ObjectMapper());
         DatasetInputDescriptor descriptor = adapter.describe(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)), 7L);
 
         Map<String, String> titles = new HashMap<>();
         descriptor.schema().forEach(column -> titles.put(column.name(), column.title()));
         assertEquals("收入金额", titles.get("revenue"));
         assertEquals("地区", titles.get("region"));
-        assertEquals("metric_time", titles.get("metric_time"));
+        assertEquals("指标日期", titles.get("metric_time"));
+        verifyNoInteractions(metricMetaMapper, dimensionMetaMapper);
+    }
+
+    private DatasetFieldEntity datasetFieldWithAlias(String name, String alias, String category) {
+        DatasetFieldEntity field = datasetField(name, category);
+        field.setColumnAlias(alias);
+        return field;
     }
 }

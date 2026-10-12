@@ -21,6 +21,11 @@ public class DatasetExecutionServiceImpl implements DatasetExecutionService {
         if (strategyReadoutFixtures != null && strategyReadoutFixtures.supports(id)) {
             return strategyReadoutFixtures.describe(context, id, inputName);
         }
+        // Aloudata 指标&维度的目录描述已经包含该数据集保存的字段及展示名快照；
+        // 再调用 Adapter.describe 会重复查询整份字段快照，不会补充任何数据。
+        if (authorizedDescriptor.sourceType() == DatasetSourceType.ALOUDATA_METRICS) {
+            return authorizedDescriptor;
+        }
         return adapters.stream().filter(a -> a.supports(authorizedDescriptor.sourceType())).findFirst()
                 .orElseThrow(() -> new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST,"未找到数据集 Adapter"))
                 .describe(context,id);

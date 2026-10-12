@@ -278,7 +278,6 @@
             :default-sort="sortState ? { prop: sortState.field, order: sortState.direction === 'asc' ? 'ascending' : 'descending' } : undefined"
             border
             size="small"
-            height="100%"
             @sort-change="onSortChange"
           >
             <el-table-column
@@ -762,10 +761,19 @@ async function fetchRows(reset: boolean): Promise<void> {
       return
     }
     const parameters = { ...namedParameters(), ...buildExecutionParameters(enabledFilterRows) }
-    const limit = paginationEnabled.value ? currentPageSize.value : clampQueryLimit(queryLimit.value)
+    // 未分页预览按小批次取数，避免一次返回数千行后由 Element Plus 为每个单元格创建组件。
+    // 用户滚动到结果底部时继续取下一批；查询上限仍按用户输入的累计总量执行。
+    const unpagedLimit = clampQueryLimit(queryLimit.value)
     const offset = paginationEnabled.value
       ? (currentPage.value - 1) * currentPageSize.value
       : reset ? 0 : rows.value.length
+    const limit = paginationEnabled.value
+      ? currentPageSize.value
+      : Math.min(DEFAULT_BATCH_SIZE, Math.max(0, unpagedLimit - offset))
+    if (!paginationEnabled.value && limit <= 0) {
+      hasMore.value = false
+      return
+    }
     const orders = sortState.value && isFieldSortable(sortState.value.field) ? [sortState.value] : []
     const requestTotalCount = paginationEnabled.value
       && (paginationPolicy.value?.returnTotalCount === true || props.component?.type === 'kpi')
@@ -828,19 +836,22 @@ async function fetchRows(reset: boolean): Promise<void> {
       queriedAt.value = Date.now()
     }
     queriedSignature.value = requestSignature
-    hasMore.value = typeof batch.hasNext === 'boolean'
+    const sourceHasMore = typeof batch.hasNext === 'boolean'
       ? batch.hasNext
       : typeof batch.last === 'boolean'
         ? !batch.last
         : nextRows.length >= limit
+    hasMore.value = sourceHasMore
+      && (paginationEnabled.value || rows.value.length < clampQueryLimit(queryLimit.value))
     totalCount.value = typeof batch.totalCount === 'number' ? batch.totalCount : null
     elapsed.value = `${((Date.now() - started) / 1000).toFixed(1)}s`
     // 记住这次执行（追加页也一并缓存）：关掉再打开，条件和结果都还在
     // —— 运行时条件只进入本次查询和会话缓存，不写回 Dashboard Schema
+    const cachedRows = paginationEnabled.value ? rows.value : rows.value.slice(0, DEFAULT_BATCH_SIZE)
     setCachedQuery(props.dataset.id, {
-      rows: rows.value,
+      rows: cachedRows,
       columns: columns.value,
-      hasMore: hasMore.value,
+      hasMore: hasMore.value || cachedRows.length < rows.value.length,
       elapsed: elapsed.value,
       queriedAt: queriedAt.value,
       signature: requestSignature,

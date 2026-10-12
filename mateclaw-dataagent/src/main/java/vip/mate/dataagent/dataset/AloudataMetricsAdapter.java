@@ -10,7 +10,6 @@ import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
 import vip.mate.dataagent.model.AloudataDimensionEntity;
-import vip.mate.dataagent.model.AloudataMetricEntity;
 import vip.mate.dataagent.model.DatasetEntity;
 import vip.mate.dataagent.model.DatasetFieldEntity;
 import vip.mate.dataagent.repository.AloudataDimensionMapper;
@@ -38,21 +37,19 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
     @Override public DatasetInputDescriptor describe(DatasetAccessContext context, long datasetId) {
         DatasetEntity dataset = require(context, datasetId);
         Map<String, Object> config = config(dataset);
-        // 展示字段标题优先级：创建数据集时冻结的展示名快照（dataagent_dataset_field.columnAlias）
-        // > 同步表实时值（metricDisplayName/dimDisplayName）> 技术名。
-        // 快照让查询配置回显与同步表的后续变化解耦。
+        // 展示字段只使用创建数据集时冻结的别名快照；不再为打开属性/查询配置弹窗
+        // 扫描整个数据源的同步指标和维度表。没有快照（旧数据）时回退到技术名。
         Map<String, String> snapshot = snapshotDisplayNames(datasetId);
-        Map<String, String> displayNames = aloudataDisplayNames(dataset.getDatasourceId());
         List<DatasetColumn> columns = new ArrayList<>();
         strings(config.get("dimensions")).forEach(name -> columns.add(new DatasetColumn(name,
-                titleOf(name, snapshot, displayNames), "STRING", true, "dimension")));
+                titleOf(name, snapshot), "STRING", true, "dimension")));
         strings(config.get("metrics")).forEach(name -> columns.add(new DatasetColumn(name,
-                titleOf(name, snapshot, displayNames), "DECIMAL", true, "measure")));
+                titleOf(name, snapshot), "DECIMAL", true, "measure")));
         return new DatasetInputDescriptor(datasetId, dataset.getName(), DatasetSourceType.ALOUDATA_METRICS, columns, dataset.getRowCount(), Map.of("datasourceId", dataset.getDatasourceId()), null);
     }
 
-    private String titleOf(String name, Map<String, String> snapshot, Map<String, String> displayNames) {
-        String title = snapshot.getOrDefault(name, displayNames.getOrDefault(name, name));
+    private String titleOf(String name, Map<String, String> snapshot) {
+        String title = snapshot.getOrDefault(name, name);
         return title == null || title.isBlank() ? name : title;
     }
 
@@ -69,24 +66,6 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
             log.warn("[Aloudata指标&维度] 读取展示名快照失败 datasetId={}: {}", datasetId, e.getMessage());
             return Map.of();
         }
-    }
-
-    /** 技术名 → 平台展示名映射；元数据查询失败不阻断数据集描述。 */
-    private Map<String, String> aloudataDisplayNames(Long datasourceId) {
-        Map<String, String> result = new HashMap<>();
-        try {
-            aloudataMetricMapper.selectList(new LambdaQueryWrapper<AloudataMetricEntity>()
-                            .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
-                            .select(AloudataMetricEntity::getMetricName, AloudataMetricEntity::getMetricDisplayName))
-                    .forEach(metric -> putIfNotBlank(result, metric.getMetricName(), metric.getMetricDisplayName()));
-            aloudataDimensionMapper.selectList(new LambdaQueryWrapper<AloudataDimensionEntity>()
-                            .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
-                            .select(AloudataDimensionEntity::getDimName, AloudataDimensionEntity::getDimDisplayName))
-                    .forEach(dim -> putIfNotBlank(result, dim.getDimName(), dim.getDimDisplayName()));
-        } catch (Exception e) {
-            log.warn("[Aloudata指标&维度] 读取平台展示名失败 datasourceId={}: {}", datasourceId, e.getMessage());
-        }
-        return result;
     }
 
     private void putIfNotBlank(Map<String, String> map, String name, String displayName) {

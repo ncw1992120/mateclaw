@@ -234,6 +234,11 @@ const dragIndex = ref<number | null>(null)
 /** 展示字段默认展开（用户可按需折叠） */
 const fieldsExpanded = ref(true)
 
+// 弹窗会同时展示/遍历上百个字段；将反复 find/some 改为索引读取，避免初始化和渲染时 O(n²)。
+const fieldMetaByName = computed(() => new Map(props.fields.map((field) => [field.name, field])))
+const fieldRowByName = computed(() => new Map(fieldRows.value.map((row) => [row.field, row])))
+const fieldNamesInRows = computed(() => new Set(fieldRows.value.map((row) => row.field)))
+
 const duplicateTitles = computed(() => {
   const seen = new Set<string>()
   const duplicates = new Set<string>()
@@ -247,7 +252,7 @@ const duplicateTitles = computed(() => {
 })
 
 const addableFields = computed(() =>
-  props.fields.filter((field) => !fieldRows.value.some((row) => row.field === field.name)),
+  props.fields.filter((field) => !fieldNamesInRows.value.has(field.name)),
 )
 
 function fieldOptionLabel(field: DatasetFieldMeta): string {
@@ -261,7 +266,7 @@ function roleOf(field: DatasetFieldMeta): 'dimension' | 'measure' {
 }
 
 function roleForInitialRow(row: FieldRow): 'dimension' | 'measure' {
-  const metadata = props.fields.find((field) => field.name === row.field)
+  const metadata = fieldMetaByName.value.get(row.field)
   // 已保存配置可能来自旧版本，曾把所有字段落成 dimension；以最新 descriptor 的
   // measure 标记纠正这一情况，同时保留用户显式切换到 dimension 的配置。
   if (metadata && roleOf(metadata) === 'measure') return 'measure'
@@ -269,9 +274,9 @@ function roleForInitialRow(row: FieldRow): 'dimension' | 'measure' {
 }
 
 function fieldTitle(fieldName: string): string {
-  const row = fieldRows.value.find((item) => item.field === fieldName)
+  const row = fieldRowByName.value.get(fieldName)
   if (row?.title?.trim()) return row.title.trim()
-  const field = queryableFields.value.find((item) => item.name === fieldName)
+  const field = fieldMetaByName.value.get(fieldName)
   return field?.displayName?.trim() || fieldName
 }
 
@@ -279,14 +284,14 @@ function fieldTitle(fieldName: string): string {
 const queryableFields = computed<QueryableDatasetField[]>(() => props.fields.map((field) => ({
   name: field.name,
   displayName: field.displayName,
-  role: fieldRows.value.find((row) => row.field === field.name)?.role ?? roleOf(field),
+  role: fieldRowByName.value.get(field.name)?.role ?? roleOf(field),
 })).sort((left, right) => {
   // 筛选绑定字段沿用展示字段的维度优先顺序，且保留同类字段的 descriptor 顺序。
   return (left.role === 'measure' ? 1 : 0) - (right.role === 'measure' ? 1 : 0)
 }))
 
 function fixedOperators(fieldName: string) {
-  const field = props.fields.find((item) => item.name === fieldName)
+  const field = fieldMetaByName.value.get(fieldName)
   const sourceType = props.sourceType === 'api' ? 'HTTP_API'
     : props.sourceType === 'aloudata' ? 'ALOUDATA_ANALYSIS_VIEW'
       : props.sourceType === 'file' ? 'FILE' : 'JDBC_SQL'
@@ -300,8 +305,8 @@ function addFixedFilter(): void {
 }
 
 function addField(fieldName: string): void {
-  const field = props.fields.find((item) => item.name === fieldName)
-  if (!field || fieldRows.value.some((row) => row.field === fieldName)) return
+  const field = fieldMetaByName.value.get(fieldName)
+  if (!field || fieldNamesInRows.value.has(fieldName)) return
   fieldRows.value.push({ field: field.name, title: field.displayName || field.name, role: roleOf(field), dataType: undefined })
 }
 
@@ -360,7 +365,7 @@ function matchedFieldForFilter(filterComponentId: string): string {
   const matches = queryableFields.value.filter((field) =>
     filterNames.has(field.name.trim())
       || filterNames.has((field.displayName ?? '').trim())
-      || filterNames.has(fieldRows.value.find((row) => row.field === field.name)?.title.trim() ?? ''),
+      || filterNames.has(fieldRowByName.value.get(field.name)?.title.trim() ?? ''),
   )
   return matches.length === 1 ? matches[0].name : ''
 }
@@ -381,7 +386,7 @@ watch(() => props.modelValue, (visible) => {
   const initial = props.initialConfig
   if (initial && initial.displayFields.length) {
     fieldRows.value = sortDimensionsFirst(initial.displayFields.map((row) => {
-      const metadata = props.fields.find((field) => field.name === row.field)
+      const metadata = fieldMetaByName.value.get(row.field)
       const saved = (row.title ?? '').trim()
       // 展示名默认跟随数据集注册表最新展示名（如 Aloudata 平台 metricDisplayName/dimDisplayName 中文名）：
       // 用户定制过（非空且不等于技术字段名）则保留；空值或旧的技术名默认值用注册表展示名自愈。
@@ -418,7 +423,7 @@ function save(): void {
   }
   if (props.componentType === 'kpi') {
     const dimensions = fieldRows.value.filter((row) => {
-      const metadata = props.fields.find((field) => field.name === row.field)
+      const metadata = fieldMetaByName.value.get(row.field)
       // Aloudata 等 descriptor 明确声明的维度以服务端角色为准；未提供角色的数据源
       // 保留用户在配置弹窗中手动标记的分类。
       const sourceRole = (metadata?.role ?? '').trim().toLowerCase()

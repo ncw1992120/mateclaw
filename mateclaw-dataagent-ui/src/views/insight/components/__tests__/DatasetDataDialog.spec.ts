@@ -33,7 +33,7 @@ vi.mock('@/api/dataset', async (importOriginal) => {
 })
 
 import DatasetDataDialog from '../DatasetDataDialog.vue'
-import { clearAllCachedQueries, setCachedQuery } from '../dataset-data-cache'
+import { clearAllCachedQueries, getCachedQuery, setCachedQuery } from '../dataset-data-cache'
 import { useInsight } from '../card-attribute/useInsight'
 import type { DatasetConfig } from '../card-attribute/useInsight'
 import type { DatasetQueryConfig } from '@/types'
@@ -928,20 +928,44 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
 })
 
 describe('查看数据弹窗 · 限制条数', () => {
-  it('未分页时默认 10000 条进入查询请求，越界输入收敛到上限 100000', async () => {
+  it('未分页时按小批次渲染并在滚动时继续取数，累计不超过查询上限', async () => {
     const wrapper = await openWith(metricViewDataset({ queryConfig: queryConfig() }))
 
     const limitInput = wrapper.get('[data-testid="query-limit"]')
     expect((limitInput.element as HTMLInputElement).value).toBe('10000')
 
+    await limitInput.setValue('80')
+    previewDatasetDraft
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 50 }, (_, index) => ({ trade_date: `2026-09-${String(index + 1).padStart(2, '0')}` })),
+        schema: ['trade_date'], rowCount: 50, last: false, totalCount: 120,
+      })
+      .mockResolvedValueOnce({
+        rows: Array.from({ length: 30 }, (_, index) => ({ trade_date: `2026-10-${String(index + 1).padStart(2, '0')}` })),
+        schema: ['trade_date'], rowCount: 30, last: false, totalCount: 120,
+      })
+
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 10000, offset: 0 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), { timeout: 0 })
+
+    const resultBody = wrapper.get('.dd-result-body').element
+    Object.defineProperties(resultBody, {
+      scrollHeight: { configurable: true, value: 200 },
+      clientHeight: { configurable: true, value: 100 },
+      scrollTop: { configurable: true, value: 100 },
+    })
+    resultBody.dispatchEvent(new Event('scroll'))
+    await flushPromises()
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 30, offset: 50 }), { timeout: 0 })
+    expect(wrapper.get('.dd-result-actions').text()).not.toContain('可滚动加载更多')
+    expect(getCachedQuery('ds-1')).toMatchObject({ rows: expect.arrayContaining([{ trade_date: '2026-09-01' }]), hasMore: true })
+    expect(getCachedQuery('ds-1')?.rows).toHaveLength(50)
 
     await limitInput.setValue('200000')
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 100000, offset: 0 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), { timeout: 0 })
     wrapper.unmount()
   })
 
