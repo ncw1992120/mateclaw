@@ -127,7 +127,7 @@ export interface ScriptResultError {
     field: string
     scriptLine?: number
     errorCount: number
-    issues: { rowNumber: number; rowKeys: Record<string, string>; valuePreview: string; reason: string }[]
+    issues: { field?: string; rowNumber: number | null; rowKeys: Record<string, string>; valuePreview: string; reason: string }[]
   }
   traceback?: string
   status?: string
@@ -156,7 +156,8 @@ export function formatPythonExecutionError(error: string): PythonExecutionErrorD
         const diagnostic = parsed.errorDetails
         const rows = (Array.isArray(diagnostic.issues) ? diagnostic.issues : []).slice(0, 10).map((issue) => {
           const keys = Object.entries(issue.rowKeys ?? {}).map(([key, value]) => `${key}=${value}`).join('，')
-          return `第 ${issue.rowNumber} 行${keys ? `（${keys}）` : ''}：值 ${issue.valuePreview}；${issue.reason}`
+          const location = issue.rowNumber == null ? '字段配置' : `第 ${issue.rowNumber} 行`
+          return `${issue.field ? `字段 ${issue.field}，` : ''}${location}${keys ? `（${keys}）` : ''}：值 ${issue.valuePreview}；${issue.reason}`
         })
         return {
           summary: [diagnostic.scriptLine ? `Python 脚本第 ${diagnostic.scriptLine} 行数据校验失败` : 'Python 数据校验失败',

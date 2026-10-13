@@ -40,7 +40,7 @@
       <li v-for="warning in editorSampleWarnings" :key="warning">{{ warning }}</li>
     </ul>
     <p class="editor-hint">取消注释造数示例后，对应输入会跳过真实数据读取；查询参数说明仅供参考，查看数据时由查询配置应用。</p>
-    <p class="editor-hint">需要定位转换失败的数据时，可使用 diagnostics.to_numeric、to_integer、to_datetime 或 required；指定 dataset、field 和 row_keys 后，错误会展示问题字段、值和记录行号。空值默认报错，null_policy="keep" 保留空值，"fill" 配合 default 替换空值。</p>
+    <p class="editor-hint">需要定位转换失败的数据时，可使用 diagnostics.to_numeric、to_integer、to_datetime 或 required，支持 pandas 和 Polars；指定 dataset、field 和 row_keys 后，错误会展示问题字段、值和记录行号。多个字段可用 diagnostics.validate 配置 rules 一次检查。空值默认报错，null_policy="keep" 保留空值，"fill" 配合 default 替换空值。</p>
 
     <template #footer>
       <el-button data-testid="python-editor-cancel" @click="ui.python.visible = false">取消</el-button>

@@ -44,7 +44,7 @@ class DashboardExecutionServiceTest {
         String error = """
                 {"code":"DATA_VALIDATION_ERROR","message":"数据校验失败",
                  "errorDetails":{"dataset":"table_zb","field":"amount","scriptLine":3,"errorCount":1,
-                 "issues":[{"rowNumber":128,"rowKeys":{"id":"secret-id"},"valuePreview":"secret-value","reason":"无法转换为数字"}]},
+                 "issues":[{"field":"users","rowNumber":128,"rowKeys":{"id":"secret-id"},"valuePreview":"secret-value","reason":"无法转换为数字"}]},
                  "traceback":"secret-script"}
                 """;
         when(runner.getStatus("diagnostic-failed")).thenReturn(Map.of("status", "FAILED", "error", error));
@@ -63,6 +63,7 @@ class DashboardExecutionServiceTest {
             assertTrue(log.contains("scriptLine=3"));
             assertTrue(log.contains("field=amount"));
             assertTrue(log.contains("row=128"));
+            assertTrue(log.contains("issueField=users"));
             assertFalse(log.contains("secret-value"));
             assertFalse(log.contains("secret-id"));
             assertFalse(log.contains("secret-script"));

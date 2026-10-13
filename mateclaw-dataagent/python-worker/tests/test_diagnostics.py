@@ -1,6 +1,7 @@
 import json
 
 import pandas as pd
+import polars as pl
 import pytest
 
 import mateclaw
@@ -61,3 +62,53 @@ def test_worker_returns_user_call_line_and_redacts_token_in_structured_details()
     assert "secret-token" not in response.error
     assert "[REDACTED]" in response.error
     assert "user_script.py" in detail["traceback"]
+
+
+def test_polars_conversions_preserve_series_type_and_nulls():
+    frame = pl.DataFrame({"id": ["A", "B"], "amount": ["12", None], "date": ["2026-10-13", None]})
+    numbers = tools().to_numeric(frame, dataset="input", field="amount", null_policy="keep")
+    assert isinstance(numbers, pl.Series)
+    assert numbers.to_list() == [12.0, None]
+    integers = tools().to_integer(frame, dataset="input", field="amount", null_policy="fill", default=0)
+    assert integers.dtype == pl.Int64 and integers.to_list() == [12, 0]
+    dates = tools().to_datetime(frame, dataset="input", field="date", format="%Y-%m-%d", null_policy="keep")
+    assert dates.dt.year().to_list() == [2026, None]
+    assert tools().required(frame, dataset="input", field="id").to_list() == ["A", "B"]
+    assert frame["amount"].to_list() == ["12", None]
+
+
+@pytest.mark.parametrize("make_frame", [pd.DataFrame, pl.DataFrame])
+def test_batch_validation_collects_fields_and_does_not_modify_input(make_frame):
+    frame = make_frame({"id": ["A", "B"], "amount": ["bad", "12"], "users": ["1", "1.5"]})
+    assert hasattr(tools(), "validate"), "SDK must support multi-field validation"
+    with pytest.raises(ValueError) as caught:
+        tools().validate(frame, dataset="input", row_keys=["id"], rules={
+            "amount": {"type": "numeric"}, "users": {"type": "integer"}, "date": {"type": "datetime"},
+        })
+    detail = caught.value.as_dict()
+    assert detail["errorCount"] == 3
+    assert [(issue["field"], issue["rowNumber"]) for issue in detail["issues"]] == [("amount", 1), ("users", 2), ("date", None)]
+    assert detail["issues"][0]["rowKeys"] == {"id": "A"}
+    assert list(frame["amount"]) == ["bad", "12"]
+
+
+@pytest.mark.parametrize("make_frame", [pd.DataFrame, pl.DataFrame])
+def test_batch_success_returns_converted_copy(make_frame):
+    frame = make_frame({"amount": ["12", "3"], "users": ["2", None]})
+    assert hasattr(tools(), "validate")
+    result = tools().validate(frame, dataset="input", rules={
+        "amount": {"type": "numeric"}, "users": {"type": "integer", "null_policy": "fill", "default": 0},
+    })
+    assert type(result) is type(frame)
+    assert list(result["amount"]) == [12.0, 3.0]
+    assert list(result["users"]) == [2, 0]
+    assert list(frame["users"]) == ["2", None]
+
+
+def test_batch_limits_samples_globally_and_counts_bad_cells():
+    frame = pd.DataFrame({"amount": ["bad"] * 12, "users": [None] * 12})
+    assert hasattr(tools(), "validate")
+    with pytest.raises(ValueError) as caught:
+        tools().validate(frame, dataset="input", rules={"amount": {"type": "numeric"}, "users": {"type": "integer"}})
+    assert caught.value.as_dict()["errorCount"] == 24
+    assert len(caught.value.as_dict()["issues"]) == 10

@@ -1,6 +1,6 @@
 # Python 数据诊断工具
 
-DataAgent 内置 Worker 已提供 `diagnostics`，脚本可直接使用，也可以写 `from mateclaw import diagnostics`。无需新增服务或安装额外依赖。工具接收 pandas DataFrame；Polars 输入可先使用 `.to_pandas()` 转换。
+DataAgent 内置 Worker 已提供 `diagnostics`，脚本可直接使用，也可以写 `from mateclaw import diagnostics`。无需新增服务或安装额外依赖。工具直接接收 pandas 或 Polars DataFrame，返回与输入一致的表格/列类型。
 
 ```python
 # table_zb 是当前查询条件过滤后的输入，不重新请求数据源。
@@ -35,6 +35,31 @@ result = zb
 `null_policy` 支持 `error`（默认报错）、`keep`（保留空值）、`fill`（必须提供合法的非空 `default`）。工具返回转换后的 Series，不修改原 DataFrame；成功后由脚本显式赋值。
 
 `to_numeric` 输出 pandas `Float64`，适用于浮点数计算；需要精确整数的业务 ID、计数等使用 `to_integer`（输出 `Int64`），避免大整数浮点精度损失。
+
+## 一次检查多个字段（第二版）
+
+```python
+# table_zb 本身是 Polars DataFrame，可以直接传入，无需先转 pandas。
+# 所有字段都成功时返回转换后的新表；任何字段失败都不会修改原表。
+zb = diagnostics.validate(
+    table_zb,
+    dataset="table_zb",
+    row_keys=["platform_id", "channel"],
+    rules={
+        "amount": {"type": "numeric"},
+        "users": {"type": "integer", "null_policy": "fill", "default": 0},
+        "date": {"type": "datetime", "format": "%Y-%m-%d"},
+        "platform_id": {"type": "required"},
+    },
+)
+result = zb
+```
+
+`rules` 的 key 是字段名，`type` 支持 `numeric`、`integer`、`datetime`、`required`。转换字段支持第一版的空值策略和日期格式；`required` 仅做必填检查。Polars 单列转换返回 `pl.Series`，可通过 `frame.with_columns(diagnostics.to_integer(...))` 应用。
+
+批量错误按规则中的字段顺序汇总，每条样例增加 `field`，单次总共仍最多返回 10 条样例。`errorCount` 统计错误单元格数量（同一行两个字段失败计为 2）；缺少整个字段计为 1 个字段配置错误，并使用 `rowNumber=null`，不虚构记录行号。规则类型、参数名或空值默认值配置不合法时，报告配置异常，不把它当成坏数据。
+
+Polars 的数值与整数列分别返回 `pl.Float64` 和 `pl.Int64`，保留 null；只将当前转换列交给既有转换逻辑，不复制整个输入数据集。日期转换保留 pandas/Polars 日期操作能力。
 
 失败时抛出 `DataValidationError`，统计全部错误但最多展示前 10 条；行号按**当前输入顺序从 1 开始**，与 DataFrame index 无关。单个问题值预览最多 120 个字符，不返回整行数据。业务标识和值会显示给有权查看本次执行的用户，脚本应避免将密码、令牌等字段配置为 `row_keys`。
 

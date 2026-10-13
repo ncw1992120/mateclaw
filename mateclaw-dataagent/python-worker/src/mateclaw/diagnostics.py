@@ -1,9 +1,10 @@
-"""pandas 数据转换诊断：行号按当前输入顺序从 1 开始，最多返回 10 个错误样例。"""
+"""pandas/Polars 数据转换诊断：行号从 1 开始，单次最多返回 10 个错误样例。"""
 
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import pandas as pd
+import polars as pl
 
 
 class DataValidationError(ValueError):
@@ -51,13 +52,18 @@ def _integer(value: Any) -> int:
 
 
 def _convert(frame, *, dataset, field, row_keys, null_policy, default, converter, reason, dtype=None, null_value=pd.NA):
-    if not isinstance(frame, pd.DataFrame):
-        raise TypeError("diagnostics 需要 pandas DataFrame")
+    if not isinstance(frame, (pd.DataFrame, pl.DataFrame)):
+        raise TypeError("diagnostics 需要 pandas 或 Polars DataFrame")
+    polars_input = isinstance(frame, pl.DataFrame)
     if null_policy not in {"error", "keep", "fill"}:
         raise ValueError("null_policy 必须是 error、keep 或 fill")
     keys = list(row_keys or [])
     if len(keys) > 5:
         raise ValueError("row_keys 最多配置 5 个业务标识字段")
+    if field not in frame.columns:
+        raise DataValidationError(str(dataset), str(field), 1, [{
+            "rowNumber": None, "rowKeys": {}, "valuePreview": "（缺少字段）", "reason": "字段不存在",
+        }])
     for name in [field, *keys]:
         if name not in frame.columns:
             raise ValueError(f"数据集 {dataset} 缺少字段 {name}")
@@ -70,7 +76,8 @@ def _convert(frame, *, dataset, field, row_keys, null_policy, default, converter
         fill_value = converter(default)
     values, issues, error_count = [], [], 0
     # 不依赖 DataFrame index：即使 index 重复，也能准确报告当前数据第几行。
-    for position, value in enumerate(frame[field].tolist()):
+    source_values = frame[field].to_list() if polars_input else frame[field].tolist()
+    for position, value in enumerate(source_values):
         empty = _empty(value)
         try:
             if empty and null_policy == "error":
@@ -83,13 +90,15 @@ def _convert(frame, *, dataset, field, row_keys, null_policy, default, converter
             if len(issues) < 10:
                 issues.append({
                     "rowNumber": position + 1,
-                    "rowKeys": {key: str(frame[key].iloc[position])[:120] for key in keys},
+                    "rowKeys": {key: str(frame[key][position] if polars_input else frame[key].iloc[position])[:120] for key in keys},
                     "valuePreview": _preview(value),
                     "reason": "空值不允许" if empty else reason,
                 })
     if error_count:
         raise DataValidationError(str(dataset), str(field), error_count, issues)
-    return pd.Series(values, index=frame.index, name=field, dtype=dtype)
+    converted = pd.Series(values, index=None if polars_input else frame.index, name=field, dtype=dtype)
+    # 仅转换当前列，而不是复制整个 Polars 数据集；返回类型与输入一致。
+    return pl.from_pandas(converted) if polars_input else converted
 
 
 def to_numeric(frame, *, dataset, field, row_keys=None, null_policy="error", default=None):
@@ -117,5 +126,42 @@ def to_datetime(frame, *, dataset, field, row_keys=None, null_policy="error", de
 
 def required(frame, *, dataset, field, row_keys=None):
     """检查必填字段：None、NaN、NaT、空字符串和纯空格均视为空值。"""
-    return _convert(frame, dataset=dataset, field=field, row_keys=row_keys, null_policy="error",
-                    default=None, converter=lambda value: value, reason="必填字段不允许为空")
+    checked = _convert(frame, dataset=dataset, field=field, row_keys=row_keys, null_policy="error",
+                       default=None, converter=lambda value: value, reason="必填字段不允许为空")
+    return frame[field].clone() if isinstance(frame, pl.DataFrame) else checked
+
+
+def validate(frame, *, dataset, rules, row_keys=None):
+    """一次转换多个字段。全部成功才返回新表；错误按字段顺序汇总，不修改原表。"""
+    if not isinstance(frame, (pd.DataFrame, pl.DataFrame)):
+        raise TypeError("diagnostics 需要 pandas 或 Polars DataFrame")
+    if not isinstance(rules, dict) or not rules:
+        raise ValueError("rules 必须是非空字段规则字典")
+    converters = {"numeric": to_numeric, "integer": to_integer, "datetime": to_datetime, "required": required}
+    # 先检查全部规则，避免把拼错的转换类型当作数据错误。
+    for field, rule in rules.items():
+        if not isinstance(rule, dict) or rule.get("type") not in converters:
+            raise ValueError(f"字段 {field} 的 type 必须是 numeric、integer、datetime 或 required")
+        allowed = {"type"} if rule["type"] == "required" else {"type", "null_policy", "default"}
+        if rule["type"] == "datetime":
+            allowed.add("format")
+        if rule.keys() - allowed:
+            raise ValueError(f"字段 {field} 包含不支持的配置项")
+    converted, issues, fields, error_count = {}, [], [], 0
+    for field, rule in rules.items():
+        options = {key: value for key, value in rule.items() if key != "type"}
+        try:
+            converted[field] = converters[rule["type"]](frame, dataset=dataset, field=field, row_keys=row_keys, **options)
+        except DataValidationError as exc:
+            detail = exc.as_dict()
+            error_count += detail["errorCount"]
+            fields.append(str(field))
+            issues.extend({**issue, "field": str(field)[:240]} for issue in detail["issues"][:10 - len(issues)])
+    if error_count:
+        raise DataValidationError(str(dataset), ", ".join(fields), error_count, issues)
+    if isinstance(frame, pl.DataFrame):
+        return frame.with_columns(list(converted.values()))
+    result = frame.copy()
+    for field, values in converted.items():
+        result[field] = values
+    return result

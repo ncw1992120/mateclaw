@@ -427,11 +427,13 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                     int count = 0;
                     for (var issue : detail.path("issues")) {
                         if (count++ >= 10) break;
-                        summary += " row=" + issue.path("rowNumber").asInt()
+                        summary += (issue.hasNonNull("field") ? " issueField=" + safeDiagnosticLabel(issue.path("field").asText()) : "")
+                                + (issue.path("rowNumber").isIntegralNumber() ? " row=" + issue.path("rowNumber").asInt() : " scope=field")
                                 + " reason=" + safeDiagnosticLabel(issue.path("reason").asText());
                     }
                     // 业务 ID、问题值及 traceback 源码只在授权查询响应中返回，不写日志。
-                    return new PythonFailureLogDetails(detail.path("scriptLine").asText("unknown"), summary);
+                    int scriptLineNumber = detail.path("scriptLine").asInt(0);
+                    return new PythonFailureLogDetails(scriptLineNumber > 0 ? Integer.toString(scriptLineNumber) : "unknown", summary);
                 }
             } catch (Exception ignored) {
                 // 兼容旧 Worker 的普通 traceback。

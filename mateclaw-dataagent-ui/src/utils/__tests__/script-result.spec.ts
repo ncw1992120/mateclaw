@@ -43,6 +43,21 @@ function tableComponent() {
 }
 
 describe('parseScriptResultEnvelope', () => {
+  it('多字段诊断逐项标明字段，缺少字段时不虚构记录行号', () => {
+    const formatted = formatPythonExecutionError(JSON.stringify({
+      code: 'DATA_VALIDATION_ERROR',
+      errorDetails: { dataset: 'input', field: 'amount, users, date', scriptLine: 8, errorCount: 3, issues: [
+        { field: 'amount', rowNumber: 1, rowKeys: { id: 'A' }, valuePreview: "'bad'", reason: '无法转换为数字' },
+        { field: 'users', rowNumber: 2, rowKeys: { id: 'B' }, valuePreview: "'1.5'", reason: '无法转换为整数' },
+        { field: 'date', rowNumber: null, rowKeys: {}, valuePreview: '（缺少字段）', reason: '字段不存在' },
+      ] },
+    }))
+    expect(formatted.summary).toContain('字段 amount，第 1 行')
+    expect(formatted.summary).toContain('字段 users，第 2 行')
+    expect(formatted.summary).toContain('字段 date，字段配置')
+    expect(formatted.summary).not.toContain('第 null 行')
+  })
+
   it('结构化数据诊断显示字段、问题值和记录定位，并保留 traceback', () => {
     const error = {
       code: 'DATA_VALIDATION_ERROR', message: '2 条数据校验失败',
