@@ -52,7 +52,7 @@ export function getInputDescriptor(datasetId: string, inputName: string = 'datas
 }
 
 /** 使用统一 DatasetSourceAdapter 预览数据，并返回下推审计结果 */
-export function previewInput(request: DatasetReadRequest, requestOptions?: { timeout?: number }) {
+export function previewInput(request: DatasetReadRequest, requestOptions?: { timeout?: number; headers?: Record<string, string> }) {
   return api.post<DatasetBatch>(`${BASE_URL}/preview`, request, requestOptions)
 }
 
@@ -105,7 +105,7 @@ export interface DatasetComposerDraftRequest {
   parameters?: Record<string, unknown>
 }
 
-export function previewDraft(request: DatasetComposerDraftRequest, requestOptions?: { timeout?: number }) {
+export function previewDraft(request: DatasetComposerDraftRequest, requestOptions?: { timeout?: number; headers?: Record<string, string> }) {
   return api.post<DatasetBatch & { executionId?: string }>(
     '/dataagent/api/v1/dataset-composer/drafts/preview', request, requestOptions,
   )

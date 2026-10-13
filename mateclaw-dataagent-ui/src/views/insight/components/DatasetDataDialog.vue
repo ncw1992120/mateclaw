@@ -267,7 +267,10 @@
             >应用</button>
           </div>
           <div class="dd-result-actions">
-            <span class="dd-hint">{{ resultHint }}</span>
+            <span class="dd-hint" data-testid="dataset-query-performance">
+              {{ resultHint }}
+              <template v-if="performanceSummary"> · 请求 {{ performanceSummary.requestMs }}ms · 数据更新 {{ performanceSummary.dataApplyMs }}ms · 表格绘制 {{ performanceSummary.renderMs }}ms</template>
+            </span>
           </div>
         </div>
         <template v-if="!component || resultTab === 'raw'">
@@ -383,6 +386,7 @@ const componentValidationError = ref('')
 const resultTab = ref<'raw' | 'render'>('raw')
 const componentRenderData = shallowRef<InsightComponentData>()
 const elapsed = ref('')
+const performanceSummary = ref<{ requestMs: number; dataApplyMs: number; renderMs: number }>()
 const columns = ref<string[]>([])
 const rows = ref<Record<string, unknown>[]>([])
 const rawTableRows = computed(() => rows.value.map((row, index) => ({ ...row, __ddRowKey: index })))
@@ -751,6 +755,13 @@ const resultHint = computed(() => {
 
 async function fetchRows(reset: boolean): Promise<void> {
   const requestSignature = currentSignature.value
+  const performanceId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  const performanceStartedAt = performance.now()
+  let responseReceivedAt: number | undefined
+  let dataAppliedAt: number | undefined
+  let performanceRowCount = 0
+  let performanceColumnCount = 0
+  performanceSummary.value = undefined
   loading.value = true
   error.value = ''
   if (reset) {
@@ -827,7 +838,7 @@ async function fetchRows(reset: boolean): Promise<void> {
           offset,
           parameters,
           ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
-        }, { timeout: 0 })
+        }, { timeout: 0, headers: { 'X-Perf-Id': performanceId } })
       : await previewDatasetDraft({
           ...request,
           columns: requestedColumns,
@@ -837,15 +848,18 @@ async function fetchRows(reset: boolean): Promise<void> {
           limit,
           offset,
           ...(hasTimeFilterRows.value ? { timeGranularity: timeGranularity.value } : {}),
-        }, { timeout: 0 })
+        }, { timeout: 0, headers: { 'X-Perf-Id': performanceId } })
+    responseReceivedAt = performance.now()
     // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
     if (currentRequest !== requestSequence) return
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
+    performanceRowCount = nextRows.length
     rows.value = paginationEnabled.value || reset ? nextRows : [...rows.value, ...nextRows]
     if (reset) {
       columns.value = hasConfiguredDisplayFields
         ? requestedColumns
         : batch.schema?.length ? batch.schema : nextRows.length ? Object.keys(nextRows[0]) : []
+      performanceColumnCount = columns.value.length
       queriedAt.value = Date.now()
     }
     queriedSignature.value = requestSignature
@@ -879,6 +893,7 @@ async function fetchRows(reset: boolean): Promise<void> {
       await nextTick()
       if (scrollRef.value) scrollRef.value.scrollTop = 0
     }
+    dataAppliedAt = performance.now()
   } catch (e) {
     error.value = (e as Error)?.message || '查询失败'
     if (reset) componentValidationError.value = ''
@@ -888,6 +903,26 @@ async function fetchRows(reset: boolean): Promise<void> {
     }
   } finally {
     loading.value = false
+  }
+  if (responseReceivedAt !== undefined && dataAppliedAt !== undefined) {
+    await nextTick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())))
+    const paintedAt = performance.now()
+    console.info('[dataset-query-perf]', {
+      requestId: performanceId,
+      requestMs: Math.round(responseReceivedAt - performanceStartedAt),
+      dataApplyMs: Math.round(dataAppliedAt - responseReceivedAt),
+      renderMs: Math.round(paintedAt - dataAppliedAt),
+      totalMs: Math.round(paintedAt - performanceStartedAt),
+      rows: performanceRowCount,
+      columns: performanceColumnCount,
+      cells: performanceRowCount * performanceColumnCount,
+    })
+    performanceSummary.value = {
+      requestMs: Math.round(responseReceivedAt - performanceStartedAt),
+      dataApplyMs: Math.round(dataAppliedAt - responseReceivedAt),
+      renderMs: Math.round(paintedAt - dataAppliedAt),
+    }
   }
 }
 

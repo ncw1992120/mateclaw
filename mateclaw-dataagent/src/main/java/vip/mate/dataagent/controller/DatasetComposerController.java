@@ -6,6 +6,8 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
@@ -53,6 +55,7 @@ import java.net.URI;
 @RestController
 @RequestMapping("/v1/dataset-composer")
 @RequiredArgsConstructor
+@Slf4j
 @Tag(name = "数据集编排")
 public class DatasetComposerController {
     /**
@@ -71,16 +74,38 @@ public class DatasetComposerController {
     private final FileDatasetAdapter fileDatasetAdapter;
     private final AloudataAnalysisViewAdapter aloudataViewAdapter;
 
+    public R<Map<String, Object>> preview(@RequestBody DraftRequest request) {
+        return preview(request, null);
+    }
+
     @PostMapping("/drafts/preview")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "预览数据集来源草稿")
-    public R<Map<String, Object>> preview(@RequestBody DraftRequest request) {
+    public R<Map<String, Object>> preview(@RequestBody DraftRequest request, HttpServletRequest servletRequest) {
+        long startedAt = System.nanoTime();
         validate(request, true);
         if ("JDBC_SQL".equalsIgnoreCase(request.sourceType)) return R.ok(previewJdbc(request));
-        if ("ALOUDATA_METRICS".equalsIgnoreCase(request.sourceType)) return R.ok(previewAloudataMetrics(request));
+        if ("ALOUDATA_METRICS".equalsIgnoreCase(request.sourceType)) {
+            String performanceId = servletRequest == null ? null : performanceId(servletRequest.getHeader("X-Perf-Id"));
+            Map<String, Object> result = previewAloudataMetrics(request, performanceId);
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=backend-response backendTotalMs={} rows={} columns={} metricCount={} dimensionCount={} limit={}",
+                        performanceId, elapsedMs(startedAt), result.get("rowCount"), sizeOf(result.get("schema")),
+                        metricCount(request), dimensionCount(request), request.limit);
+            }
+            return R.ok(result);
+        }
         if ("HTTP_API".equalsIgnoreCase(request.sourceType)) return R.ok(previewHttpApi(request));
         if ("FILE".equalsIgnoreCase(request.sourceType)) return R.ok(previewFile(request));
-        if ("ALOUDATA_ANALYSIS_VIEW".equalsIgnoreCase(request.sourceType)) return R.ok(previewAloudataView(request));
+        if ("ALOUDATA_ANALYSIS_VIEW".equalsIgnoreCase(request.sourceType)) {
+            String performanceId = servletRequest == null ? null : performanceId(servletRequest.getHeader("X-Perf-Id"));
+            Map<String, Object> result = previewAloudataView(request, performanceId);
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=backend-response backendTotalMs={} rows={} columns={} sourceType={}",
+                        performanceId, elapsedMs(startedAt), result.get("rowCount"), sizeOf(result.get("schema")), request.sourceType);
+            }
+            return R.ok(result);
+        }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", List.of());
         result.put("schema", List.of());
@@ -90,7 +115,7 @@ public class DatasetComposerController {
         return R.ok(result);
     }
 
-    private Map<String, Object> previewAloudataMetrics(DraftRequest request) {
+    private Map<String, Object> previewAloudataMetrics(DraftRequest request, String performanceId) {
         Map<String, Object> config = request.sourceConfig == null ? Map.of() : request.sourceConfig;
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
         List<String> metrics = requestedFields(strings(config.get("metrics")), request.columns);
@@ -119,11 +144,20 @@ public class DatasetComposerController {
         int offset = Math.max(request.offset == null ? 0 : request.offset, 0);
         query.setLimit(limit); query.setOffset(offset);
         query.setIsQueryTotalCount(request.requestTotalCount);
+        long aloudataStartedAt = System.nanoTime();
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(longId(request.datasourceId), query);
+        long aloudataQueryMs = elapsedMs(aloudataStartedAt);
         if (response != null && response.hasBusinessFailure()) {
             throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, response.failureDescription());
         }
+        long conversionStartedAt = System.nanoTime();
         List<Map<String, Object>> rows = AloudataMetricRows.from(response);
+        long rowConvertMs = elapsedMs(conversionStartedAt);
+        if (performanceId != null) {
+            log.info("[dataset-query-perf] requestId={} stage=aloudata-query aloudataQueryMs={} rowConvertMs={} rows={} columns={} metricCount={} dimensionCount={} limit={} offset={}",
+                    performanceId, aloudataQueryMs, rowConvertMs, rows.size(), rows.isEmpty() ? sizeOf(request.columns) : rows.getFirst().size(),
+                    metrics.size(), dimensions.size(), limit, offset);
+        }
         Long total = response != null && response.getData() != null ? response.getData().getTotal() : null;
         boolean hasNext = total != null ? offset + rows.size() < total : rows.size() >= limit;
         Map<String, Object> result = new LinkedHashMap<>();
@@ -133,6 +167,26 @@ public class DatasetComposerController {
         result.put("pushdownReport", Map.of("pushedFilters", request.filters == null ? List.of() : request.filters,
                 "residualFilters", List.of())); result.put("executionId", "draft-" + UUID.randomUUID());
         return result;
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000;
+    }
+
+    private static String performanceId(String value) {
+        return value != null && value.matches("[\\w-]{8,64}") ? value : null;
+    }
+
+    private static int sizeOf(Object value) {
+        return value instanceof Collection<?> collection ? collection.size() : 0;
+    }
+
+    private int metricCount(DraftRequest request) {
+        return request.sourceConfig == null ? 0 : strings(request.sourceConfig.get("metrics")).size();
+    }
+
+    private int dimensionCount(DraftRequest request) {
+        return request.sourceConfig == null ? 0 : strings(request.sourceConfig.get("dimensions")).size();
     }
 
     private Map<String, Object> previewHttpApi(DraftRequest request) {
@@ -195,7 +249,7 @@ public class DatasetComposerController {
         return result;
     }
 
-    private Map<String, Object> previewAloudataView(DraftRequest request) {
+    private Map<String, Object> previewAloudataView(DraftRequest request, String performanceId) {
         Map<String, Object> config = request.sourceConfig == null ? Map.of() : request.sourceConfig;
         String view = String.valueOf(config.getOrDefault("analysisViewId", "")).trim();
         if (view.isBlank()) throw new IllegalArgumentException("analysisViewId is required");
@@ -211,7 +265,8 @@ public class DatasetComposerController {
                 // adapter.previewDraft 只消费 filters/limit，不读取 datasetId。
                 new vip.mate.dataagent.dataset.DatasetReadRequest(1L, "draft", request.columns, toFilters(request.filters),
                         toOrders(request.orders), Math.min(request.limit == null ? 20 : request.limit, MAX_DRAFT_PAGE_SIZE),
-                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount, request.timeGranularity));
+                        request.offset == null ? 0 : request.offset, request.parameters, request.requestTotalCount, request.timeGranularity),
+                performanceId);
         List<Map<String,Object>> rows = batch.rows() == null ? List.of() : batch.rows();
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("rows", rows); result.put("schema", rows.isEmpty() ? request.columns : new ArrayList<>(rows.getFirst().keySet()));

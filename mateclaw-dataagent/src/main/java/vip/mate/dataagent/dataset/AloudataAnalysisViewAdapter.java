@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
@@ -90,7 +91,11 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                     request.requestTotalCount(), null);
         }
         try {
+            String performanceId = MDC.get("dataset-query-perf-id");
+            long aloudataStartedAt = System.nanoTime();
             ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
+            long aloudataQueryMs = (System.nanoTime() - aloudataStartedAt) / 1_000_000;
+            long conversionStartedAt = System.nanoTime();
             Map<String, Object> body = response == null || response.getBody() == null
                     ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
             String code = string(body, "code");
@@ -108,6 +113,12 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
             Long total = totalCount(body);
             int offset = request.offset() == null ? 0 : request.offset();
             boolean hasNext = total == null ? rows.size() >= limit : offset + rows.size() < total;
+            long rowConvertMs = (System.nanoTime() - conversionStartedAt) / 1_000_000;
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=aloudata-query endpoint={} aloudataQueryMs={} rowConvertMs={} rows={} columns={} metricCount={} dimensionCount={} limit={}",
+                        performanceId, endpoint, aloudataQueryMs, rowConvertMs, rows.size(), rows.isEmpty() ? request.columns().size() : rows.getFirst().size(),
+                        sizeOf(params.get("metrics")), sizeOf(params.get("dimensions")), limit);
+            }
             return new DatasetBatch(rows, null, rows.size(), !hasNext, report, total);
         } catch (DatasetReadException e) {
             throw e;
@@ -128,6 +139,11 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
 
     /** 草稿视图预览：沿用正式读取的 Aloudata 查询端点，但不依赖已落库 DatasetEntity。 */
     public DatasetBatch previewDraft(DatasetAccessContext context, Long datasourceId, String viewName, DatasetReadRequest request) {
+        return previewDraft(context, datasourceId, viewName, request, null);
+    }
+
+    public DatasetBatch previewDraft(DatasetAccessContext context, Long datasourceId, String viewName,
+                                     DatasetReadRequest request, String performanceId) {
         if (context == null || datasourceId == null || viewName == null || viewName.isBlank())
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "Aloudata 指标视图参数不完整");
         DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
@@ -158,15 +174,24 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
                     request.requestTotalCount(), null);
         }
         try {
+            long aloudataStartedAt = System.nanoTime();
             ResponseEntity<Map> response = apiClient.callWithParams(endpoint, configHelper.parseConfig(datasource), params);
+            long aloudataQueryMs = (System.nanoTime() - aloudataStartedAt) / 1_000_000;
             Map<String, Object> body = response == null || response.getBody() == null ? Map.of() : objectMapper.convertValue(response.getBody(), new TypeReference<>() {});
             String code = string(body, "code");
             if ("SM_02_0038".equals(code)) throw new DatasetReadException(DatasetReadErrorCode.ACCESS_DENIED, "当前账号无权访问该指标视图，请在 Aloudata 指标平台为该账号授予该视图的权限（VIEW_ACCESS_DENIED）");
             if (Boolean.FALSE.equals(body.get("success"))) throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE,
                     Optional.ofNullable(string(body, "message", "errorMsg")).orElse("Aloudata 请求失败"));
+            long conversionStartedAt = System.nanoTime();
             List<Map<String,Object>> rows = rows(body);
             if (queryHasProjection) {
                 rows = projectRows(rows, queryCompiler.resolveColumns(view, request.columns()));
+            }
+            long rowConvertMs = (System.nanoTime() - conversionStartedAt) / 1_000_000;
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=aloudata-query endpoint={} aloudataQueryMs={} rowConvertMs={} rows={} columns={} metricCount={} dimensionCount={} limit={}",
+                        performanceId, endpoint, aloudataQueryMs, rowConvertMs, rows.size(), rows.isEmpty() ? request.columns().size() : rows.getFirst().size(),
+                        sizeOf(params.get("metrics")), sizeOf(params.get("dimensions")), limit);
             }
             Long total = totalCount(body);
             int offset = request.offset() == null ? 0 : request.offset();
@@ -175,6 +200,10 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
         } catch (DatasetReadException e) { throw e; }
         catch (ResourceAccessException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_TIMEOUT, "Aloudata 请求超时", e); }
         catch (RestClientException e) { throw new DatasetReadException(DatasetReadErrorCode.SOURCE_UNAVAILABLE, "Aloudata 服务不可用", e); }
+    }
+
+    private int sizeOf(Object value) {
+        return value instanceof Collection<?> collection ? collection.size() : 0;
     }
 
     private DatasetEntity requireDataset(DatasetAccessContext context, long datasetId) {

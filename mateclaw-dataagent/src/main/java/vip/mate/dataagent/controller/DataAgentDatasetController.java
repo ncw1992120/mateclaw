@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
@@ -16,6 +17,7 @@ import vip.mate.dataagent.dataset.*;
 
 import java.util.List;
 import java.util.Map;
+import org.slf4j.MDC;
 
 /**
  * 数据集管理控制器
@@ -25,6 +27,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/datasets")
 @RequiredArgsConstructor
+@Slf4j
 @Tag(name = "数据集管理", description = "数据集 CRUD、数据查询与行级操作接口")
 public class DataAgentDatasetController {
 
@@ -42,12 +45,30 @@ public class DataAgentDatasetController {
         return R.ok(executionService.descriptor(context, id, inputName));
     }
 
+    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request) {
+        return preview(request, null);
+    }
+
     @PostMapping("/preview")
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
     @Operation(summary = "预览统一数据集", description = "通过统一 DatasetSourceAdapter 读取并返回受控预览")
-    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request) {
+    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
+        long startedAt = System.nanoTime();
+        String performanceId = servletRequest == null ? null : servletRequest.getHeader("X-Perf-Id");
+        if (performanceId != null && !performanceId.matches("[\\w-]{8,64}")) performanceId = null;
         DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
-        return R.ok(executionService.preview(context, request));
+        try {
+            if (performanceId != null) MDC.put("dataset-query-perf-id", performanceId);
+            DatasetBatch batch = executionService.preview(context, request);
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=backend-response backendTotalMs={} rows={} columns={} source=dataset-preview",
+                        performanceId, (System.nanoTime() - startedAt) / 1_000_000,
+                        batch.rows() == null ? 0 : batch.rows().size(), batch.rows() == null || batch.rows().isEmpty() ? 0 : batch.rows().getFirst().size());
+            }
+            return R.ok(batch);
+        } finally {
+            MDC.remove("dataset-query-perf-id");
+        }
     }
 
     /**

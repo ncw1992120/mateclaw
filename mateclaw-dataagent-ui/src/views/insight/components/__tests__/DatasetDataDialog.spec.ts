@@ -188,7 +188,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
         { field: 'status', role: 'dimension', operator: 'eq', value: 'ACTIVE' },
         { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
       ],
-    }), { timeout: 0 })
+    }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     wrapper.unmount()
   })
 
@@ -251,6 +251,35 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     wrapper.unmount()
   })
 
+  it('查询完成后记录同一请求的接口与表格绘制耗时', async () => {
+    const log = vi.spyOn(console, 'info').mockImplementation(() => {})
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      callback(performance.now())
+      return 1
+    })
+    const wrapper = await openWith(metricViewDataset())
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    const requestOptions = previewDatasetDraft.mock.calls.at(-1)?.[1] as { headers?: Record<string, string> }
+    const event = log.mock.calls.filter(([name]) => name === '[dataset-query-perf]').at(-1)?.[1] as Record<string, unknown> | undefined
+    expect(requestOptions.headers?.['X-Perf-Id']).toMatch(/^[\w-]{8,64}$/)
+    expect(event).toMatchObject({
+      requestId: requestOptions.headers?.['X-Perf-Id'],
+      rows: 1,
+    })
+    expect(event?.columns).toEqual(expect.any(Number))
+    expect(event?.cells).toBe(event?.columns)
+    expect(event?.requestMs).toEqual(expect.any(Number))
+    expect(event?.renderMs).toEqual(expect.any(Number))
+    expect(event?.totalMs).toEqual(expect.any(Number))
+
+    wrapper.unmount()
+    log.mockRestore()
+    vi.unstubAllGlobals()
+  })
+
   it('已落库的 Aloudata 指标维度配置按当前选择发起草稿查询并遵从展示字段', async () => {
     const dataset = metricViewDataset({
       backendDatasetId: '123',
@@ -279,7 +308,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
       sourceType: 'ALOUDATA_METRICS',
       sourceConfig: expect.objectContaining({ metrics: ['new_metric', 'hidden_metric'], dimensions: ['new_dimension'] }),
       columns: ['new_dimension', 'new_metric'],
-    }), { timeout: 0 })
+    }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     wrapper.unmount()
   })
 
@@ -345,7 +374,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ requestTotalCount: true }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ requestTotalCount: true }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     expect(wrapper.get('[data-testid="component-preview-validation"]').text()).toContain('返回 2 行')
     expect(wrapper.emitted('render')).toBeUndefined()
     wrapper.unmount()
@@ -532,7 +561,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
         columns: ['trade_date', 'cust_type', 'amount'],
         filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '机构' }],
-      }), { timeout: 0 })
+      }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
       expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
         componentId: 'table-no-bindings',
         table: { columns: ['trade_date', 'cust_type', 'amount'] },
@@ -569,7 +598,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     await flushPromises()
 
     await wrapper.get('[data-testid="component-render"]').trigger('click')
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ columns: ['trade_date', 'cust_type', 'amount'] }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
       componentId: 'table-first-open',
       table: { columns: ['trade_date', 'cust_type', 'amount'] },
@@ -977,11 +1006,11 @@ describe('查看数据弹窗 · 限制条数', () => {
 
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
 
     await wrapper.get('[data-testid="end-reached"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 30, offset: 50 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 30, offset: 50 }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     expect(wrapper.get('.dd-result-actions').text()).not.toContain('可滚动加载更多')
     expect(getCachedQuery('ds-1')).toMatchObject({ rows: expect.arrayContaining([{ trade_date: '2026-09-01' }]), hasMore: true })
     expect(getCachedQuery('ds-1')?.rows).toHaveLength(50)
@@ -989,7 +1018,7 @@ describe('查看数据弹窗 · 限制条数', () => {
     await limitInput.setValue('200000')
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 50, offset: 0 }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     wrapper.unmount()
   })
 
@@ -1004,7 +1033,7 @@ describe('查看数据弹窗 · 限制条数', () => {
     expect(wrapper.get('[data-testid="query-limit"]').attributes('disabled')).toBeDefined()
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 5, offset: 0 }), { timeout: 0 })
+    expect(previewDatasetDraft).toHaveBeenLastCalledWith(expect.objectContaining({ limit: 5, offset: 0 }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
     wrapper.unmount()
   })
 })
