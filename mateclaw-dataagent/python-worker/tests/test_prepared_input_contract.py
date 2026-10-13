@@ -13,6 +13,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
+import polars as pl
 
 from mateclaw.datasets import DatasetClient
 from mateclaw.types import DatasetInput, PreparedInputExpiredError, ResourceLimitError
@@ -106,6 +107,21 @@ def test_input_request_only_carries_input_name(server):
     polars = frame.to_polars()
     assert polars.height == 2
     assert polars["in_account"].sum() == 200.5
+
+
+def test_to_polars_infers_mixed_column_types_from_all_rows():
+    rows = tuple(
+        [{"amount": index, "mixed": index} for index in range(100)]
+        + [{"amount": 33.5, "mixed": "late value"}]
+    )
+    frame = DatasetInput("mixed_input", (), rows)
+
+    polars = frame.to_polars()
+
+    assert polars.schema["amount"].is_float()
+    assert polars["amount"][-1] == 33.5
+    assert polars.schema["mixed"] == pl.String
+    assert polars["mixed"][-1] == "late value"
 
 
 def test_input_empty_result_is_valid(server):

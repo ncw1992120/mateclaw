@@ -76,7 +76,10 @@ class DatasetInput:
 
     def to_polars(self):
         import polars as pl
-        return pl.DataFrame(self._materialized_rows())
+        # 默认只抽样前 100 行推断 schema。后续行若出现浮点数或字符串等
+        # 同列混合类型，会在构造阶段触发 ComputeError。输入已经完整物化，
+        # 因此扫描全部行推断每列的兼容类型，避免把后续合法值误判为建表错误。
+        return pl.DataFrame(self._materialized_rows(), infer_schema_length=None)
 
     def iter_batches(self, batch_size: int = 10_000):
         if batch_size <= 0: raise ValueError("batch_size must be positive")

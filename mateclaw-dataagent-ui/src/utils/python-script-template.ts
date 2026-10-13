@@ -20,8 +20,9 @@ export function buildPythonEditorDocument(
   userCode = '',
   samplesByInputName: Record<string, Record<string, unknown>[]> = {},
   includeDataExamples = true,
+  editableSystemCode?: string,
 ): string {
-  const system = buildSystemScript(source.inputs, [], source.bindings, undefined, samplesByInputName, source.queryParameters, includeDataExamples)
+  const system = (editableSystemCode ?? buildSystemScript(source.inputs, [], source.bindings, undefined, samplesByInputName, source.queryParameters, includeDataExamples))
     .replace(SYSTEM_SCRIPT_START, includeDataExamples ? '# ===== 造数示例与上游数据读取 =====' : '# ===== 系统生成区域：上游输入数据读取 =====')
     .replace(SYSTEM_SCRIPT_END, '# ===== 数据读取结束 =====')
   const outputExample = source.outputContract?.example

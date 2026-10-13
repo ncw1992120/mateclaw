@@ -409,6 +409,35 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     wrapper.unmount()
   })
 
+  it('编辑数据集读取方式后保存，重新打开仍回显用户修改的系统读取代码', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: true, schemaFingerprint: 'schema-1', displayFields: [], filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    const wrapper = await mountDialog()
+    const editor = wrapper.get('[data-testid="python-editor-code"]')
+    const customRead = [
+      '# ===== 系统生成区域：上游输入数据读取 =====',
+      'if "dataset_a" not in locals():',
+      '    dataset_a = datasets.input(input_name="dataset_a").to_pandas()',
+      '# ===== 数据读取结束 =====',
+    ].join('\n')
+    await editor.setValue((editor.element as HTMLTextAreaElement).value.replace(
+      /# ===== 系统生成区域：上游输入数据读取 =====[\s\S]*?# ===== 数据读取结束 =====/,
+      customRead,
+    ))
+    await wrapper.find('[data-testid="python-editor-save"]').trigger('click')
+
+    expect(state.pythonSystemState?.mode).toBe('managed')
+    expect(state.pythonSystemState?.managedCode).toContain('.to_pandas()')
+
+    state.ui.python.visible = true
+    await nextTick()
+    expect((wrapper.get('[data-testid="python-editor-code"]').element as HTMLTextAreaElement).value).toContain('.to_pandas()')
+    wrapper.unmount()
+  })
+
   it('卡片切换不串状态：A managed / B generated 互不影响', () => {
     const userMarker = '# ===== 用户处理区域 ====='
     const compA = writeComponentDatasetPipeline(

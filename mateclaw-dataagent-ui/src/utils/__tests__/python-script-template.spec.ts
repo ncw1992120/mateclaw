@@ -108,6 +108,20 @@ describe('python script system state', () => {
     expect(document).toContain('result = table_zb')
   })
 
+  it('uses the saved editable dataset-read region instead of regenerating over user changes', () => {
+    const savedSystem = [
+      '# ===== 系统生成区域：上游输入数据读取 =====',
+      'if "table_ab" not in locals():',
+      '    table_ab = datasets.input(input_name="table_ab").to_pandas()',
+      '# ===== 数据读取结束 =====',
+    ].join('\n')
+    const document = buildPythonEditorDocument(source, 'result = dataset_a', {}, false, savedSystem)
+
+    expect(document).toContain('table_ab = datasets.input(input_name="table_ab").to_pandas()')
+    expect(document).not.toContain('dataset_a = datasets.input(')
+    expect(parsePythonEditorDocument(document).systemCode).toContain('.to_pandas()')
+  })
+
   it('没有真实查询行时不再用字段映射伪造 schema 造数', () => {
     const document = buildPythonEditorDocument({
       inputs: [{

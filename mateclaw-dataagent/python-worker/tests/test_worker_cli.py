@@ -115,16 +115,11 @@ def test_worker_locates_user_code_and_retains_multiline_polars_exception(tmp_pat
     assert error["errorContext"]["sourceLines"][-1] == {"line": 4, "code": "result = pl.DataFrame(rows)"}
 
 
-def test_worker_identifies_sdk_input_conversion_without_dumping_frame_locals(tmp_path):
+def test_worker_converts_mixed_sdk_input_without_polars_schema_failure(tmp_path):
     script = "from mateclaw.types import DatasetInput\nrows = tuple([{'amount': 1}] * 100 + [{'amount': 'abc'}])\nresult = DatasetInput('upstream_zb', (), rows).to_polars()\n# ===== 用户处理区域 ====="
     _, response = run_worker(tmp_path, task_request(script))
-    assert response["error"].startswith("{"), "Worker must return upstream conversion context"
-    error = json.loads(response["error"])
-    assert error["errorContext"]["inputName"] == "upstream_zb"
-    assert error["errorContext"]["conversion"] == "Polars"
-    assert error["errorContext"]["region"] == "system"
-    assert error["errorContext"]["scriptLine"] == 3
-    assert "locals" not in error["errorContext"]
+    assert response["status"] == "SUCCEEDED"
+    assert response["result"]["data"]["rows"][-1] == {"amount": "abc"}
 
 
 def test_worker_reads_prepared_dataset_input(tmp_path):

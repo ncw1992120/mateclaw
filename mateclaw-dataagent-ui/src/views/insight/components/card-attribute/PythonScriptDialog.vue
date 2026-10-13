@@ -71,7 +71,7 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight, currentPythonSource } from './useInsight'
-import { buildPythonEditorDocument, parsePythonEditorDocument } from '@/utils/python-script-template'
+import { buildPythonEditorDocument, effectiveSystemCode, parsePythonEditorDocument } from '@/utils/python-script-template'
 import type { FinalResultQueryConfig, QueryDisplayField } from '@/types'
 import { isFinalResultQueryConfigured, sortDisplayFieldsDimensionsFirst } from '@/utils/final-result-query'
 import { highlightPython } from '@/utils/python-syntax'
@@ -124,7 +124,11 @@ function loadEditorDocument(): void {
   sampleWarnings.value = []
   samplesLoaded.value = false
   sampleLoading.value = false
-  editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, {}, false)
+  // 只有用户接管过的系统读取区需要原样回显；generated 模式始终按最新数据集配置重新生成。
+  const editableSystemCode = state.pythonSystemState?.mode === 'managed'
+    ? effectiveSystemCode(state.pythonSystemState)
+    : undefined
+  editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, {}, false, editableSystemCode)
   void nextTick(bindEditorScroll)
 }
 
