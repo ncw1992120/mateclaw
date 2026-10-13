@@ -1387,6 +1387,8 @@ export interface KpiMetricConfig {
   unit: string
   /** 辅助说明（固定文本，用户可编辑） */
   helperText: string
+  /** 指标卡片数值单位缩放；未配置时默认自动缩放。 */
+  valueUnitMode?: 'auto' | 'none'
   /** 是否在卡片中展示 */
   visible: boolean
   /** 自由布局：距卡片内容区左侧 px */

@@ -109,6 +109,20 @@ export function styleToCss(style: KpiMetricFieldStyle, themeColor?: string): str
   return `font-size:${style.size}px;color:${color};font-family:${family};font-weight:${style.bold || 'normal'};`
 }
 
+/** 仅供指标卡片使用：将数值按万 / 亿压缩显示，不改写查询结果。 */
+export function formatKpiValue(value: string | number | null | undefined, mode: 'auto' | 'none' = 'auto'): string {
+  const original = value == null ? '--' : String(value)
+  if (mode === 'none' || !original.trim()) return original
+
+  const numericValue = Number(original.replaceAll(',', '').trim())
+  if (!Number.isFinite(numericValue)) return original
+
+  const absoluteValue = Math.abs(numericValue)
+  if (absoluteValue >= 100_000_000) return `${(numericValue / 100_000_000).toFixed(2)}亿`
+  if (absoluteValue >= 10_000) return `${(numericValue / 10_000).toFixed(2)}万`
+  return original
+}
+
 /** 解析指标的图标、强调色和四个文字字段颜色；不访问数据源。
  * 强调色默认取区域主色（同一张卡内所有指标同色）：一卡跑五个色系是纯噪声，
  * 第三个色号只由用户在指标样式弹窗里显式 custom 产生。图标仍按序号轮转做形状区分。 */

@@ -9,6 +9,7 @@ import {
   cloneStyles,
   defaultMetricLayout,
   defaultMetricStyles,
+  formatKpiValue,
   hasMetricLayoutConflict,
   isDefaultMetricFontSize,
   isMachineMetricLayout,
@@ -27,6 +28,25 @@ const schema: DatasetFieldMeta[] = [
   { name: 'sent_count', displayName: '下发策略数' },
   { name: 'touch_rate', displayName: '触达率' },
 ]
+
+describe('kpi-metrics · 指标值单位换算', () => {
+  it.each([
+    ['9999', '9999'],
+    ['10000', '1.00万'],
+    ['23450', '2.35万'],
+    ['99999999', '10000.00万'],
+    ['100000000', '1.00亿'],
+    ['-234500', '-23.45万'],
+    ['12.5', '12.5'],
+  ])('formats %s as %s', (value, expected) => {
+    expect(formatKpiValue(value)).toBe(expected)
+  })
+
+  it('leaves non-numeric and explicitly unscaled values unchanged', () => {
+    expect(formatKpiValue('N/A')).toBe('N/A')
+    expect(formatKpiValue('23450', 'none')).toBe('23450')
+  })
+})
 
 describe('kpi-metrics · 默认样式', () => {
   it('指标值默认加粗，其余常规', () => {

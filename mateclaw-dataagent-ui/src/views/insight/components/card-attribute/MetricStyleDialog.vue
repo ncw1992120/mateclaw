@@ -73,6 +73,18 @@
             aria-label="辅助说明"
             data-testid="metric-helper-text"
           />
+          <label class="ms-meta-label" for="metric-value-unit-auto">数值缩放</label>
+          <div class="ms-unit-mode">
+            <el-switch
+              id="metric-value-unit-auto"
+              :model-value="metric.valueUnitMode !== 'none'"
+              active-text="自动换算"
+              aria-label="指标值自动换算"
+              data-testid="kpi-value-unit-auto"
+              @update:model-value="updateValueUnitMode"
+            />
+            <span class="ms-unit-hint">≥1万显示为万，≥1亿显示为亿</span>
+          </div>
         </div>
         <div class="ms-section-title">字段样式</div>
         <div v-for="field in KPI_METRIC_FIELDS" :key="field" class="ms-style-row">
@@ -163,6 +175,10 @@ function updateUnit(value: string) {
   if (metric.value) setFieldUnit(metric.value.fieldKey, value)
 }
 
+function updateValueUnitMode(enabled: boolean) {
+  if (metric.value) metric.value.valueUnitMode = enabled ? 'auto' : 'none'
+}
+
 function selectIcon(iconKey: string) {
   if (!metric.value) return
   metric.value.visual ??= { colorMode: 'theme' }
@@ -204,6 +220,7 @@ function resetMetric() {
   if (!metric.value) return
   metric.value.styles = defaultMetricStyles()
   metric.value.visual = { iconKey: undefined, colorMode: 'theme' }
+  metric.value.valueUnitMode = 'auto'
   iconEnabled.value = true
   ElMessage.success('已恢复跟随主题')
 }
@@ -252,6 +269,17 @@ function syncMetricStyles() {
 .ms-meta-label {
   color: var(--el-text-color-regular);
   font-size: 13px;
+}
+.ms-unit-mode {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.ms-unit-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
 }
 .ms-icon-row {
   display: flex;

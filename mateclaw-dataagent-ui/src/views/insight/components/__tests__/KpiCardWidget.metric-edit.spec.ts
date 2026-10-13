@@ -69,6 +69,25 @@ describe('KpiCardWidget · 画布指标编辑', () => {
     wrapper.unmount()
   })
 
+  it('仅在指标卡片自动换算大数值，关闭后显示原值', () => {
+    const source = metric('revenue', 0, 0)
+    const componentData = {
+      componentId: 'kpi-card',
+      renderType: 'kpi',
+      kpi: { fieldKey: 'revenue', name: 'REVENUE', value: '234500' },
+      kpiList: [{ fieldKey: 'revenue', name: 'REVENUE', value: '234500' }],
+    } as unknown as InsightComponentData
+    const first = mountWidget([source], componentData)
+
+    expect(first.wrapper.get('.kpi-metric-value').text()).toBe('23.45万')
+    first.wrapper.unmount()
+
+    source.valueUnitMode = 'none'
+    const second = mountWidget([source], componentData)
+    expect(second.wrapper.get('.kpi-metric-value').text()).toBe('234500')
+    second.wrapper.unmount()
+  })
+
   it('查询结果缺少已配置指标时，不将第一项指标值复用到缺失指标', () => {
     const metrics = [metric('old-field', 0, 0), metric('field-a', 160, 0), metric('field-b', 320, 0), metric('field-c', 480, 0)]
     const componentData = {

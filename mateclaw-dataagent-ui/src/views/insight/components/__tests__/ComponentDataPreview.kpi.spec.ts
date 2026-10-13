@@ -40,7 +40,7 @@ describe('ComponentDataPreview · KPI 输出字段投影', () => {
 
     expect(wrapper.findAll('.kpi-metric')).toHaveLength(2)
     expect(wrapper.findAll('.kpi-metric-name').map((node) => node.text())).toEqual(['转化规模', '转化人数'])
-    expect(wrapper.findAll('.kpi-metric-value').map((node) => node.text())).toEqual(['27948000', '2964'])
+    expect(wrapper.findAll('.kpi-metric-value').map((node) => node.text())).toEqual(['2794.80万', '2964'])
     expect(component.kpiMetrics).toHaveLength(13)
     wrapper.unmount()
   })

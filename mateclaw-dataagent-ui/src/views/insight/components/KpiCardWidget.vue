@@ -72,7 +72,7 @@
             <span>{{ metricLabel(metric) }}</span>
           </div>
           <div class="kpi-metric-valuerow">
-            <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value, 'value', metricFontScale(metric))">{{ metricValue(metric) }}</span>
+            <span class="kpi-metric-value" :style="css(metric.styles.value, metricVisual(metric).textColors.value, 'value', metricFontScale(metric))">{{ formatKpiValue(metricValue(metric), metric.valueUnitMode) }}</span>
             <span v-if="metric.unit" class="kpi-metric-unit" :style="css(metric.styles.unit, metricVisual(metric).textColors.unit, 'unit', metricFontScale(metric))">{{ metric.unit }}</span>
           </div>
           <div v-if="metric.helperText" class="kpi-metric-helper" :style="css(metric.styles.helper, metricVisual(metric).textColors.helper, 'helper', metricFontScale(metric))">{{ metric.helperText }}</div>
@@ -146,6 +146,7 @@ import DashboardTabTitle from './DashboardTabTitle.vue'
 import {
   autoFitFontSize,
   autoMetricLayout,
+  formatKpiValue,
   hasMetricLayoutConflict,
   isDefaultMetricFontSize,
   isMachineMetricLayout,

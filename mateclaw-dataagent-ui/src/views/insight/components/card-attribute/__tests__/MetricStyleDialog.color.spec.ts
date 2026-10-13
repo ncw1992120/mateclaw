@@ -40,7 +40,11 @@ function mountDialog() {
           template: '<input :value="modelValue" v-bind="$attrs" @input="$emit(\'update:modelValue\', $event.target.value)" />',
         },
         'el-dialog': { template: '<div data-testid="dialog" v-bind="$attrs"><slot /><slot name="footer" /></div>' },
-        'el-switch': { template: '<button type="button"><slot /></button>' },
+        'el-switch': {
+          props: ['modelValue', 'activeText'],
+          emits: ['update:modelValue'],
+          template: '<button type="button" v-bind="$attrs" :aria-pressed="modelValue" @click="$emit(\'update:modelValue\', !modelValue)"><slot />{{ activeText }}</button>',
+        },
         'el-icon': { template: '<span><slot /></span>' },
         'el-input-number': { template: '<span />' },
         'el-button': { template: '<button type="button" @click="$emit(\'click\')"><slot /></button>' },
@@ -107,6 +111,18 @@ describe('MetricStyleDialog shared color fields', () => {
     expect(metric.displayName).toBe('营收')
     expect(metric.unit).toBe('万元')
     expect(metric.helperText).toBe('较上期增长')
+  })
+
+  it('toggles automatic value unit conversion independently for this metric', async () => {
+    const wrapper = mountDialog()
+    const metric = insightFixture.value.state.kpiMetrics[0]
+    const toggle = wrapper.get('[data-testid="kpi-value-unit-auto"]')
+
+    expect(toggle.attributes('aria-pressed')).toBe('true')
+    await toggle.trigger('click')
+    expect(metric.valueUnitMode).toBe('none')
+    await toggle.trigger('click')
+    expect(metric.valueUnitMode).toBe('auto')
   })
 
   it('maps accent and each metric text color to their existing style fields', async () => {
