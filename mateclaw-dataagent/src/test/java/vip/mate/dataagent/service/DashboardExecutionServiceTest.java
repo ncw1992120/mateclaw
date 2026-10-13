@@ -30,6 +30,49 @@ import static org.mockito.Mockito.*;
 
 class DashboardExecutionServiceTest {
     @Test
+    void structuredDataFailureKeepsUiDetailsButOmitsValuesFromServiceLogs() {
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        DashboardExecutionEntity execution = new DashboardExecutionEntity();
+        execution.setExecutionId("diagnostic-failed");
+        execution.setWorkspaceId(7L);
+        execution.setDashboardId(42L);
+        execution.setStatus("RUNNING");
+        when(executionMapper.selectOne(any())).thenReturn(execution);
+        String error = """
+                {"code":"DATA_VALIDATION_ERROR","message":"数据校验失败",
+                 "errorDetails":{"dataset":"table_zb","field":"amount","scriptLine":3,"errorCount":1,
+                 "issues":[{"rowNumber":128,"rowKeys":{"id":"secret-id"},"valuePreview":"secret-value","reason":"无法转换为数字"}]},
+                 "traceback":"secret-script"}
+                """;
+        when(runner.getStatus("diagnostic-failed")).thenReturn(Map.of("status", "FAILED", "error", error));
+        Logger logger = (Logger) LoggerFactory.getLogger(DashboardExecutionServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var service = new DashboardExecutionServiceImpl(mock(InsightDashboardService.class),
+                    mock(ScriptTaskPreparationService.class), runner, guard, new ObjectMapper(), executionMapper,
+                    mock(ObjectRefService.class), new vip.mate.dataagent.service.code.ScriptResultContractService(),
+                    "http://mateclaw-dataagent:18089/dataagent/api/");
+            assertEquals(error, service.status("diagnostic-failed").get("error"));
+            String log = appender.list.stream().map(ILoggingEvent::getFormattedMessage)
+                    .filter(message -> message.contains("stage=python-execution-failed")).findFirst().orElseThrow();
+            assertTrue(log.contains("scriptLine=3"));
+            assertTrue(log.contains("field=amount"));
+            assertTrue(log.contains("row=128"));
+            assertFalse(log.contains("secret-value"));
+            assertFalse(log.contains("secret-id"));
+            assertFalse(log.contains("secret-script"));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
+    @Test
     void logsPythonFailureDetailsWithoutLoggingScriptOrParameters() {
         WorkspaceGuard guard = mock(WorkspaceGuard.class);
         DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);

@@ -416,6 +416,27 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     /** 从 traceback 提取用户脚本行号和异常摘要；不将 traceback 中的脚本源码写入服务日志。 */
     private PythonFailureLogDetails pythonFailureLogDetails(String error) {
         if (error == null || error.isBlank()) return new PythonFailureLogDetails("unknown", "(no error detail)");
+        if (error.stripLeading().startsWith("{")) {
+            try {
+                var payload = mapper.readTree(error);
+                if ("DATA_VALIDATION_ERROR".equals(payload.path("code").asText())) {
+                    var detail = payload.path("errorDetails");
+                    String summary = "dataset=" + safeDiagnosticLabel(detail.path("dataset").asText())
+                            + " field=" + safeDiagnosticLabel(detail.path("field").asText())
+                            + " errorCount=" + detail.path("errorCount").asInt();
+                    int count = 0;
+                    for (var issue : detail.path("issues")) {
+                        if (count++ >= 10) break;
+                        summary += " row=" + issue.path("rowNumber").asInt()
+                                + " reason=" + safeDiagnosticLabel(issue.path("reason").asText());
+                    }
+                    // 业务 ID、问题值及 traceback 源码只在授权查询响应中返回，不写日志。
+                    return new PythonFailureLogDetails(detail.path("scriptLine").asText("unknown"), summary);
+                }
+            } catch (Exception ignored) {
+                // 兼容旧 Worker 的普通 traceback。
+            }
+        }
         java.util.regex.Matcher matcher = java.util.regex.Pattern
                 .compile("user_script\\.py[\"'], line (\\d+)")
                 .matcher(error);
@@ -430,6 +451,11 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     }
 
     private record PythonFailureLogDetails(String scriptLine, String summary) { }
+
+    private String safeDiagnosticLabel(String value) {
+        String clean = value.replace('\n', ' ').replace('\r', ' ');
+        return clean.substring(0, Math.min(clean.length(), 240));
+    }
 
     private PersistedExecutionState persistedState(DashboardExecutionEntity execution) {
         return new PersistedExecutionState(execution.getStatus(), execution.getLogs(), execution.getOutputJson(),

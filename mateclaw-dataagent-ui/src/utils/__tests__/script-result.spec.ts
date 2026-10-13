@@ -43,6 +43,25 @@ function tableComponent() {
 }
 
 describe('parseScriptResultEnvelope', () => {
+  it('结构化数据诊断显示字段、问题值和记录定位，并保留 traceback', () => {
+    const error = {
+      code: 'DATA_VALIDATION_ERROR', message: '2 条数据校验失败',
+      errorDetails: { dataset: 'table_zb', field: 'amount', scriptLine: 3, errorCount: 2,
+        issues: [{ rowNumber: 2, rowKeys: { id: 'SUB-001' }, valuePreview: "'abc'", reason: '无法转换为数字' }] },
+      traceback: 'Traceback (most recent call last):\n  File "user_script.py", line 3\nDataValidationError: 2 条数据校验失败',
+    }
+    const formatted = formatPythonExecutionError(JSON.stringify(error))
+    expect(formatted.summary).toContain('第 3 行')
+    expect(formatted.summary).toContain('table_zb')
+    expect(formatted.summary).toContain('amount')
+    expect(formatted.summary).toContain("'abc'")
+    expect(formatted.summary).toContain('id=SUB-001')
+    expect(formatted.summary).toContain('第 2 行')
+    expect(formatted.details).toContain('user_script.py')
+    const transferred = formatScriptResultError(error)
+    expect(formatPythonExecutionError(transferred)).toEqual(formatted)
+  })
+
   it('从 Python traceback 提取脚本行号和异常摘要，同时保留完整详情', () => {
     const traceback = [
       'Traceback (most recent call last):',

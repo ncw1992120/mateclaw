@@ -121,6 +121,15 @@ export interface ScriptExecutionResultResponse {
 
 /** 执行失败的稳定状态与可读信息 */
 export interface ScriptResultError {
+  code?: string
+  errorDetails?: {
+    dataset: string
+    field: string
+    scriptLine?: number
+    errorCount: number
+    issues: { rowNumber: number; rowKeys: Record<string, string>; valuePreview: string; reason: string }[]
+  }
+  traceback?: string
   status?: string
   path?: string
   expected?: string
@@ -140,6 +149,30 @@ export interface PythonExecutionErrorDisplay {
 export function formatPythonExecutionError(error: string): PythonExecutionErrorDisplay {
   const details = error.trim()
   if (!details) return { summary: 'Python 执行失败，后端未返回错误详情', details: '' }
+  if (details.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(details) as ScriptResultError
+      if (parsed.code === 'DATA_VALIDATION_ERROR' && parsed.errorDetails) {
+        const diagnostic = parsed.errorDetails
+        const rows = (Array.isArray(diagnostic.issues) ? diagnostic.issues : []).slice(0, 10).map((issue) => {
+          const keys = Object.entries(issue.rowKeys ?? {}).map(([key, value]) => `${key}=${value}`).join('，')
+          return `第 ${issue.rowNumber} 行${keys ? `（${keys}）` : ''}：值 ${issue.valuePreview}；${issue.reason}`
+        })
+        return {
+          summary: [diagnostic.scriptLine ? `Python 脚本第 ${diagnostic.scriptLine} 行数据校验失败` : 'Python 数据校验失败',
+            `数据集：${diagnostic.dataset}；字段：${diagnostic.field}`,
+            `共 ${diagnostic.errorCount} 条错误，展示前 ${rows.length} 条`, ...rows].join('\n'),
+          details: parsed.traceback ?? '',
+        }
+      }
+    } catch {
+      // 非诊断 JSON 或旧 Worker 错误继续使用普通文本展示。
+    }
+  }
+  const tracebackStart = details.indexOf('Traceback (most recent call last):')
+  if (tracebackStart > 0 && (details.startsWith('Python 脚本') || details.startsWith('Python 数据校验失败'))) {
+    return { summary: details.slice(0, tracebackStart).trim(), details: details.slice(tracebackStart) }
+  }
 
   const lines = details.split(/\r?\n/)
   const scriptFrames = lines
@@ -226,6 +259,10 @@ export function parseScriptResultEnvelope(value: unknown): ScriptResultEnvelope 
 export function formatScriptResultError(error: ScriptResultError | string | null | undefined): string {
   if (!error) return '执行失败'
   if (typeof error === 'string') return error
+  if (error.code === 'DATA_VALIDATION_ERROR' && error.errorDetails) {
+    const formatted = formatPythonExecutionError(JSON.stringify(error))
+    return [formatted.summary, formatted.details].filter(Boolean).join('\n')
+  }
   if (error.status === 'OUTPUT_CONTRACT_ERROR') {
     const parts = [
       '数据格式不匹配',

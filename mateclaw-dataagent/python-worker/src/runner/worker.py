@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Sequence, TextIO
 
 from mateclaw.datasets import DatasetClient
+from mateclaw import diagnostics
 from mateclaw.results import ResultContractError, normalize_result
 from .models import TaskRequest, TaskResponse
 
@@ -114,6 +115,7 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
         ),
         "parameters": request.parameters,
         "input_catalog": request.inputCatalog,
+        "diagnostics": diagnostics,
     }
     status = "SUCCEEDED"
     result: dict[str, Any] | None = None
@@ -145,6 +147,13 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
     except BaseException as exc:
         status = "FAILED"
         error = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-10_000:]
+        if isinstance(exc, diagnostics.DataValidationError):
+            # 沿用 error 字符串契约，内部增加 JSON 诊断；无需新增数据库字段。
+            frames = traceback.extract_tb(exc.__traceback__)
+            user_frames = [frame for frame in frames if frame.filename == "user_script.py"]
+            detail = {**exc.as_dict(), "scriptLine": user_frames[-1].lineno if user_frames else None}
+            error = json.dumps({"code": "DATA_VALIDATION_ERROR", "message": str(exc),
+                                "errorDetails": detail, "traceback": error}, ensure_ascii=False)
         return_code = 1
 
     output = stdout_buffer.getvalue()
