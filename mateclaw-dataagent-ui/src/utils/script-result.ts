@@ -122,6 +122,15 @@ export interface ScriptExecutionResultResponse {
 /** 执行失败的稳定状态与可读信息 */
 export interface ScriptResultError {
   code?: string
+  exceptionType?: string
+  errorContext?: {
+    scriptLine?: number
+    userLine?: number
+    region?: string
+    inputName?: string
+    conversion?: string
+    sourceLines?: { line: number; code: string }[]
+  }
   errorDetails?: {
     dataset: string
     field: string
@@ -145,13 +154,33 @@ export interface PythonExecutionErrorDisplay {
   details: string
 }
 
+const PYTHON_TRACEBACK_SEPARATOR = '\n===== Python traceback =====\n'
+
 /** 将 Worker traceback 转成可直接理解的“行号 + 异常”，同时保留原文供继续排查。 */
 export function formatPythonExecutionError(error: string): PythonExecutionErrorDisplay {
+  // traceback 可能因长度限制失去标准标题，语法错误也没有该标题；不能靠其内容分隔。
+  const separator = error.indexOf(PYTHON_TRACEBACK_SEPARATOR)
+  if (separator > 0 && error.startsWith('Python ')) {
+    return { summary: error.slice(0, separator).trim(), details: error.slice(separator + PYTHON_TRACEBACK_SEPARATOR.length) }
+  }
   const details = error.trim()
   if (!details) return { summary: 'Python 执行失败，后端未返回错误详情', details: '' }
   if (details.startsWith('{')) {
     try {
       const parsed = JSON.parse(details) as ScriptResultError
+      if (parsed.code === 'PYTHON_EXECUTION_ERROR') {
+        const context = parsed.errorContext ?? {}
+        const location = context.region === 'system' ? '系统数据读取' : context.region === 'user' ? '用户处理代码' : '执行代码'
+        return {
+          summary: [context.scriptLine ? `Python 脚本第 ${context.scriptLine} 行执行失败（${location}）` : 'Python 脚本执行失败',
+            context.userLine ? `用户处理区域第 ${context.userLine} 行（不是编辑器全文行号）` : '',
+            context.inputName ? `输入数据集：${context.inputName}；转换：${context.conversion ?? '未知'}` : '',
+            `${parsed.exceptionType ?? 'PythonError'}: ${parsed.message ?? '未返回异常信息'}`,
+            ...(context.sourceLines ?? []).map((source) => `${source.line === context.scriptLine ? '→ ' : '  '}${source.line}: ${source.code}`),
+          ].filter(Boolean).join('\n'),
+          details: parsed.traceback ?? '',
+        }
+      }
       if (parsed.code === 'DATA_VALIDATION_ERROR' && parsed.errorDetails) {
         const diagnostic = parsed.errorDetails
         const rows = (Array.isArray(diagnostic.issues) ? diagnostic.issues : []).slice(0, 10).map((issue) => {
@@ -180,7 +209,10 @@ export function formatPythonExecutionError(error: string): PythonExecutionErrorD
     .map((line) => line.match(/File ["'](?:.*[/\\])?user_script\.py["'], line (\d+)/))
     .filter((match): match is RegExpMatchArray => match !== null)
   const lineNumber = scriptFrames.at(-1)?.[1]
-  const exception = [...lines].reverse().find((line) => line.trim() && !line.trim().startsWith('^'))?.trim()
+  // 多行异常的最后一句通常只是补充提示，必须保留真正的异常类型和主消息。
+  const lastFrame = lines.reduce((last, line, index) => line.trimStart().startsWith('File ') ? index : last, -1)
+  const exception = lines.slice(lastFrame + 1).find((line) => /^[A-Za-z_][\w.]*:\s*/.test(line))?.trim()
+    ?? [...lines].reverse().find((line) => line.trim() && !line.trim().startsWith('^'))?.trim()
   const isTraceback = lines.some((line) => line.startsWith('Traceback (most recent call last):'))
 
   if (isTraceback && lineNumber && exception) {
@@ -260,9 +292,9 @@ export function parseScriptResultEnvelope(value: unknown): ScriptResultEnvelope 
 export function formatScriptResultError(error: ScriptResultError | string | null | undefined): string {
   if (!error) return '执行失败'
   if (typeof error === 'string') return error
-  if (error.code === 'DATA_VALIDATION_ERROR' && error.errorDetails) {
+  if (error.code === 'PYTHON_EXECUTION_ERROR' || (error.code === 'DATA_VALIDATION_ERROR' && error.errorDetails)) {
     const formatted = formatPythonExecutionError(JSON.stringify(error))
-    return [formatted.summary, formatted.details].filter(Boolean).join('\n')
+    return formatted.details ? `${formatted.summary}${PYTHON_TRACEBACK_SEPARATOR}${formatted.details}` : formatted.summary
   }
   if (error.status === 'OUTPUT_CONTRACT_ERROR') {
     const parts = [

@@ -100,6 +100,33 @@ def test_worker_script_errors_are_terminal_and_token_is_redacted(tmp_path):
     assert "[REDACTED]" in response["error"]
 
 
+def test_worker_locates_user_code_and_retains_multiline_polars_exception(tmp_path):
+    script = "# ===== 用户处理区域 =====\nimport polars as pl\nrows = [{'amount': 1}] * 100 + [{'amount': 'abc'}]\nresult = pl.DataFrame(rows)"
+    _, response = run_worker(tmp_path, task_request(script))
+    assert response["status"] == "FAILED"
+    assert response["error"].startswith("{"), "Worker must return structured execution context"
+    error = json.loads(response["error"])
+    assert error["exceptionType"] == "polars.exceptions.ComputeError"
+    assert "could not append value" in error["message"]
+    assert "capacity" in error["message"]
+    assert error["errorContext"]["scriptLine"] == 4
+    assert error["errorContext"]["userLine"] == 3
+    assert error["errorContext"]["region"] == "user"
+    assert error["errorContext"]["sourceLines"][-1] == {"line": 4, "code": "result = pl.DataFrame(rows)"}
+
+
+def test_worker_identifies_sdk_input_conversion_without_dumping_frame_locals(tmp_path):
+    script = "from mateclaw.types import DatasetInput\nrows = tuple([{'amount': 1}] * 100 + [{'amount': 'abc'}])\nresult = DatasetInput('upstream_zb', (), rows).to_polars()\n# ===== 用户处理区域 ====="
+    _, response = run_worker(tmp_path, task_request(script))
+    assert response["error"].startswith("{"), "Worker must return upstream conversion context"
+    error = json.loads(response["error"])
+    assert error["errorContext"]["inputName"] == "upstream_zb"
+    assert error["errorContext"]["conversion"] == "Polars"
+    assert error["errorContext"]["region"] == "system"
+    assert error["errorContext"]["scriptLine"] == 3
+    assert "locals" not in error["errorContext"]
+
+
 def test_worker_reads_prepared_dataset_input(tmp_path):
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):

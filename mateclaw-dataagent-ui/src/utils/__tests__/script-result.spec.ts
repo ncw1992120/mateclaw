@@ -43,6 +43,37 @@ function tableComponent() {
 }
 
 describe('parseScriptResultEnvelope', () => {
+  it('长 traceback 截断或语法错误没有 Traceback 标题时仍保留详情', () => {
+    for (const traceback of ['x'.repeat(10_000), '  File "user_script.py", line 2\nSyntaxError: invalid syntax']) {
+      const error = { code: 'PYTHON_EXECUTION_ERROR', exceptionType: 'ValueError', message: '失败', traceback }
+      expect(formatPythonExecutionError(formatScriptResultError(error)))
+        .toEqual(formatPythonExecutionError(JSON.stringify(error)))
+    }
+  })
+  it('旧版多行 traceback 摘要保留主异常，不只显示容量溢出补充说明', () => {
+    const traceback = 'Traceback (most recent call last):\n  File "user_script.py", line 19\n  File "frame.py", line 100\n    create_frame(rows)\npolars.exceptions.ComputeError: could not append value to the builder\n\nit might also be that a value overflows the data-type capacity'
+    const display = formatPythonExecutionError(traceback)
+    expect(display.summary).toContain('第 19 行')
+    expect(display.summary).toContain('polars.exceptions.ComputeError: could not append value')
+    expect(display.details).toEqual(traceback)
+  })
+
+  it('新执行错误显示输入别名、失败代码和执行行号', () => {
+    const error = {
+      code: 'PYTHON_EXECUTION_ERROR', exceptionType: 'polars.exceptions.ComputeError',
+      message: 'could not append value to the builder\n\nit might also be that a value overflows capacity',
+      errorContext: { scriptLine: 19, region: 'system', inputName: 'table_zb', conversion: 'Polars',
+        sourceLines: [{ line: 19, code: ').to_polars()' }] },
+      traceback: 'Traceback (most recent call last):\n  File "user_script.py", line 19\npolars.exceptions.ComputeError: could not append value',
+    }
+    const display = formatPythonExecutionError(JSON.stringify(error))
+    expect(display.summary).toContain('table_zb')
+    expect(display.summary).toContain('系统数据读取')
+    expect(display.summary).toContain('19: ).to_polars()')
+    expect(display.summary).toContain('ComputeError')
+    expect(formatPythonExecutionError(formatScriptResultError(error))).toEqual(display)
+  })
+
   it('多字段诊断逐项标明字段，缺少字段时不虚构记录行号', () => {
     const formatted = formatPythonExecutionError(JSON.stringify({
       code: 'DATA_VALIDATION_ERROR',

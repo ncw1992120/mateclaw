@@ -87,7 +87,7 @@ class DashboardExecutionServiceTest {
         when(executionMapper.selectOne(any())).thenReturn(execution);
         when(runner.getStatus("dashboard-42-failed")).thenReturn(Map.of(
                 "status", "FAILED",
-                "error", "Traceback (most recent call last):\n  File \"user_script.py\", line 1\n    print('secret script')\nValueError: metric_id column is missing",
+                "error", "Traceback (most recent call last):\n  File \"user_script.py\", line 1\n    print('secret script')\nValueError: metric_id column is missing\n\nit might also be that a value overflows the data-type's capacity",
                 "returncode", 1,
                 "script", "secret script",
                 "parameters", Map.of("token", "secret parameter")));
@@ -124,6 +124,30 @@ class DashboardExecutionServiceTest {
             logger.detachAppender(appender);
             appender.stop();
         }
+    }
+
+    @Test
+    void structuredPythonErrorLogsLocationButNotSourceCode() throws Exception {
+        var service = new DashboardExecutionServiceImpl(mock(InsightDashboardService.class),
+                mock(ScriptTaskPreparationService.class), mock(PythonExecutionService.class),
+                mock(WorkspaceGuard.class), new ObjectMapper(), mock(DashboardExecutionMapper.class),
+                mock(ObjectRefService.class), new vip.mate.dataagent.service.code.ScriptResultContractService(),
+                "http://mateclaw-dataagent:18089/dataagent/api/");
+        var method = DashboardExecutionServiceImpl.class.getDeclaredMethod("pythonFailureLogDetails", String.class);
+        method.setAccessible(true);
+        String error = """
+                {"code":"PYTHON_EXECUTION_ERROR","exceptionType":"polars.exceptions.ComputeError",
+                 "message":"could not append value\\n\\nit might also be that a value overflows capacity",
+                 "errorContext":{"scriptLine":19,"region":"system","inputName":"table_zb","conversion":"Polars",
+                 "sourceLines":[{"line":19,"code":"secret-script"}]},"traceback":"secret-traceback"}
+                """;
+        String detail = method.invoke(service, error).toString();
+        assertTrue(detail.contains("scriptLine=19"));
+        assertTrue(detail.contains("inputName=table_zb"));
+        assertTrue(detail.contains("region=system"));
+        assertTrue(detail.contains("polars.exceptions.ComputeError: could not append value"));
+        assertFalse(detail.contains("secret-script"));
+        assertFalse(detail.contains("secret-traceback"));
     }
 
     @Test

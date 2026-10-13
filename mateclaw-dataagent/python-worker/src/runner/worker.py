@@ -17,6 +17,7 @@ from typing import Any, Sequence, TextIO
 from mateclaw.datasets import DatasetClient
 from mateclaw import diagnostics
 from mateclaw.results import ResultContractError, normalize_result
+from mateclaw.types import DatasetInput
 from .models import TaskRequest, TaskResponse
 
 
@@ -98,6 +99,34 @@ def _upload_table_result(envelope: dict[str, Any], endpoint: str, token: str, di
         return None
 
 
+def _error_context(exc: BaseException, script: str) -> dict[str, Any]:
+    """只定位脚本和 SDK 输入转换，不收集局部变量或整份业务数据。"""
+    context: dict[str, Any] = {}
+    frame = exc.__traceback__
+    while frame is not None:
+        if frame.tb_frame.f_code.co_filename == "user_script.py":
+            context["scriptLine"] = frame.tb_lineno
+        owner = frame.tb_frame.f_locals.get("self")
+        function = frame.tb_frame.f_code.co_name
+        if isinstance(owner, DatasetInput) and function in ("to_polars", "to_pandas"):
+            context.update(inputName=owner.input_name,
+                           conversion="Polars" if function == "to_polars" else "pandas")
+        frame = frame.tb_next
+    if isinstance(exc, SyntaxError) and exc.filename == "user_script.py":
+        context["scriptLine"] = exc.lineno
+    lines = script.splitlines()
+    line = context.get("scriptLine")
+    if isinstance(line, int) and 0 < line <= len(lines):
+        marker = next((index + 1 for index, text in enumerate(lines)
+                       if text.strip() in ("# ===== 用户处理区域 =====", "# ===== 自定义处理代码（可编辑） =====")), None)
+        context["region"] = "unknown" if marker is None else "user" if line > marker else "system"
+        if marker is not None and line > marker:
+            context["userLine"] = line - marker
+        context["sourceLines"] = [{"line": index + 1, "code": lines[index][:240]}
+                                  for index in range(max(0, line - 3), min(len(lines), line + 2))]
+    return context
+
+
 def execute_task(request: TaskRequest, work_directory: str | Path | None = None) -> TaskResponse:
     """Execute a validated request and return the compatible task response shape."""
     directory = Path(work_directory) if work_directory else Path.cwd()
@@ -147,13 +176,19 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
     except BaseException as exc:
         status = "FAILED"
         error = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))[-10_000:]
+        context = _error_context(exc, request.script)
         if isinstance(exc, diagnostics.DataValidationError):
             # 沿用 error 字符串契约，内部增加 JSON 诊断；无需新增数据库字段。
-            frames = traceback.extract_tb(exc.__traceback__)
-            user_frames = [frame for frame in frames if frame.filename == "user_script.py"]
-            detail = {**exc.as_dict(), "scriptLine": user_frames[-1].lineno if user_frames else None}
+            detail = {**exc.as_dict(), "scriptLine": context.get("scriptLine")}
             error = json.dumps({"code": "DATA_VALIDATION_ERROR", "message": str(exc),
-                                "errorDetails": detail, "traceback": error}, ensure_ascii=False)
+                                "errorDetails": detail, "errorContext": context, "traceback": error}, ensure_ascii=False)
+        else:
+            exception_type = type(exc).__qualname__
+            if type(exc).__module__ != "builtins":
+                exception_type = f"{type(exc).__module__}.{exception_type}"
+            error = json.dumps({"code": "PYTHON_EXECUTION_ERROR", "exceptionType": exception_type,
+                                "message": str(exc)[:10_000], "errorContext": context,
+                                "traceback": error}, ensure_ascii=False)
         return_code = 1
 
     output = stdout_buffer.getvalue()

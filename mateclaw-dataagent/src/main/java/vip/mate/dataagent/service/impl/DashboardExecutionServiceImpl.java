@@ -419,6 +419,17 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         if (error.stripLeading().startsWith("{")) {
             try {
                 var payload = mapper.readTree(error);
+                if ("PYTHON_EXECUTION_ERROR".equals(payload.path("code").asText())) {
+                    var context = payload.path("errorContext");
+                    int line = context.path("scriptLine").asInt(0);
+                    String summary = "region=" + safeDiagnosticLabel(context.path("region").asText("unknown"))
+                            + (context.hasNonNull("userLine") ? " userLine=" + context.path("userLine").asInt() : "")
+                            + (context.hasNonNull("inputName") ? " inputName=" + safeDiagnosticLabel(context.path("inputName").asText()) : "")
+                            + (context.hasNonNull("conversion") ? " conversion=" + safeDiagnosticLabel(context.path("conversion").asText()) : "")
+                            + " " + safeDiagnosticLabel(payload.path("exceptionType").asText("PythonError"))
+                            + ": " + safeDiagnosticLabel(payload.path("message").asText());
+                    return new PythonFailureLogDetails(line > 0 ? Integer.toString(line) : "unknown", summary);
+                }
                 if ("DATA_VALIDATION_ERROR".equals(payload.path("code").asText())) {
                     var detail = payload.path("errorDetails");
                     String summary = "dataset=" + safeDiagnosticLabel(detail.path("dataset").asText())
@@ -444,11 +455,19 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 .matcher(error);
         String scriptLine = "unknown";
         while (matcher.find()) scriptLine = matcher.group(1);
-        String summary = Arrays.stream(error.split("\\R"))
+        String[] lines = error.split("\\R");
+        int lastFrame = -1;
+        for (int index = 0; index < lines.length; index++) {
+            if (lines[index].stripLeading().startsWith("File ")) lastFrame = index;
+        }
+        String summary = Arrays.stream(lines).skip(lastFrame + 1L)
+                .filter(line -> line.matches("^[A-Za-z_][\\w.]*:.*"))
+                .findFirst()
+                .orElseGet(() -> Arrays.stream(lines)
                 .map(String::trim)
                 .filter(line -> !line.isEmpty())
                 .reduce((first, last) -> last)
-                .orElse("(no error detail)");
+                .orElse("(no error detail)"));
         return new PythonFailureLogDetails(scriptLine, summary);
     }
 
