@@ -223,6 +223,17 @@ const elDialogStub = {
   props: ['modelValue'],
   template: '<div v-bind="$attrs"><slot /><slot name="footer" /></div>',
 }
+const elCollapseStub = {
+  name: 'el-collapse',
+  emits: ['update:modelValue', 'change'],
+  data: () => ({ open: false }),
+  template: '<div><button type="button" data-testid="python-sample-toggle" @click="open = !open; $emit(\'update:modelValue\', open ? [\'data-samples\'] : []); $emit(\'change\', open ? [\'data-samples\'] : [])">造数示例</button><slot /></div>',
+}
+const elCollapseItemStub = {
+  name: 'el-collapse-item',
+  props: ['name', 'title'],
+  template: '<div><slot /></div>',
+}
 const pythonQueryConfigDialogStub = {
   props: ['modelValue'],
   emits: ['update:modelValue'],
@@ -231,7 +242,7 @@ const pythonQueryConfigDialogStub = {
 
 async function mountDialog() {
   const wrapper = mount(PythonScriptDialog, {
-    global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
+    global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, 'el-collapse': elCollapseStub, 'el-collapse-item': elCollapseItemStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
   })
   state.ui.python.visible = true
   await nextTick()
@@ -255,7 +266,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     state.pythonUser = 'result = 1'
   })
 
-  it('上游样例查询未完成时脚本仍可编辑和保存', async () => {
+  it('打开脚本后无需等待上游样例查询即可编辑和保存', async () => {
     state.finalResultQueryConfig = {
       confirmed: true,
       schemaFingerprint: 'schema-1',
@@ -266,7 +277,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     } as never
     fetchDatasetSampleRows.mockReturnValue(new Promise(() => {}))
     const wrapper = mount(PythonScriptDialog, {
-      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
+      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, 'el-collapse': elCollapseStub, 'el-collapse-item': elCollapseItemStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
     })
 
     state.ui.python.visible = true
@@ -276,7 +287,8 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     expect(editor.disabled).toBe(false)
     expect(editor.value).toContain('datasets.input(')
     expect((wrapper.get('[data-testid="python-editor-save"]').element as HTMLButtonElement).disabled).toBe(false)
-    expect(wrapper.find('[data-testid="python-sample-loading"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="python-sample-loading"]').exists()).toBe(false)
+    expect(fetchDatasetSampleRows).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
@@ -303,7 +315,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
 
   it('从属性配置直接打开查询配置时不显示脚本编辑弹窗，关闭配置后结束流程', async () => {
     const wrapper = mount(PythonScriptDialog, {
-      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
+      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, 'el-collapse': elCollapseStub, 'el-collapse-item': elCollapseItemStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
     })
 
     useInsight().openPythonQueryConfig()
@@ -319,7 +331,7 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     wrapper.unmount()
   })
 
-  it('单一编辑区包含造数、数据接入、自定义代码和输出样例，不再呈现分区编辑器', async () => {
+  it('打开编辑器不查询造数样例，正文不包含造数 JSON，且保留用户脚本和输出示例', async () => {
     state.finalResultQueryConfig = {
       confirmed: true,
       schemaFingerprint: 'schema-1',
@@ -333,15 +345,40 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     const wrapper = await mountDialog()
 
     const editor = wrapper.get('[data-testid="python-editor-code"]')
-    expect((editor.element as HTMLTextAreaElement).value).toContain('造数示例与上游数据读取')
+    expect((editor.element as HTMLTextAreaElement).value).not.toContain('造数示例与上游数据读取')
     expect((editor.element as HTMLTextAreaElement).value).toContain('自定义处理代码（可编辑）')
     expect((editor.element as HTMLTextAreaElement).value).toContain('输出结果示例（参考）')
-    expect((editor.element as HTMLTextAreaElement).value).toContain('华东')
-    expect((editor.element as HTMLTextAreaElement).value).toContain('12')
-    expect(fetchDatasetSampleRows).toHaveBeenCalledWith(state.datasets[0], state.filterCatalog)
+    expect((editor.element as HTMLTextAreaElement).value).not.toContain('华东')
+    expect(fetchDatasetSampleRows).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="python-sample-json"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="system-code-readonly"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="user-code"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="footer-query-config"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('仅首次展开顶部造数示例时查询上游数据，并在收起重开后复用 JSON 结果', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: true,
+      schemaFingerprint: 'schema-1',
+      displayFields: [],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    const wrapper = await mountDialog()
+
+    expect(fetchDatasetSampleRows).not.toHaveBeenCalled()
+    await wrapper.get('[data-testid="python-sample-toggle"]').trigger('click')
+    await flushPromises()
+    expect(fetchDatasetSampleRows).toHaveBeenCalledOnce()
+    expect(wrapper.get('[data-testid="python-sample-json"]').text()).toContain('"region": "华东"')
+    expect(wrapper.get('[data-testid="python-sample-json"]').text()).toContain('"amount": 12')
+
+    await wrapper.get('[data-testid="python-sample-toggle"]').trigger('click')
+    await wrapper.get('[data-testid="python-sample-toggle"]').trigger('click')
+    await flushPromises()
+    expect(fetchDatasetSampleRows).toHaveBeenCalledOnce()
     wrapper.unmount()
   })
 

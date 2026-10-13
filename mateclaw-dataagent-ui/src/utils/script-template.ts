@@ -18,6 +18,7 @@ export function buildSystemScript(
   outputContract?: { kind: string; example: string; fieldRules: { minColumns: number; minDimensionColumns: number; minNumericColumns: number } },
   samplesByInputName: Record<string, Record<string, unknown>[]> = {},
   queryParameters: Array<{ field: string; title: string; parameterName: string; operators: string[] }> = [],
+  includeDataExamples = true,
 ): string {
   const validInputs = inputs.filter(input => input.datasetId && input.inputName)
   const lines = [
@@ -40,7 +41,7 @@ export function buildSystemScript(
     })
   }
 
-  if (validInputs.length) {
+  if (validInputs.length && includeDataExamples) {
     lines.push(
       '',
       '# 造数示例：默认注释；取消对应注释即可用上游「查看数据-查询」的最近结果进行本地调试。',
@@ -49,7 +50,7 @@ export function buildSystemScript(
       '# import polars as pl',
     )
   }
-  validInputs.forEach((input) => {
+  if (includeDataExamples) validInputs.forEach((input) => {
     const rows = samplesByInputName[input.inputName] ?? []
     const sampleData = rows
     if (rows.length) {

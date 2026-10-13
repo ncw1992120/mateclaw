@@ -11,6 +11,21 @@
     :close-on-click-modal="false"
     aria-label="展开编辑 Python 脚本"
   >
+    <el-collapse v-model="expandedSections" class="python-sample-collapse" @change="onSampleSectionChange">
+      <el-collapse-item name="data-samples" title="造数示例">
+        <p v-if="sampleLoading" class="editor-hint" data-testid="python-sample-loading">正在获取上游数据集结果以生成 JSON 造数示例。</p>
+        <ul v-if="sampleWarnings.length" class="editor-warnings" data-testid="python-sample-warnings">
+          <li v-for="warning in sampleWarnings" :key="warning">{{ warning }}</li>
+        </ul>
+        <p v-if="!state.datasets.length" class="editor-hint">当前没有已绑定的数据集输入。</p>
+        <section v-for="dataset in state.datasets" :key="dataset.alias" class="python-sample-block">
+          <div class="python-sample-title">{{ dataset.alias }}</div>
+          <pre v-if="hasSampleRows(dataset.alias)" class="python-sample-json" data-testid="python-sample-json">{{ formatSampleRows(dataset.alias) }}</pre>
+          <p v-else-if="samplesLoaded && !sampleWarnings.some((warning) => warning.includes(dataset.alias))" class="editor-hint">查询成功，但没有可展示的数据行。</p>
+        </section>
+      </el-collapse-item>
+    </el-collapse>
+
     <div class="editor-intro">
       <div>
         <div class="editor-kicker">PYTHON WORKSPACE</div>
@@ -35,11 +50,7 @@
       />
     </div>
 
-    <p v-if="editorLoading" class="editor-hint" data-testid="python-sample-loading">正在后台获取上游查询结果以补充 JSON 造数样例；脚本可继续编辑和保存。</p>
-    <ul v-else-if="editorSampleWarnings.length" class="editor-warnings" data-testid="python-sample-warnings">
-      <li v-for="warning in editorSampleWarnings" :key="warning">{{ warning }}</li>
-    </ul>
-    <p class="editor-hint">取消注释造数示例后，对应输入会跳过真实数据读取；查询参数说明仅供参考，查看数据时由查询配置应用。</p>
+    <p class="editor-hint">查询参数说明仅供参考；查看数据时会按查询配置应用。</p>
     <p class="editor-hint">需要定位转换失败的数据时，可使用 diagnostics.to_numeric、to_integer、to_datetime 或 required，支持 pandas 和 Polars；指定 dataset、field 和 row_keys 后，错误会展示问题字段、值和记录行号。多个字段可用 diagnostics.validate 配置 rules 一次检查。空值默认报错，null_policy="keep" 保留空值，"fill" 配合 default 替换空值。</p>
 
     <template #footer>
@@ -70,8 +81,11 @@ import PythonQueryConfigDialog from './PythonQueryConfigDialog.vue'
 const { state, savePython } = useInsight()
 const ui = state.ui
 const editorCode = ref('')
-const editorLoading = ref(false)
-const editorSampleWarnings = ref<string[]>([])
+const expandedSections = ref<string[]>([])
+const sampleRowsByInputName = ref<Record<string, Record<string, unknown>[]>>({})
+const sampleWarnings = ref<string[]>([])
+const sampleLoading = ref(false)
+const samplesLoaded = ref(false)
 const editorRef = ref<unknown>(null)
 const highlightRef = ref<HTMLElement | null>(null)
 const showQueryConfig = ref(false)
@@ -102,46 +116,64 @@ function createEmptyFinalResultQueryConfig(): FinalResultQueryConfig {
   }
 }
 
-let editorLoadId = 0
+let sampleLoadId = 0
 
-async function loadEditorDocument(): Promise<void> {
-  const loadId = ++editorLoadId
-  editorLoading.value = true
-  editorSampleWarnings.value = []
-  const initialDocument = buildPythonEditorDocument(currentPythonSource(), state.pythonUser)
-  editorCode.value = initialDocument
+function loadEditorDocument(): void {
+  expandedSections.value = []
+  sampleRowsByInputName.value = {}
+  sampleWarnings.value = []
+  samplesLoaded.value = false
+  sampleLoading.value = false
+  editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, {}, false)
+  void nextTick(bindEditorScroll)
+}
 
+function onSampleSectionChange(activeNames: string[] | string): void {
+  const expanded = Array.isArray(activeNames) ? activeNames.includes('data-samples') : activeNames === 'data-samples'
+  if (expanded && !samplesLoaded.value && !sampleLoading.value) void loadSampleRows()
+}
+
+async function loadSampleRows(): Promise<void> {
+  if (!state.datasets.length) {
+    samplesLoaded.value = true
+    return
+  }
+  const loadId = ++sampleLoadId
+  sampleLoading.value = true
+  sampleWarnings.value = []
   const samples: Record<string, Record<string, unknown>[]> = {}
   const warnings: string[] = []
   await Promise.all(state.datasets.map(async (dataset) => {
     try {
       const result = await fetchDatasetSampleRows(dataset, state.filterCatalog)
       samples[dataset.alias] = result.rows
-      if (!result.rows.length) warnings.push(`上游数据集「${dataset.alias}」查询成功，但结果为 0 行；未生成 JSON 造数。`)
+      if (!result.rows.length) warnings.push(`上游数据集「${dataset.alias}」查询成功，但结果为 0 行。`)
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
-      warnings.push(`上游数据集「${dataset.alias}」查询失败：${reason}。真实数据读取代码仍保留。`)
+      warnings.push(`上游数据集「${dataset.alias}」查询失败：${reason}`)
     }
   }))
+  if (loadId !== sampleLoadId || !ui.python.visible) return
+  sampleRowsByInputName.value = samples
+  sampleWarnings.value = warnings
+  samplesLoaded.value = true
+  sampleLoading.value = false
+}
 
-  if (loadId !== editorLoadId || !ui.python.visible) return
-  const documentWithSamples = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, samples)
-  if (editorCode.value === initialDocument) {
-    editorCode.value = documentWithSamples
-  } else {
-    warnings.push('样例数据已获取；检测到脚本已有修改，为避免覆盖编辑内容，本次未自动替换造数示例。重新打开编辑器可重新生成。')
-  }
-  editorSampleWarnings.value = warnings
-  editorLoading.value = false
-  void nextTick(bindEditorScroll)
+function hasSampleRows(alias: string): boolean {
+  return Boolean(sampleRowsByInputName.value[alias]?.length)
+}
+
+function formatSampleRows(alias: string): string {
+  return JSON.stringify(sampleRowsByInputName.value[alias] ?? [], null, 2)
 }
 
 watch(() => ui.python.visible, (visible) => {
   if (visible && !ui.python.queryConfigOnly) {
-    void loadEditorDocument()
+    loadEditorDocument()
   } else {
-    editorLoadId += 1
-    editorLoading.value = false
+    sampleLoadId += 1
+    sampleLoading.value = false
   }
 })
 
@@ -274,6 +306,21 @@ function saveQueryConfig(config: FinalResultQueryConfig): void {
   color: var(--db-text-muted);
   font-size: 12px;
   line-height: 1.6;
+}
+.python-sample-collapse { margin-bottom: 14px; }
+.python-sample-block { margin-top: 10px; }
+.python-sample-title { margin-bottom: 6px; color: var(--db-text-secondary); font-size: 12px; font-weight: 600; }
+.python-sample-json {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--db-border);
+  border-radius: var(--radius-sm);
+  background: var(--db-muted);
+  color: var(--db-text);
+  font: 12px/1.5 var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
+  white-space: pre;
 }
 .editor-warnings {
   margin: 10px 2px 0;

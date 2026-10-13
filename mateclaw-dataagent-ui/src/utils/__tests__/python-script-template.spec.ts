@@ -95,6 +95,19 @@ describe('python script system state', () => {
     expect(parsePythonEditorDocument(document)).toMatchObject({ userCode: 'result = table_zb' })
   })
 
+  it('builds the Python editor without generated data-sample comments when examples are shown separately', () => {
+    const document = buildPythonEditorDocument({
+      inputs: [{ datasetId: 'a', inputName: 'table_zb' }],
+      bindings: [],
+    }, 'result = table_zb', { table_zb: [{ amount: 12 }] }, false)
+
+    expect(document).not.toContain('造数示例')
+    expect(document).not.toContain('json.loads')
+    expect(document).not.toContain('amount":12')
+    expect(document).toContain('datasets.input(')
+    expect(document).toContain('result = table_zb')
+  })
+
   it('没有真实查询行时不再用字段映射伪造 schema 造数', () => {
     const document = buildPythonEditorDocument({
       inputs: [{
