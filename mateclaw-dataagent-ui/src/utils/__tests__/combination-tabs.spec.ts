@@ -221,6 +221,36 @@ describe('组合卡片页签 · 复制页签', () => {
     expect(copyNestedTabs[0].children[0].title).toBe('nested-child')
   })
 
+  it('复制页签不复制各层组件的数据源配置和 Python 处理脚本，但保留展示配置', () => {
+    const nested = makeContainer([], [{
+      id: 'nested-tab', title: '嵌套页签', children: [{
+        ...makeChild('nested-table'),
+        dataSource: { datasourceId: 'nested-source', metrics: ['m'], dimensions: [], filters: [], limit: 50 },
+        config: { color: 'blue', datasetPipeline: { datasetInputs: [{ datasetId: 'nested-ds' }], script: 'nested script' } },
+      }],
+    }])
+    const sourcedChild: InsightCombinationChild = {
+      ...makeChild('sourced-child'),
+      dataSource: { datasourceId: 'source', metrics: ['m'], dimensions: [], filters: [], limit: 50 },
+      config: { color: 'red', datasetPipeline: { datasetInputs: [{ datasetId: 'ds' }], script: 'process()' } },
+      ...componentToCombinationChild(nested, { x: 10, y: 20, col: 12 }),
+    }
+    const c = makeContainer([], [{ id: 'tab_a', title: '外层', children: [sourcedChild] }])
+
+    const res = duplicateCombinationTab(c, 'tab_a', (() => {
+      let seq = 0
+      return () => `copy_${++seq}`
+    })())
+    const copiedChild = res.created!.children[0]
+    const copiedNestedChild = copiedChild.containerConfig!.tabs[0].children[0]
+
+    expect(copiedChild.dataSource).toBeUndefined()
+    expect(copiedChild.config).toEqual({ color: 'red' })
+    expect(copiedNestedChild.dataSource).toBeUndefined()
+    expect(copiedNestedChild.config).toEqual({ color: 'blue' })
+    expect(c.containerConfig!.tabs[0].children[0].config).toMatchObject({ datasetPipeline: { script: 'process()' } })
+  })
+
   it('源页签不存在时不做改动', () => {
     const c = makeContainer([], [{ id: 'tab_a', title: '页签 1', children: [] }])
     const res = duplicateCombinationTab(c, 'tab_missing', () => 'x')
