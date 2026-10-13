@@ -32,11 +32,10 @@
         data-testid="python-editor-code"
         aria-label="Python 脚本"
         spellcheck="false"
-        :disabled="editorLoading"
       />
     </div>
 
-    <p v-if="editorLoading" class="editor-hint" data-testid="python-sample-loading">正在获取上游数据集的查询结果，用于生成 JSON 造数样例…</p>
+    <p v-if="editorLoading" class="editor-hint" data-testid="python-sample-loading">正在后台获取上游查询结果以补充 JSON 造数样例；脚本可继续编辑和保存。</p>
     <ul v-else-if="editorSampleWarnings.length" class="editor-warnings" data-testid="python-sample-warnings">
       <li v-for="warning in editorSampleWarnings" :key="warning">{{ warning }}</li>
     </ul>
@@ -44,7 +43,7 @@
 
     <template #footer>
       <el-button data-testid="python-editor-cancel" @click="ui.python.visible = false">取消</el-button>
-      <el-button type="primary" data-testid="python-editor-save" :disabled="editorLoading" @click="save">保存</el-button>
+      <el-button type="primary" data-testid="python-editor-save" @click="save">保存</el-button>
     </template>
   </el-dialog>
 
@@ -108,7 +107,8 @@ async function loadEditorDocument(): Promise<void> {
   const loadId = ++editorLoadId
   editorLoading.value = true
   editorSampleWarnings.value = []
-  editorCode.value = '# 正在获取上游数据集的查询结果…'
+  const initialDocument = buildPythonEditorDocument(currentPythonSource(), state.pythonUser)
+  editorCode.value = initialDocument
 
   const samples: Record<string, Record<string, unknown>[]> = {}
   const warnings: string[] = []
@@ -124,8 +124,13 @@ async function loadEditorDocument(): Promise<void> {
   }))
 
   if (loadId !== editorLoadId || !ui.python.visible) return
+  const documentWithSamples = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, samples)
+  if (editorCode.value === initialDocument) {
+    editorCode.value = documentWithSamples
+  } else {
+    warnings.push('样例数据已获取；检测到脚本已有修改，为避免覆盖编辑内容，本次未自动替换造数示例。重新打开编辑器可重新生成。')
+  }
   editorSampleWarnings.value = warnings
-  editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, samples)
   editorLoading.value = false
   void nextTick(bindEditorScroll)
 }

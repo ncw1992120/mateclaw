@@ -46,6 +46,7 @@ describe('fetchDatasetSampleRows', () => {
       filters: [{ field: 'region', operator: 'eq', value: '华东', role: 'dimension' }],
       parameters: { region_param: '华东' },
     })
+    expect(previewInput.mock.calls[0][1]).toEqual({ timeout: 0 })
     expect(result.rows).toEqual([
       { region: '华东', amount: 12 },
       { region: '华南', amount: 9 },
@@ -64,6 +65,7 @@ describe('fetchDatasetSampleRows', () => {
     const result = await fetchDatasetSampleRows(dataset, [])
 
     expect(previewDatasetDraft).toHaveBeenCalledOnce()
+    expect(previewDatasetDraft.mock.calls[0][1]).toEqual({ timeout: 0 })
     expect(result.rows).toEqual([{ amount: 12 }])
   })
 

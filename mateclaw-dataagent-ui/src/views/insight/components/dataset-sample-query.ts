@@ -103,11 +103,11 @@ export async function fetchDatasetSampleRows(
       datasetId: dataset.backendDatasetId,
       inputName: dataset.alias,
       ...request,
-    })
+    }, { timeout: 0 })
   } else {
     const draft = draftRequestForDataset({ ...dataset, filters: request.filters as DatasetConfig['filters'] })
     if (!draft) throw new Error(`数据集「${dataset.alias}」暂不支持查询造数样例`)
-    result = await previewDatasetDraft({ ...draft, ...request })
+    result = await previewDatasetDraft({ ...draft, ...request }, { timeout: 0 })
   }
 
   return {

@@ -255,6 +255,31 @@ describe('PythonScriptDialog 系统区接管交互', () => {
     state.pythonUser = 'result = 1'
   })
 
+  it('上游样例查询未完成时脚本仍可编辑和保存', async () => {
+    state.finalResultQueryConfig = {
+      confirmed: true,
+      schemaFingerprint: 'schema-1',
+      displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+      filterFields: [],
+      sortPolicy: { enabled: false, mode: 'single', allowedFields: [], defaultSort: null },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+    } as never
+    fetchDatasetSampleRows.mockReturnValue(new Promise(() => {}))
+    const wrapper = mount(PythonScriptDialog, {
+      global: { stubs: { 'el-dialog': elDialogStub, 'el-input': elInputStub, 'el-button': elButtonStub, 'el-tag': elTagStub, PythonQueryConfigDialog: pythonQueryConfigDialogStub } },
+    })
+
+    state.ui.python.visible = true
+    await nextTick()
+
+    const editor = wrapper.get('[data-testid="python-editor-code"]').element as HTMLTextAreaElement
+    expect(editor.disabled).toBe(false)
+    expect(editor.value).toContain('datasets.input(')
+    expect((wrapper.get('[data-testid="python-editor-save"]').element as HTMLButtonElement).disabled).toBe(false)
+    expect(wrapper.find('[data-testid="python-sample-loading"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
   it('未确认查询配置时保存脚本会弹出提示且不关闭编辑弹窗', async () => {
     state.finalResultQueryConfig = {
       confirmed: false,
