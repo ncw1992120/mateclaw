@@ -1032,6 +1032,80 @@ describe('CombinationCardWidget · 页签移动与复制', () => {
 
   const dataTransfer = { setData: vi.fn(), getData: vi.fn(() => 't1'), effectAllowed: '', dropEffect: '' }
 
+  function mountWithNestedTabs() {
+    const nested = {
+      ...nestedCombination,
+      containerConfig: {
+        ...containerConfig,
+        tabs: [
+          { id: 'nested-tab-1', title: '内层页签 1', children: [] },
+          { id: 'nested-tab-2', title: '内层页签 2', children: [] },
+        ],
+        activeTab: 'nested-tab-1',
+      },
+    }
+    return mount(CombinationCardWidget, {
+      props: {
+        component: {
+          id: 'outer-combination', type: 'combination', title: '外层组合卡片',
+          children: [nested],
+          containerConfig,
+          position: { x: 0, y: 0, w: 12, h: 8 },
+        },
+        editable: true,
+      },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true,
+          ChartWidget: true,
+          DataTableWidget: true,
+          FilterSelectWidget: true,
+          TimeFilterWidget: true,
+          AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' },
+          'el-icon': true,
+          DashboardTabTitle: { template: '<span />' },
+          DashboardComponentIcon: { template: '<span />' },
+        },
+      },
+    })
+  }
+
+  it('bubbles copy requests from a nested combination tab to the outer editor', async () => {
+    const wrapper = mountWithNestedTabs()
+    const innerTabs = wrapper.findAll('[data-child="nested-combination"] .cc-tab')
+
+    await innerTabs[1].trigger('keydown', { ctrlKey: true, key: 'c' })
+
+    expect(wrapper.emitted('copy-tab')?.[0]?.[0]).toEqual({ containerId: 'nested-combination', tabId: 'nested-tab-2' })
+    wrapper.unmount()
+  })
+
+  it('bubbles drag-reorder requests from a nested combination tab to the outer editor', async () => {
+    const wrapper = mountWithNestedTabs()
+    const innerTabs = wrapper.findAll('[data-child="nested-combination"] .cc-tab')
+
+    await innerTabs[0].trigger('dragstart', { dataTransfer })
+    await innerTabs[1].trigger('dragover', { dataTransfer, clientX: 999 })
+    await innerTabs[1].trigger('drop', { dataTransfer, clientX: 999 })
+
+    expect(wrapper.emitted('move-tab')?.[0]?.[0]).toEqual({ containerId: 'nested-combination', tabId: 'nested-tab-1', toIndex: 2 })
+    wrapper.unmount()
+  })
+
+  it('bubbles context-menu requests from a nested combination tab to the outer editor', async () => {
+    const wrapper = mountWithNestedTabs()
+    const innerTab = wrapper.findAll('[data-child="nested-combination"] .cc-tab')[1]
+
+    await innerTab.trigger('contextmenu', { clientX: 120, clientY: 60 })
+
+    expect(wrapper.emitted('tab-context-menu')?.[0]?.[0]).toMatchObject({
+      containerId: 'nested-combination', tabId: 'nested-tab-2', x: 120, y: 60,
+    })
+    wrapper.unmount()
+  })
+
   it('拖拽页签 A 到页签 C 之后：emit move-tab（先删后插 toIndex）', async () => {
     const wrapper = mountWithTabs()
     const tabs = wrapper.findAll('.cc-tab')
