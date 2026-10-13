@@ -236,6 +236,31 @@ describe('Aloudata 数据集展示名取数', () => {
     expect(mocks.listAloudataDimensions).not.toHaveBeenCalled()
   })
 
+  it('字段表 descriptor 缺少已选字段时使用选择器字段信息兜底，不阻断添加数据集', async () => {
+    const { confirmAloudata } = useInsight()
+    state.ui.aloudata = {
+      visible: true,
+      mode: 'metric-dim',
+      datasourceId: '9',
+      metricView: '',
+      metrics: ['digo_trd_fund_amt_inout_cy_jjgr'],
+      dims: ['attribution_plan_id'],
+      displayNames: {
+        attribution_plan_id: '计划id',
+        digo_trd_fund_amt_inout_cy_jjgr: '转化规模',
+      },
+    }
+    mocks.confirmDatasetDraft.mockResolvedValueOnce({ datasetId: '104', descriptor: { schema: [] } })
+
+    await expect(confirmAloudata()).resolves.toBeUndefined()
+
+    expect(state.ui.aloudata.visible).toBe(false)
+    expect(state.datasets[0].fields.map(({ name, displayName }) => [name, displayName])).toEqual([
+      ['attribution_plan_id', '计划id'],
+      ['digo_trd_fund_amt_inout_cy_jjgr', '转化规模'],
+    ])
+  })
+
   it('确认落库失败时移除未保存的数据集并保持配置弹窗打开', async () => {
     const { confirmAloudata } = useInsight()
     state.ui.aloudata = {

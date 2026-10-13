@@ -1662,14 +1662,15 @@ function applyDatasetDescriptor(ds: DatasetConfig, descriptor: datasetApi.Datase
   const labels = new Map(columns.map((column) => [column.name, column.title?.trim() ?? '']))
   if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
     const selectedNames = [...(ds.aloudata.dims ?? []), ...(ds.aloudata.metrics ?? [])]
-    const missing = selectedNames.filter((name) => !labels.has(name) || !labels.get(name))
-    if (missing.length) {
-      throw new Error(`展示字段表未包含已选字段或展示名：${missing.join('、')}`)
-    }
+    const displayNames = ds.aloudata.displayNames ?? {}
+    const resolvedLabels = Object.fromEntries(selectedNames.map((name) => [
+      name,
+      labels.get(name) || displayNames[name]?.trim() || name,
+    ]))
     const schema = buildAloudataMetricDimSchema(
       ds.aloudata.metrics ?? [],
       ds.aloudata.dims ?? [],
-      Object.fromEntries(labels),
+      resolvedLabels,
     )
     ds.fields = reconcileFieldMetas(schema, ds.fields, ds.schema)
     ds.schema = schema
