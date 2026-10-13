@@ -1765,12 +1765,13 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
   if (!state.backend.dashboardId) return { ok: false, message: '未加载仪表盘，无法预览' }
   state.backend.running = true
   const startedAt = Date.now()
+  let executionId = ''
   try {
     // “查看数据”是 Python 编辑器内的直接操作，不能要求用户先离开弹窗再点顶部保存。
     // 对仍使用 ds-* 临时 ID 的草稿先落库，再用回填后的真实 datasetId 组装执行 Schema。
     await ensurePersistedDatasetInputs()
     const executableSchema = buildSchema()
-    const { executionId } = await backend.submitComponentExecution(
+    const submission = await backend.submitComponentExecution(
       state.backend.dashboardId,
       state.backend.componentId,
       {},
@@ -1782,6 +1783,7 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
       ),
       { timeout: 0 },
     )
+    executionId = submission.executionId
     state.backend.executionId = executionId
     // 一直轮询到后端返回终态；长时间运行的查询不应被前端固定 60 秒截止。
     while (true) {
@@ -1821,13 +1823,28 @@ async function runComponentPreview(syncFinalResultQueryConfig = true): Promise<{
         }
         return { ok: true, message: executionId }
       }
-      const message = formatScriptResultError({ status, ...(typeof statusResponse.error === 'object' && statusResponse.error ? statusResponse.error as Record<string, string> : {}) })
+      const executionError = statusResponse.error
+      let structuredError = executionError
+      if (typeof executionError === 'string' && executionError.trim().startsWith('{')) {
+        try {
+          structuredError = JSON.parse(executionError)
+        } catch {
+          // 普通 Python traceback/错误文本不是 JSON，保留原文供排查。
+        }
+      }
+      const message = typeof structuredError === 'string' && structuredError.trim()
+        ? structuredError
+        : formatScriptResultError({ status, ...(typeof structuredError === 'object' && structuredError ? structuredError as Record<string, string> : {}) })
+      console.error('[python-execution] failed', { executionId, status, error: executionError || message })
       failResultSet('script', message)
       return { ok: false, message }
     }
   } catch (e) {
-    const msg = (e as Error)?.message || '执行提交失败'
+    const requestError = e as Error & { response?: { data?: { msg?: string; message?: string; error?: string } } }
+    const responseBody = requestError.response?.data
+    const msg = responseBody?.msg || responseBody?.message || responseBody?.error || requestError.message || '执行提交失败'
     state.backend.lastError = msg
+    console.error('[python-execution] request failed', { executionId, error: msg })
     return { ok: false, message: msg }
   } finally {
     state.backend.running = false

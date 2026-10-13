@@ -1,6 +1,10 @@
 package vip.mate.dataagent.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import org.slf4j.LoggerFactory;
 import org.junit.jupiter.api.Test;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
 import vip.mate.dataagent.dataset.DatasetInputDescriptor;
@@ -25,6 +29,59 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 class DashboardExecutionServiceTest {
+    @Test
+    void logsPythonFailureDetailsWithoutLoggingScriptOrParameters() {
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        DashboardExecutionEntity execution = new DashboardExecutionEntity();
+        execution.setExecutionId("dashboard-42-failed");
+        execution.setWorkspaceId(7L);
+        execution.setDashboardId(42L);
+        execution.setStatus("RUNNING");
+        when(executionMapper.selectOne(any())).thenReturn(execution);
+        when(runner.getStatus("dashboard-42-failed")).thenReturn(Map.of(
+                "status", "FAILED",
+                "error", "Traceback (most recent call last):\n  File \"user_script.py\", line 1\n    print('secret script')\nValueError: metric_id column is missing",
+                "returncode", 1,
+                "script", "secret script",
+                "parameters", Map.of("token", "secret parameter")));
+
+        Logger logger = (Logger) LoggerFactory.getLogger(DashboardExecutionServiceImpl.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        try {
+            var service = new DashboardExecutionServiceImpl(
+                    mock(InsightDashboardService.class), mock(ScriptTaskPreparationService.class), runner,
+                    guard, new ObjectMapper(), executionMapper, mock(ObjectRefService.class),
+                    new vip.mate.dataagent.service.code.ScriptResultContractService(),
+                    "http://mateclaw-dataagent:18089/dataagent/api/");
+
+            Map<String, Object> response = service.status("dashboard-42-failed");
+
+            assertTrue(((String) response.get("error")).contains("File \"user_script.py\", line 1"));
+            assertTrue(((String) response.get("error")).contains("ValueError: metric_id column is missing"));
+            assertEquals(1, response.get("returnCode"));
+            String log = appender.list.stream().map(ILoggingEvent::getFormattedMessage)
+                    .filter(message -> message.contains("stage=python-execution-failed"))
+                    .findFirst().orElseThrow();
+            assertTrue(log.contains("dashboardId=42"));
+            assertTrue(log.contains("executionId=dashboard-42-failed"));
+            assertTrue(log.contains("status=FAILED"));
+            assertTrue(log.contains("returnCode=1"));
+            assertTrue(log.contains("scriptLine=1"));
+            assertTrue(log.contains("ValueError: metric_id column is missing"));
+            assertFalse(log.contains("user_script.py"));
+            assertFalse(log.contains("secret script"));
+            assertFalse(log.contains("secret parameter"));
+        } finally {
+            logger.detachAppender(appender);
+            appender.stop();
+        }
+    }
+
     @Test
     void executesNestedTabComponentWithIndependentPerInputFilterPlans() throws Exception {
         InsightDashboardService dashboards = mock(InsightDashboardService.class);

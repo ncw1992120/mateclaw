@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractResultSchema,
+  formatPythonExecutionError,
   formatScriptResultError,
   fingerprintResultSchema,
   parseScriptResultEnvelope,
@@ -42,6 +43,27 @@ function tableComponent() {
 }
 
 describe('parseScriptResultEnvelope', () => {
+  it('从 Python traceback 提取脚本行号和异常摘要，同时保留完整详情', () => {
+    const traceback = [
+      'Traceback (most recent call last):',
+      '  File "user_script.py", line 27, in <module>',
+      '    result = missing_value + 1',
+      "NameError: name 'missing_value' is not defined",
+    ].join('\n')
+
+    expect(formatPythonExecutionError(traceback)).toEqual({
+      summary: "Python 脚本第 27 行执行失败：NameError: name 'missing_value' is not defined",
+      details: traceback,
+    })
+  })
+
+  it('没有 traceback 时保留原始错误信息', () => {
+    expect(formatPythonExecutionError('Python Worker 不可用')).toEqual({
+      summary: 'Python Worker 不可用',
+      details: '',
+    })
+  })
+
   it('接受合法 table/scalar/message', () => {
     expect(parseScriptResultEnvelope(tableEnvelope([column('id', 'number')], [{ id: 1 }])).kind).toBe('table')
     expect(parseScriptResultEnvelope(scalarEnvelope(42)).kind).toBe('scalar')

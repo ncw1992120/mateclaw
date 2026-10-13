@@ -268,7 +268,9 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             updateFromRunner(execution, result);
             return response(execution, result);
         } catch (RuntimeException e) {
-            return response(execution, persistedResult(execution));
+            LOGGER.error("[python-execution] stage=status-poll-failed dashboardId={} executionId={} error={}",
+                    execution.getDashboardId(), executionId, e.getMessage());
+            throw e;
         }
     }
 
@@ -376,6 +378,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 execution.setOutputRefJson(null);
                 execution.setErrorMessage(writeJson(e.asMap()));
                 persistIfChanged(execution, previous);
+                logExecutionFailure(execution, previous);
                 return;
             }
         } else {
@@ -388,7 +391,45 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         Object returnCode = result.get("stats") instanceof Map<?, ?> stats ? stats.get("returncode") : result.get("returncode");
         if (returnCode instanceof Number number) execution.setReturnCode(number.intValue());
         persistIfChanged(execution, previous);
+        logExecutionFailure(execution, previous);
     }
+
+    /** 记录执行失败的诊断信息，但绝不记录脚本、查询参数、输入数据或完整 Runner 请求。 */
+    private void logExecutionFailure(DashboardExecutionEntity execution, PersistedExecutionState previous) {
+        String status = execution.getStatus();
+        boolean failed = status != null && (status.equalsIgnoreCase("FAILED")
+                || status.equalsIgnoreCase("OUTPUT_CONTRACT_ERROR")
+                || status.equalsIgnoreCase("TIMEOUT")
+                || status.equalsIgnoreCase("CANCELLED")
+                || status.equalsIgnoreCase("OUTPUT_LIMIT")
+                || status.equalsIgnoreCase("RESULT_LIMIT"));
+        if (!failed) return;
+
+        PersistedExecutionState current = persistedState(execution);
+        if (previous.equals(current)) return;
+        PythonFailureLogDetails details = pythonFailureLogDetails(execution.getErrorMessage());
+        LOGGER.error("[python-execution] stage=python-execution-failed dashboardId={} executionId={} status={} returnCode={} scriptLine={} error={}",
+                execution.getDashboardId(), execution.getExecutionId(), status,
+                execution.getReturnCode(), details.scriptLine(), details.summary());
+    }
+
+    /** 从 traceback 提取用户脚本行号和异常摘要；不将 traceback 中的脚本源码写入服务日志。 */
+    private PythonFailureLogDetails pythonFailureLogDetails(String error) {
+        if (error == null || error.isBlank()) return new PythonFailureLogDetails("unknown", "(no error detail)");
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("user_script\\.py[\"'], line (\\d+)")
+                .matcher(error);
+        String scriptLine = "unknown";
+        while (matcher.find()) scriptLine = matcher.group(1);
+        String summary = Arrays.stream(error.split("\\R"))
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .reduce((first, last) -> last)
+                .orElse("(no error detail)");
+        return new PythonFailureLogDetails(scriptLine, summary);
+    }
+
+    private record PythonFailureLogDetails(String scriptLine, String summary) { }
 
     private PersistedExecutionState persistedState(DashboardExecutionEntity execution) {
         return new PersistedExecutionState(execution.getStatus(), execution.getLogs(), execution.getOutputJson(),
@@ -417,10 +458,6 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
         response.put("returnCode", execution.getReturnCode());
         if (result != null && !result.isEmpty()) response.put("runner", result);
         return response;
-    }
-
-    private Map<String, Object> persistedResult(DashboardExecutionEntity execution) {
-        return Map.of("status", execution.getStatus(), "result", execution.getOutputJson() == null ? "" : execution.getOutputJson());
     }
 
     private String writeJson(Object value) {

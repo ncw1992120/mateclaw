@@ -42,9 +42,19 @@ const stubs = {
 beforeEach(() => {
   vi.restoreAllMocks()
   const originalUseInsight = insightModule.useInsight
-  reloadResult = vi.fn((forceRefresh?: boolean) =>
-    forceRefresh ? Promise.resolve() : originalUseInsight().loadResultPreview(forceRefresh),
-  )
+  reloadResult = vi.fn((forceRefresh?: boolean) => {
+    if (forceRefresh) {
+      previewState.payload = {
+        dataColumns: state.resultSet.columns.map((column) => ({ ...column })),
+        dataRows: state.resultSet.rows.map((row) => ({ ...row })),
+        fieldStruct: [],
+        execInfo: { inputDatasets: [], queryConditions: '', pushedFilters: [], scanned: '-', returned: '0', pythonTime: '-', inRows: 0, outRows: 0, error: '' },
+        logs: [],
+      } as any
+      return Promise.resolve()
+    }
+    return originalUseInsight().loadResultPreview(forceRefresh)
+  })
   vi.spyOn(insightModule, 'useInsight').mockImplementation(() => ({
     ...originalUseInsight(),
     loadResultPreview: reloadResult,
@@ -65,6 +75,24 @@ beforeEach(() => {
 })
 
 describe('PythonResultDataDialog', () => {
+  it('失败时突出显示脚本行号和异常，并允许展开完整 traceback', async () => {
+    const traceback = [
+      'Traceback (most recent call last):',
+      '  File "user_script.py", line 27, in <module>',
+      '    result = missing_value + 1',
+      "NameError: name 'missing_value' is not defined",
+    ].join('\n')
+
+    const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
+    previewState.error = traceback
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="python-execution-error"]').text())
+      .toContain("Python 脚本第 27 行执行失败：NameError: name 'missing_value' is not defined")
+    expect(wrapper.get('[data-testid="python-execution-error"] pre').text()).toContain('result = missing_value + 1')
+    wrapper.unmount()
+  })
+
   it('查看数据展示全部输出列，并允许在结果区配置展示名', async () => {
     Object.assign(state.resultSet, {
       columns: [
@@ -89,10 +117,10 @@ describe('PythonResultDataDialog', () => {
     expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(2)
     expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr').map((row) => row.findAll('td')[1].text()))
       .toEqual(['amount', 'region'])
-    expect(wrapper.findAll('.result-table .result-column').map((column) => column.attributes('data-label')))
-      .toEqual(['amount', '区域'])
     await wrapper.findAll('.dd-display-table input')[0].setValue('统计金额')
     expect(state.finalResultQueryConfig?.displayFields.find((field) => field.field === 'amount')?.title).toBe('统计金额')
+    await wrapper.get('[data-testid="python-run-query"]').trigger('click')
+    await flushPromises()
     expect(wrapper.find('.result-column[data-prop="amount"]').attributes('data-label')).toBe('统计金额')
     wrapper.unmount()
   })
@@ -203,12 +231,19 @@ describe('PythonResultDataDialog', () => {
     refreshedWrapper.unmount()
   })
 
-  it('loads the existing result when mounted while already visible', async () => {
+  it('打开弹窗时不自动查询，结果区提示用户点击查询', async () => {
+    previewState.payload = {
+      dataColumns: [{ name: 'stale', type: 'string' }],
+      dataRows: [{ stale: '旧结果' }],
+    } as any
     const wrapper = mount(PythonResultDataDialog, { global: { stubs } })
     await flushPromises()
 
-    expect(wrapper.find('.result-table').exists()).toBe(true)
-    expect(previewState.payload?.dataRows).toEqual([{ result: 'rendered' }])
+    expect(reloadResult).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('点击「查询」获取数据')
+    expect(previewState.payload).toBeNull()
+    expect(wrapper.findAll('[data-testid="python-display-fields-table"] tbody tr')).toHaveLength(1)
+    expect(wrapper.find('.result-table').exists()).toBe(false)
     wrapper.unmount()
   })
 

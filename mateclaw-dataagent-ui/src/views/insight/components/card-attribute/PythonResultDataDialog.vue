@@ -122,8 +122,15 @@
           <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
             <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
           </el-table>
-          <el-empty v-else-if="loading" description="查询中…" />
-          <el-empty v-else :description="error || '点击「查询」获取数据'" />
+          <el-empty v-if="loading" description="查询中…" />
+          <div v-else-if="error" class="dd-execution-error" role="alert" data-testid="python-execution-error">
+            <div class="dd-execution-error-summary">{{ formattedError.summary }}</div>
+            <details v-if="formattedError.details" class="dd-execution-error-details">
+              <summary>查看完整 Python traceback</summary>
+              <pre>{{ formattedError.details }}</pre>
+            </details>
+          </div>
+          <el-empty v-else description="点击「查询」获取数据" />
         </div>
         <div v-if="paginationEnabled && visibleColumns.length" class="dd-pagination" data-testid="python-result-pagination">
           <el-pagination
@@ -154,20 +161,27 @@ import { applyResultFilters } from '@/utils/result-preview-filter'
 import { createPythonResultFilterRows, enabledPythonResultConditions } from '@/utils/python-result-filter-conditions'
 import type { InsightComponent, InsightComponentData } from '@/types'
 import { componentPreviewData } from '@/utils/component-preview-data'
+import { reconcileFinalResultDisplayFields } from '@/utils/final-result-query'
+import { formatPythonExecutionError } from '@/utils/script-result'
 import ComponentDataPreview from '../ComponentDataPreview.vue'
 import ViewDataFilterSelect from './ViewDataFilterSelect.vue'
 
 const props = defineProps<{ component?: InsightComponent | null }>()
 const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
-const { state, previewState, loadResultPreview } = useInsight()
+const { state, previewState, loadResultPreview, rebuildKpiMetrics } = useInsight()
 const ui = state.ui
 const loading = computed(() => previewState.loading)
 const error = computed(() => previewState.error)
+const formattedError = computed(() => formatPythonExecutionError(error.value))
 const config = computed(() => state.finalResultQueryConfig)
 const displayFields = computed(() => config.value?.displayFields ?? [])
-const displayRows = computed(() => (previewState.payload?.dataColumns ?? []).map((column) => {
+// 字段配置可直接从当前结果 Schema 展示，不需要为了打开弹窗而重新读取执行结果。
+const outputColumns = computed(() => previewState.payload?.dataColumns ?? state.resultSet.columns)
+const displayRows = computed(() => outputColumns.value.map((column) => {
   const configured = displayFields.value.find((field) => field.field === column.name)
-  const sampleValue = previewState.payload?.dataRows?.[0]?.[column.name] ?? column.sampleValue
+  const sampleValue = previewState.payload?.dataRows?.[0]?.[column.name]
+    ?? state.resultSet.rows[0]?.[column.name]
+    ?? column.sampleValue
   const role = column.type === 'number' || typeof sampleValue === 'number'
     ? 'measure'
     : configured?.role ?? 'dimension'
@@ -282,8 +296,7 @@ function setTimeConditionEnabled(group: Extract<PythonConditionGroup, { kind: 't
 function updateDisplayName(field: string, title: string): void {
   const fields = [...displayFields.value]
   const index = fields.findIndex((item) => item.field === field)
-  const column = previewState.payload?.dataColumns.find((item) => item.name === field)
-  const role = fields[index]?.role ?? (typeof column?.sampleValue === 'number' ? 'measure' : 'dimension')
+  const role = displayRows.value.find((row) => row.name === field)?.role ?? fields[index]?.role ?? 'dimension'
   const next = { field, title, role }
   if (index >= 0) fields[index] = { ...fields[index], title }
   else fields.push(next)
@@ -330,8 +343,20 @@ function initialize(): void {
   hasQueried.value = false
   resultTab.value = 'raw'
   appliedConditions.value = []
+  previewState.payload = null
+  previewState.error = ''
+  if (state.resultSet.columns.length && config.value) {
+    state.finalResultQueryConfig = {
+      ...config.value,
+      displayFields: reconcileFinalResultDisplayFields(
+        state.resultSet.columns,
+        state.resultSet.rows,
+        config.value.displayFields ?? [],
+      ),
+    }
+  }
+  if (state.cards.find((card) => card.id === state.activeCardId)?.type === 'kpi') rebuildKpiMetrics()
   conditionRows.value = createPythonResultFilterRows(filterFields.value, state.filterCatalog)
-  void loadResultPreview()
 }
 
 watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
@@ -361,6 +386,11 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-field-name, .dd-bound-field code { font-family: var(--font-mono, monospace); }
 .dd-display-empty, .dd-empty { padding: 12px 0; color: var(--db-text-muted); font-size: 12px; text-align: center; }
 .dd-binding-error { display: block; color: var(--el-color-danger); font-size: 12px; margin-top: 4px; }
+.dd-execution-error { padding: 16px; color: var(--el-color-danger); background: var(--el-color-danger-light-9); border: 1px solid var(--el-color-danger-light-7); border-radius: 6px; overflow: auto; }
+.dd-execution-error-summary { font-weight: 600; white-space: pre-wrap; overflow-wrap: anywhere; }
+.dd-execution-error-details { margin-top: 10px; color: var(--el-text-color-regular); font-size: 12px; }
+.dd-execution-error-details summary { cursor: pointer; }
+.dd-execution-error-details pre { max-height: 240px; margin: 8px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--el-font-family); }
 .dd-query-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dd-result-actions { display: flex; align-items: center; gap: 10px; }
 .dd-result-body { min-height: 160px; }

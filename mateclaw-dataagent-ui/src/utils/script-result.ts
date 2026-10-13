@@ -129,6 +129,32 @@ export interface ScriptResultError {
   message?: string
 }
 
+export interface PythonExecutionErrorDisplay {
+  /** 面向用户的简短错误，优先包含 Python 脚本行号。 */
+  summary: string
+  /** 完整 traceback，仅在用户主动展开时显示。 */
+  details: string
+}
+
+/** 将 Worker traceback 转成可直接理解的“行号 + 异常”，同时保留原文供继续排查。 */
+export function formatPythonExecutionError(error: string): PythonExecutionErrorDisplay {
+  const details = error.trim()
+  if (!details) return { summary: 'Python 执行失败，后端未返回错误详情', details: '' }
+
+  const lines = details.split(/\r?\n/)
+  const scriptFrames = lines
+    .map((line) => line.match(/File ["'](?:.*[/\\])?user_script\.py["'], line (\d+)/))
+    .filter((match): match is RegExpMatchArray => match !== null)
+  const lineNumber = scriptFrames.at(-1)?.[1]
+  const exception = [...lines].reverse().find((line) => line.trim() && !line.trim().startsWith('^'))?.trim()
+  const isTraceback = lines.some((line) => line.startsWith('Traceback (most recent call last):'))
+
+  if (isTraceback && lineNumber && exception) {
+    return { summary: `Python 脚本第 ${lineNumber} 行执行失败：${exception}`, details }
+  }
+  return { summary: details, details: isTraceback ? details : '' }
+}
+
 const DATA_TYPES: readonly string[] = ['string', 'number', 'boolean', 'date', 'datetime']
 
 /** 严格解析 envelope；未知版本/kind/列类型抛出带路径的前端契约错误。 */
