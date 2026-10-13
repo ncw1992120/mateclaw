@@ -55,27 +55,33 @@ export function saveAsTemplate(id: string, data: InsightDashboardSaveAsTemplateI
 
 /** 预览仪表盘（获取所有组件渲染数据，支持运行时筛选条件） */
 export function preview(id: string, filterContext?: DashboardFilterContext) {
-  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {})
+  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {}, { timeout: 0 })
 }
 
 /** 预览单个组件数据（编辑器即时验证） */
 export function previewComponent(component: InsightComponent) {
-  return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
+  return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component, { timeout: 0 })
 }
 
 /** 创建已保存脚本的数据处理执行任务 */
 export function execute(id: string, parameters: Record<string, unknown> = {}) {
-  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/executions`, { parameters })
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/executions`, { parameters }, { timeout: 0 })
 }
 
 /** 按组件级 datasetPipeline 创建执行任务。 */
 export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string, queryContext?: QueryContext, requestOptions?: { timeout?: number }) {
-  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext }, requestOptions)
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext }, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
 }
 
 /** 查询脚本执行状态 */
 export function getExecutionStatus(executionId: string, requestOptions?: { timeout?: number }) {
-  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`, requestOptions)
+  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
 }
 
 /** 查询执行日志（标准输出与受限错误信息） */
@@ -86,7 +92,10 @@ export function getExecutionLogs(executionId: string) {
 /** 读取执行结果预览（大结果由 DataAgent 受控读取 ObjectRef 后返回受限行集） */
 export function getExecutionResult(executionId: string, requestOptions?: { timeout?: number }) {
   // 统一结构化结果：envelope 为 table/scalar/message 标准信封（内联与 ObjectRef 引用同构）
-  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`, requestOptions)
+  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
 }
 
 /** 对 Worker 的完整输出结果应用已确认的最终结果查询配置。 */
@@ -96,7 +105,7 @@ export function previewExecutionResult(executionId: string, request: {
   finalResultQueryConfig: Record<string, unknown>
 }) {
   return api.post<Record<string, unknown>>(
-    `${BASE_URL}/executions/${encodeURIComponent(executionId)}/result/preview`, request,
+    `${BASE_URL}/executions/${encodeURIComponent(executionId)}/result/preview`, request, { timeout: 0 },
   )
 }
 

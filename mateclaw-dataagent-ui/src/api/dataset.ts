@@ -53,7 +53,10 @@ export function getInputDescriptor(datasetId: string, inputName: string = 'datas
 
 /** 使用统一 DatasetSourceAdapter 预览数据，并返回下推审计结果 */
 export function previewInput(request: DatasetReadRequest, requestOptions?: { timeout?: number; headers?: Record<string, string> }) {
-  return api.post<DatasetBatch>(`${BASE_URL}/preview`, request, requestOptions)
+  return api.post<DatasetBatch>(`${BASE_URL}/preview`, request, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
 }
 
 /** 查询计划预览请求：datasetId + 运行时 QueryContext +（可选）未保存的查询配置草稿 */
@@ -83,7 +86,7 @@ export interface QueryPlanPreviewResponse {
  * 显式空集合短路时 rows 为空且不访问数据源。
  */
 export function previewQueryPlan(request: QueryPlanPreviewRequest) {
-  return api.post<QueryPlanPreviewResponse>(`${BASE_URL}/query-plan/preview`, request)
+  return api.post<QueryPlanPreviewResponse>(`${BASE_URL}/query-plan/preview`, request, { timeout: 0 })
 }
 
 export interface DatasetComposerDraftRequest {
@@ -107,7 +110,10 @@ export interface DatasetComposerDraftRequest {
 
 export function previewDraft(request: DatasetComposerDraftRequest, requestOptions?: { timeout?: number; headers?: Record<string, string> }) {
   return api.post<DatasetBatch & { executionId?: string }>(
-    '/dataagent/api/v1/dataset-composer/drafts/preview', request, requestOptions,
+    '/dataagent/api/v1/dataset-composer/drafts/preview', request, {
+      ...requestOptions,
+      timeout: requestOptions?.timeout ?? 0,
+    },
   )
 }
 

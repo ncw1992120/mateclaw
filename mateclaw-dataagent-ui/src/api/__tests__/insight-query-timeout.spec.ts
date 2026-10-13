@@ -25,22 +25,36 @@ describe('查看数据查询请求超时', () => {
     }
   }
 
-  it('数据集查看数据的草稿和已保存数据预览不受全局 60 秒超时限制', async () => {
+  it('数据集草稿、数据源及计划预览默认不受全局 60 秒超时限制', async () => {
     captureRequests()
 
-    await datasetApi.previewDraft({ sourceType: 'JDBC_SQL' }, { timeout: 0 })
-    await datasetApi.previewInput({ datasetId: 'dataset-1' } as never, { timeout: 0 })
+    await datasetApi.previewDraft({ sourceType: 'JDBC_SQL' })
+    await datasetApi.previewInput({ datasetId: 'dataset-1' } as never)
+    await datasetApi.previewQueryPlan({ datasetId: 'dataset-1', queryContext: {} } as never)
 
-    expect(capturedTimeouts).toEqual([0, 0])
+    expect(capturedTimeouts).toEqual([0, 0, 0])
   })
 
   it('Python 查看数据的执行、状态轮询和结果读取不受全局 60 秒超时限制', async () => {
     captureRequests()
 
-    await dashboardApi.executeComponent('dashboard-1', 'component-1', {}, undefined, undefined, { timeout: 0 })
-    await dashboardApi.getExecutionStatus('execution-1', { timeout: 0 })
-    await dashboardApi.getExecutionResult('execution-1', { timeout: 0 })
+    await dashboardApi.executeComponent('dashboard-1', 'component-1')
+    await dashboardApi.getExecutionStatus('execution-1')
+    await dashboardApi.getExecutionResult('execution-1')
+    await dashboardApi.previewExecutionResult('execution-1', { finalResultQueryConfig: {} })
+    await dashboardApi.executeComponent('dashboard-1', 'component-1', {}, undefined, undefined, { timeout: 5000 })
 
-    expect(capturedTimeouts).toEqual([0, 0, 0])
+    expect(capturedTimeouts).toEqual([0, 0, 0, 0, 5000])
+  })
+
+  it('仪表盘与查询计划的长查询不受全局 60 秒超时限制，但普通详情请求仍保留默认超时', async () => {
+    captureRequests()
+
+    await dashboardApi.preview('dashboard-1')
+    await dashboardApi.previewComponent({} as never)
+    await dashboardApi.execute('dashboard-1')
+    await dashboardApi.get('dashboard-1')
+
+    expect(capturedTimeouts).toEqual([0, 0, 0, 60000])
   })
 })
