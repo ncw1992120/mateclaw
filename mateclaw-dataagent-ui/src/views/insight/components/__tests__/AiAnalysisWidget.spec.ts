@@ -51,6 +51,15 @@ describe('AiAnalysisWidget', () => {
     expect(wrapper.find('button.el-button').exists()).toBe(false)
   })
 
+  it('hides manual generation when automatic generation is enabled', () => {
+    const wrapper = mount(AiAnalysisWidget, {
+      props: { component: { ...component, config: { autoGenerate: true } } },
+      ...globalStubs,
+    })
+
+    expect(wrapper.find('button.el-button').exists()).toBe(false)
+  })
+
   it('renders data and ai sections with their labels and unchanged markdown text', () => {
     const componentData = {
       aiAnalysis: {

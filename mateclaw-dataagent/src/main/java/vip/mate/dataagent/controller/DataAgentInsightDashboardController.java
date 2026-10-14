@@ -3,6 +3,7 @@ package vip.mate.dataagent.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -277,6 +278,17 @@ public class DataAgentInsightDashboardController {
     public R<String> generateReport(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return R.ok(reportService.generateReport(id));
+    }
+
+    /** 基于预览页面已加载的数据生成单个 AI 分析组件内容。 */
+    @PostMapping("/{id}/components/{componentId}/ai-analysis")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "生成组件 AI 分析", description = "使用当前页面已加载的数据快照生成单个 AI 分析组件内容，不重新查询仪表盘")
+    public R<String> generateComponentAnalysis(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id,
+            @Parameter(description = "AI 分析组件 ID") @PathVariable String componentId,
+            @Valid @RequestBody InsightComponentAiAnalysisRequest request) {
+        return R.ok(reportService.generateComponentAnalysis(id, componentId, request));
     }
 
     /**

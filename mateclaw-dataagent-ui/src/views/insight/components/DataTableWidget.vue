@@ -129,6 +129,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'table-view-change', payload: { componentId: string; currentPage: number; pageSize: number; total: number; columns: string[]; rows: string[][]; sort: { field: string; order: 'ascending' | 'descending' } | null }): void
   (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
@@ -341,6 +342,21 @@ const pagedTableRows = computed(() => {
   const end = start + pageSize.value
   return sortedTableRows.value.slice(start, end)
 })
+
+/** 将当前实际展示页同步给仪表盘预览，供自动分析复用同一份视图数据。 */
+watch([pagedTableRows, currentPage, pageSize, sortState, activeTableData], () => {
+  const table = activeTableData.value
+  if (!table) return
+  emit('table-view-change', {
+    componentId: props.component.id,
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    total: activeTableData.value?.totalCount ?? activeTableRows.value.length,
+    columns: [...table.columns],
+    rows: pagedTableRows.value.map((row) => table.columns.map((_, index) => row[`col_${index}`] ?? '')),
+    sort: sortState.value ? { ...sortState.value } : null,
+  })
+}, { deep: true, immediate: true, flush: 'post' })
 
 /** 导出 CSV */
 function handleExportCsv(): void {

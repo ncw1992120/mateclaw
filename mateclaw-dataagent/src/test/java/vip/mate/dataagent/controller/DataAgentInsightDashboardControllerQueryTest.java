@@ -170,4 +170,32 @@ class DataAgentInsightDashboardControllerQueryTest {
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.msg").value(org.hamcrest.Matchers.containsString("RESULT_NOT_READY")));
     }
+
+    @Test
+    @DisplayName("组件 AI 分析端点将前端快照透传给分析服务")
+    void componentAiAnalysisPassesPreviewSnapshot() throws Exception {
+        InsightReportService reports = mock(InsightReportService.class);
+        DataAgentInsightDashboardController controller = new DataAgentInsightDashboardController(
+                mock(InsightDashboardService.class), mock(InsightDataBindService.class), reports,
+                mock(DashboardExecutionService.class), mock(ResultSetQueryService.class));
+        MockMvc standalone = MockMvcBuilders.standaloneSetup(controller)
+                .setControllerAdvice(new vip.mate.dataagent.exception.DataAgentGlobalExceptionHandler())
+                .build();
+        when(reports.generateComponentAnalysis(eq(7L), eq("ai-1"), any())).thenReturn("## 关键发现\n数据变化明显");
+        Map<String, Object> snapshot = Map.of(
+                "pageId", "page-1",
+                "components", List.of(Map.of("componentId", "table-1", "status", "success")));
+        Map<String, Object> request = Map.of("promptTemplate", "关注转化率", "snapshot", snapshot);
+
+        standalone.perform(post("/v1/insight/dashboards/7/components/ai-1/ai-analysis")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(om.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").value(org.hamcrest.Matchers.containsString("关键发现")));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(vip.mate.dataagent.dto.InsightComponentAiAnalysisRequest.class);
+        verify(reports).generateComponentAnalysis(eq(7L), eq("ai-1"), captor.capture());
+        org.junit.jupiter.api.Assertions.assertEquals(snapshot, captor.getValue().getSnapshot());
+        org.junit.jupiter.api.Assertions.assertEquals("关注转化率", captor.getValue().getPromptTemplate());
+    }
 }

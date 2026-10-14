@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   getExecutionResult: vi.fn(),
   previewExecutionResult: vi.fn(),
   getReport: vi.fn(),
+  generateComponentAnalysis: vi.fn(),
 }))
 
 vi.mock('@/stores/useInsightDashboardStore', () => ({
@@ -41,6 +42,7 @@ vi.mock('@/api/dataset', () => ({
 }))
 vi.mock('@/api/insight-report', () => ({
   generateReport: vi.fn(),
+  generateComponentAnalysis: mocks.generateComponentAnalysis,
   getReport: mocks.getReport,
   publishReport: vi.fn(),
 }))
@@ -82,8 +84,9 @@ async function mountPreview() {
       plugins: [i18n],
       stubs: {
         DashboardCanvas: {
+          name: 'DashboardCanvas',
           props: ['components', 'componentDataMap'],
-          emits: ['filter-change'],
+          emits: ['filter-change', 'ai-analysis-generate', 'table-view-change'],
           template: '<div data-test="canvas">{{ JSON.stringify(componentDataMap) }}</div>',
         },
         ElButton: true, ElIcon: true, ElDrawer: true,
@@ -108,6 +111,7 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     mocks.confirmDatasetDraft.mockReset()
     mocks.execute.mockReset()
     mocks.getReport.mockResolvedValue(null)
+    mocks.generateComponentAnalysis.mockReset().mockResolvedValue('## 趋势分析\n\n数据总体上升。')
     mocks.previewQueryPlan.mockResolvedValue({ rows: [{ region: '华东' }], rowCount: 1 })
   })
   afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.clearAllMocks() })
@@ -160,6 +164,69 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     pendingReport.resolve('<p>报告</p>')
     await flushPromises()
     expect(mocks.getReport).toHaveBeenCalledWith('dashboard-1')
+  })
+
+  it('自动生成开启时，在当前页签数据加载完成后用已加载数据生成分析', async () => {
+    const aiComponent = {
+      id: 'analysis-1', type: 'aiAnalysis', title: '策略分析', position: { x: 0, y: 5, w: 4, h: 3 },
+      config: { autoGenerate: true, promptTemplate: '关注各策略转化率' },
+    }
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '策略解读', schemaJson: schemaFor([pipelineComponent, aiComponent]),
+    }
+
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledWith('dashboard-1', 'analysis-1', expect.objectContaining({
+      promptTemplate: '关注各策略转化率',
+      snapshot: expect.objectContaining({
+        pageId: 'page-1',
+        components: [expect.objectContaining({ componentId: 'dataset-table', status: 'success' })],
+      }),
+    }), expect.any(AbortSignal))
+    expect(canvasDataMap(wrapper)['analysis-1'].aiAnalysis.analysisSection).toContain('数据总体上升')
+  })
+
+  it('自动生成会等待当前页面数据请求进入终态', async () => {
+    const pendingQuery = deferred<any>()
+    mocks.previewQueryPlan.mockReturnValue(pendingQuery.promise)
+    const aiComponent = {
+      id: 'analysis-1', type: 'aiAnalysis', title: '策略分析', position: { x: 0, y: 5, w: 4, h: 3 },
+      config: { autoGenerate: true },
+    }
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '策略解读', schemaJson: schemaFor([pipelineComponent, aiComponent]),
+    }
+    wrapper = await mountPreview()
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).not.toHaveBeenCalled()
+
+    pendingQuery.resolve({ rows: [{ region: '华东' }], rowCount: 1 })
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+  })
+
+  it('关闭自动生成时不自动运行，只有点击组件按钮才生成', async () => {
+    const aiComponent = {
+      id: 'analysis-manual', type: 'aiAnalysis', title: '手动分析', position: { x: 0, y: 0, w: 4, h: 3 },
+      config: { autoGenerate: false },
+    }
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '策略解读', schemaJson: schemaFor([pipelineComponent, aiComponent]),
+    }
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(mocks.generateComponentAnalysis).not.toHaveBeenCalled()
+    wrapper.findComponent({ name: 'DashboardCanvas' }).vm.$emit('ai-analysis-generate', 'analysis-manual')
+    await flushPromises()
+
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledWith(
+      'dashboard-1', 'analysis-manual', expect.objectContaining({ snapshot: expect.any(Object) }), expect.any(AbortSignal),
+    )
   })
 
   it('无数据集管线时不请求数据集列表（不做物化探测）', async () => {

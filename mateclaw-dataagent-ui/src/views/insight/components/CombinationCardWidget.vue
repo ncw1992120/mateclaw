@@ -217,6 +217,7 @@
             :dashboard-theme="dashboardTheme"
             :tab-title-icon-style-preview="tabTitleIconStylePreview"
             @edit-tab-title-icon-style="(payload) => emit('edit-tab-title-icon-style', payload)"
+            @table-view-change="(payload) => emit('table-view-change', payload)"
           />
           <FilterSelectWidget
             v-else-if="child.type === 'filter'"
@@ -241,11 +242,14 @@
             :component-data="childComponentData(child)"
             :show-title="false"
             :dashboard-theme="dashboardTheme"
+            :generating="aiAnalysisGeneratingIds?.has(child.id)"
+            @generate="(id) => emit('ai-analysis-generate', id)"
           />
           <CombinationCardWidget
             v-else-if="child.type === 'combination'"
             :component="toWidgetComponent(child)"
             :component-data-map="componentDataMap"
+            :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
             :runtime-filter-state="runtimeFilterState"
             :editable="editable"
             :container-resizing="resizingId === child.id"
@@ -259,6 +263,8 @@
             @filter-change="(payload) => emit('filter-change', payload)"
             @time-filter-change="(payload) => emit('time-filter-change', payload)"
             @retry-component-query="(id) => emit('retry-component-query', id)"
+            @table-view-change="(payload) => emit('table-view-change', payload)"
+            @ai-analysis-generate="(id) => emit('ai-analysis-generate', id)"
             @select-child="(payload) => emit('select-child', payload)"
             @add-tab="(payload) => emit('add-tab', payload)"
             @remove-tab="(payload) => emit('remove-tab', payload)"
@@ -349,6 +355,7 @@ const props = withDefaults(
   defineProps<{
     component: InsightComponent
     componentDataMap?: Record<string, InsightComponentData>
+    aiAnalysisGeneratingIds?: Set<string>
     runtimeFilterState?: DashboardRuntimeFilterState
     /** 容器本身不展示样例数据；内部子组件按自身类型决定，保留字段兼容旧调用方。 */
     sampleMode?: boolean
@@ -403,6 +410,8 @@ const emit = defineEmits<{
   (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
   (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void
   (e: 'retry-component-query', componentId: string): void
+  (e: 'table-view-change', payload: { componentId: string; currentPage: number; pageSize: number; total: number; columns: string[]; rows: string[][]; sort: { field: string; order: 'ascending' | 'descending' } | null }): void
+  (e: 'ai-analysis-generate', componentId: string): void
 }>()
 
 const { t } = useI18n()
@@ -612,6 +621,7 @@ function toWidgetComponent(child: InsightCombinationChild): InsightComponent {
     id: child.id,
     type: child.type,
     title: child.title,
+    aiAnalysisContent: child.aiAnalysisContent,
     titleBarStyle: child.titleBarStyle,
     titleIconStyle: child.titleIconStyle,
     themeAccentGroup: child.themeAccentGroup,

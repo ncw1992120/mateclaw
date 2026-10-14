@@ -133,6 +133,7 @@
         @component-time-range-change="handleComponentTimeRangeChange"
         @retry-component-query="retryComponentQuery"
         @ai-analysis-generate="handleAiAnalysisGenerate"
+        @table-view-change="handleTableViewChange"
       />
     </div>
 
@@ -189,7 +190,7 @@ import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import * as datasetApi from '@/api/dataset'
 import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
-import { generateReport, getReport, publishReport } from '@/api/insight-report'
+import { generateComponentAnalysis, generateReport, getReport, publishReport } from '@/api/insight-report'
 import { collectDashboardComponents, useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
@@ -201,6 +202,7 @@ import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-them
 import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
 import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { buildAiAnalysisSnapshot, collectVisibleAiAnalysisComponents, collectVisibleAnalysisComponents, type AiAnalysisTableView } from '@/utils/ai-analysis-context'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
 import { removeDanglingFilterBindings } from '@/utils/dashboard-filter-deletion'
@@ -229,6 +231,7 @@ const store = useInsightDashboardStore()
 const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
+const tableViews = reactive<Record<string, AiAnalysisTableView>>({})
 const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
 const dashboardThemeVariables = computed(() => ({
   ...themeCssVariables(dashboardTheme.value),
@@ -241,9 +244,12 @@ const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
 
 /** 正在生成 AI 分析的组件 ID 集合 */
 const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
-
-/** AI 分析内容状态（componentId → analysisSection） */
-const aiAnalysisContents = reactive<Record<string, string>>({})
+const previewDataReady = ref(false)
+const dataRefreshPending = ref(false)
+let autoAnalysisScheduleSequence = 0
+let aiAnalysisRequestSequence = 0
+const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController }>()
+const lastAutoAnalysisKeys = new Map<string, string>()
 
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
@@ -374,6 +380,9 @@ onUnmounted(() => {
     clearTimeout(filterReloadTimer)
     filterReloadTimer = null
   }
+  autoAnalysisScheduleSequence += 1
+  for (const request of aiAnalysisRequests.values()) request.controller.abort()
+  aiAnalysisRequests.clear()
 })
 
 watch(
@@ -448,11 +457,48 @@ watch(
   { deep: true },
 )
 
+const visibleAnalysisScopeKey = computed(() => {
+  const visible = [...collectVisibleAnalysisComponents(currentPageComponents.value), ...collectVisibleAiAnalysisComponents(currentPageComponents.value)]
+  return JSON.stringify({
+    pageId: activePageId.value,
+    components: visible.map((component) => ({
+      id: component.id,
+      type: component.type,
+      autoGenerate: (component.config as { autoGenerate?: boolean } | undefined)?.autoGenerate,
+      promptTemplate: (component.config as { promptTemplate?: string } | undefined)?.promptTemplate,
+    })),
+  })
+})
+
+const visibleAnalysisDataKey = computed(() => {
+  const visible = collectVisibleAnalysisComponents(currentPageComponents.value)
+  return JSON.stringify({
+    scope: visibleAnalysisScopeKey.value,
+    filters: getRuntimeFilterState(),
+    ready: previewDataReady.value,
+    pending: dataRefreshPending.value,
+    data: visible.map((component) => ({
+      componentId: component.id,
+      data: componentDataMap.value[component.id],
+      tableView: tableViews[component.id],
+    })),
+  })
+})
+
+watch(visibleAnalysisDataKey, () => {
+  invalidatePendingAiAnalysis()
+  scheduleAutoAiAnalysis()
+})
+
 /** 加载仪表盘 */
 async function loadDashboard(): Promise<void> {
   if (!props.dashboardId) {
     return
   }
+  previewDataReady.value = false
+  dataRefreshPending.value = true
+  componentDataMap.value = {}
+  for (const key of Object.keys(tableViews)) delete tableViews[key]
   markDashboardPerformance('insight-preview-start')
   await store.selectDashboard(props.dashboardId)
   if (dashboard.value) {
@@ -474,6 +520,14 @@ async function loadDashboard(): Promise<void> {
         name: t('insight.firstPageName'),
         components: [],
       }]
+    }
+    for (const component of collectDashboardComponents(schema.pages.flatMap((page) => page.components))) {
+      if (component.type !== 'aiAnalysis') continue
+      componentDataMap.value[component.id] = {
+        componentId: component.id,
+        renderType: 'aiAnalysis',
+        aiAnalysis: { dataSection: '', analysisSection: component.aiAnalysisContent ?? '' },
+      }
     }
     // 默认选中第一个页面
     if (schema.pages.length > 0) {
@@ -499,6 +553,8 @@ async function loadDashboard(): Promise<void> {
         console.error('[preview] 数据通道执行失败', result.reason)
       }
     }
+    dataRefreshPending.value = false
+    previewDataReady.value = true
     // 报告读取是独立后台任务，不阻塞组件数据渲染路径；卸载后不回写状态
     void loadReport()
   }
@@ -888,6 +944,7 @@ async function refreshPipelineComponent(
     }
     let rows: Record<string, unknown>[]
     let fieldLabels: Record<string, string> | undefined
+    let totalCount: number | undefined
     const script = pipeline.script?.trim()
     if (script) {
       const submitStartedAt = performance.now()
@@ -916,12 +973,13 @@ async function refreshPipelineComponent(
         const result = await insightDashboardApi.previewExecutionResult(created.executionId, {
           parameters: finalResultFilterParameters(component, effectiveFilters), requestId: String(requestId),
           finalResultQueryConfig: outputConfig,
-        }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[] }
+        }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[]; totalCount?: number }
         console.info('[dashboard-perf]', JSON.stringify({
           stage: 'final-result-query', executionId: created.executionId, componentId: component.id,
           requestId, elapsedMs: Math.round(performance.now() - resultQueryStartedAt), rowCount: result.rows?.length ?? 0,
         }))
         rows = result.rows ?? []
+        totalCount = result.totalCount
         const configured = pipeline.finalResultQueryConfig?.displayFields ?? []
         fieldLabels = Object.fromEntries(configured.map((field) => [field.field, field.title]))
       } else {
@@ -940,16 +998,21 @@ async function refreshPipelineComponent(
         queryContext,
       })
       rows = result.rows ?? []
+      totalCount = result.totalCount
       fieldLabels = Object.fromEntries((input.queryConfig?.displayFields ?? []).map((field) => [field.field, field.title]))
     }
     if (latestComponentRequest.get(component.id) !== requestId) return
     const queryStatus = rows.length === 0 ? 'empty' : 'success'
+    const renderedData = toComponentData(component, rows, fieldLabels, {
+      projectKpiFromResult: Boolean(script && component.type === 'kpi'),
+    })
+    if (component.type === 'table' && typeof totalCount === 'number' && renderedData.table) {
+      renderedData.table.totalCount = totalCount
+    }
     componentDataMap.value = {
       ...componentDataMap.value,
       [component.id]: {
-        ...toComponentData(component, rows, fieldLabels, {
-          projectKpiFromResult: Boolean(script && component.type === 'kpi'),
-        }),
+        ...renderedData,
         queryStatus,
       },
     }
@@ -1080,18 +1143,36 @@ async function reloadScopedComponentData(context: DashboardFilterContext): Promi
 
 /** 防抖重载（筛选频繁变化时避免过多请求） */
 function scheduleReloadWithFilters(context: DashboardFilterContext, refreshAllPipelines = false): void {
+  dataRefreshPending.value = true
   if (filterReloadTimer) {
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
     if (previewDisposed) return
     const state = getRuntimeFilterState()
-    void Promise.all([
+    void Promise.allSettled([
       reloadScopedComponentData(context),
       reloadScriptBindings(context),
       refreshPipelineComponents(state, refreshAllPipelines),
-    ])
+    ]).finally(() => {
+      dataRefreshPending.value = false
+      scheduleAutoAiAnalysis()
+    })
   }, 300)
+}
+
+function handleTableViewChange(view: AiAnalysisTableView & { componentId: string }): void {
+  const previous = tableViews[view.componentId]
+  const next: AiAnalysisTableView = {
+    currentPage: view.currentPage,
+    pageSize: view.pageSize,
+    total: view.total,
+    columns: [...view.columns],
+    rows: view.rows.map((row) => [...row]),
+    sort: view.sort ? { ...view.sort } : null,
+  }
+  if (JSON.stringify(previous) === JSON.stringify(next)) return
+  tableViews[view.componentId] = next
 }
 
 /** 筛选组件值变化 */
@@ -1177,31 +1258,118 @@ function retryComponentQuery(componentId: string): void {
   }
 }
 
-/** AI 分析组件触发生成（同步接口） */
-async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
-  if (aiAnalysisGeneratingIds.has(componentId)) return
+function isQueryExpected(component: InsightComponent): boolean {
+  return Boolean(component.dataSource)
+    || Boolean(readComponentDatasetPipeline(component)?.datasetInputs?.length)
+    || Boolean(schema.scriptBindings?.some((binding) => binding.componentId === component.id))
+}
+
+function isCurrentAnalysisDataReady(): boolean {
+  if (!previewDataReady.value || dataRefreshPending.value) return false
+  return collectVisibleAnalysisComponents(currentPageComponents.value).every((component) => {
+    if (!isQueryExpected(component)) return true
+    const status = componentDataMap.value[component.id]?.queryStatus
+    return Boolean(status && status !== 'loading')
+  })
+}
+
+function waitForCurrentAnalysisData(): Promise<void> {
+  if (isCurrentAnalysisDataReady()) return Promise.resolve()
+  return new Promise((resolve) => {
+    const stop = watch(isCurrentAnalysisDataReady, (ready) => {
+      if (ready || previewDisposed) {
+        stop()
+        resolve()
+      }
+    }, { immediate: true })
+  })
+}
+
+function currentAiAnalysisSnapshot() {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  return buildAiAnalysisSnapshot({
+    pageId: activePageId.value,
+    pageTitle: page?.name ?? '',
+    components: currentPageComponents.value,
+    componentDataMap: componentDataMap.value,
+    tableViews,
+    filters: getRuntimeFilterState(),
+  })
+}
+
+function invalidatePendingAiAnalysis(): void {
+  for (const [componentId, request] of aiAnalysisRequests) {
+    request.controller.abort()
+    aiAnalysisRequests.delete(componentId)
+    aiAnalysisGeneratingIds.delete(componentId)
+  }
+}
+
+function scheduleAutoAiAnalysis(): void {
+  const scheduleSequence = ++autoAnalysisScheduleSequence
+  if (previewDisposed || !isCurrentAnalysisDataReady()) return
+  void nextTick().then(() => {
+    if (previewDisposed || scheduleSequence !== autoAnalysisScheduleSequence || !isCurrentAnalysisDataReady()) return
+    const snapshot = currentAiAnalysisSnapshot()
+    for (const component of collectVisibleAiAnalysisComponents(currentPageComponents.value)) {
+      const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
+      if (config?.autoGenerate !== true) continue
+      const key = JSON.stringify({ promptTemplate: config.promptTemplate ?? '', snapshot })
+      if (lastAutoAnalysisKeys.get(component.id) === key) continue
+      lastAutoAnalysisKeys.set(component.id, key)
+      void runAiAnalysis(component.id, snapshot, config.promptTemplate)
+    }
+  })
+}
+
+/** 自动模式在当前快照变化后运行；手动模式由卡片按钮调用同一流程。 */
+async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<typeof currentAiAnalysisSnapshot>, promptTemplate?: string): Promise<void> {
+  if (aiAnalysisRequests.has(componentId)) return
+  await waitForCurrentAnalysisData()
+  // 让表格在查询完成后先同步实际展示页，快照中的 rows/page/size 才与界面一致。
+  await nextTick()
+  if (previewDisposed || !isCurrentAnalysisDataReady()) return
+  const component = collectVisibleAiAnalysisComponents(currentPageComponents.value).find((item) => item.id === componentId)
+  if (!component) return
+  const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
+  const snapshot = suppliedSnapshot ?? currentAiAnalysisSnapshot()
+  const requestPrompt = promptTemplate ?? config?.promptTemplate
+  const request = { promptTemplate: requestPrompt, snapshot }
+  const sequence = ++aiAnalysisRequestSequence
+  const controller = new AbortController()
+  aiAnalysisRequests.set(componentId, { sequence, controller })
   aiAnalysisGeneratingIds.add(componentId)
 
   try {
-    const analysisMarkdown = await generateReport(props.dashboardId)
-    aiAnalysisContents[componentId] = analysisMarkdown
-    const dataMap = { ...componentDataMap.value }
-    const existing = dataMap[componentId]
-    if (existing) {
-      dataMap[componentId] = {
-        ...existing,
-        aiAnalysis: {
-          dataSection: existing.aiAnalysis?.dataSection ?? '',
-          analysisSection: analysisMarkdown,
-        },
-      }
-      componentDataMap.value = dataMap
-    }
-  } catch (err: any) {
-    ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + (err?.message || String(err)))
-  } finally {
+    const markdown = await generateComponentAnalysis(props.dashboardId, componentId, request, controller.signal)
+    if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    aiAnalysisRequests.delete(componentId)
     aiAnalysisGeneratingIds.delete(componentId)
+    const existing = componentDataMap.value[componentId]
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: {
+        ...existing,
+        componentId,
+        renderType: 'aiAnalysis',
+        aiAnalysis: {
+          dataSection: existing?.aiAnalysis?.dataSection ?? '',
+          analysisSection: markdown,
+        },
+      },
+    }
+  } catch (err) {
+    if (controller.signal.aborted || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    aiAnalysisRequests.delete(componentId)
+    aiAnalysisGeneratingIds.delete(componentId)
+    const message = err instanceof Error ? err.message : String(err)
+    ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + message)
   }
+}
+
+/** 手动模式只在明确点击时生成；同样等待当前可见数据进入终态。 */
+async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
+  await runAiAnalysis(componentId)
 }
 
 /** 生成报告 */

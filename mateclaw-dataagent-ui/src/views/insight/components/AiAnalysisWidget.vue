@@ -3,7 +3,7 @@
     <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</span>
       <el-button
-        v-if="!generating"
+        v-if="!autoGenerate && !generating"
         type="primary"
         size="small"
         :icon="MagicStick"
@@ -47,7 +47,7 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightComponent, InsightComponentData, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
+import type { InsightComponent, InsightComponentData, AIAnalysisComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
 import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 defineOptions({
@@ -73,6 +73,7 @@ const emit = defineEmits<{
 
 const dataSection = computed(() => props.componentData?.aiAnalysis?.dataSection)
 const analysisSection = computed(() => props.componentData?.aiAnalysis?.analysisSection)
+const autoGenerate = computed(() => (props.component.config as AIAnalysisComponentConfig | undefined)?.autoGenerate === true)
 
 /** 将 Markdown 渲染为安全 HTML */
 function renderMarkdown(md: string): string {

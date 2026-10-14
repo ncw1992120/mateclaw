@@ -1426,6 +1426,8 @@ export interface InsightCombinationChild {
   type: InsightComponentType
   /** 子卡片标题 */
   title: string
+  /** AI 分析内容（仅 aiAnalysis 类型，生成后持久化到 Schema）。 */
+  aiAnalysisContent?: string
   /** 子卡片标题栏样式（默认 standard） */
   titleBarStyle?: ComponentTitleBarStyle
   /** 子卡片标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */

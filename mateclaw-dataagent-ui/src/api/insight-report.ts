@@ -1,5 +1,6 @@
 import api from './index'
 import type { InsightReport, InsightReportPublishInput } from '@/types'
+import type { AiAnalysisSnapshot } from '@/utils/ai-analysis-context'
 
 /** API 路径常量 */
 const BASE_URL = '/v1/insight/dashboards'
@@ -99,6 +100,20 @@ export interface AttributionAnalysisResponse {
 /** 同步生成报告（HTML 格式） */
 export function generateReport(dashboardId: string) {
   return api.post<string>(`${BASE_URL}/${dashboardId}/report`)
+}
+
+/** 基于预览页当前已经加载的数据快照生成单个 AI 分析组件内容。 */
+export function generateComponentAnalysis(
+  dashboardId: string,
+  componentId: string,
+  request: { promptTemplate?: string; snapshot: AiAnalysisSnapshot },
+  signal?: AbortSignal,
+) {
+  return api.post<string>(
+    `${BASE_URL}/${dashboardId}/components/${encodeURIComponent(componentId)}/ai-analysis`,
+    request,
+    { timeout: 0, signal },
+  )
 }
 
 /** 获取已生成的报告 */

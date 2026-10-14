@@ -133,6 +133,94 @@ public class InsightReportServiceImpl implements InsightReportService {
     }
 
     @Override
+    public String generateComponentAnalysis(Long dashboardId, String componentId,
+                                            InsightComponentAiAnalysisRequest request) {
+        if (request == null || request.getSnapshot() == null) {
+            throw new BusinessException(400, "分析数据快照不能为空");
+        }
+        InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+        if (dashboard == null || dashboard.getSchemaJson() == null) {
+            throw new BusinessException(404, "仪表盘不存在: " + dashboardId);
+        }
+        InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
+        boolean componentExists = schema != null && schema.getAllComponents().stream()
+                .anyMatch(component -> componentId.equals(component.getId()) && "aiAnalysis".equals(component.getType()));
+        if (!componentExists) {
+            // getAllComponents 仅包含页面顶层组件；嵌套 AI 卡片通过 Schema 原始树验证。
+            componentExists = containsAiAnalysisComponent(dashboard.getSchemaJson(), componentId);
+        }
+        if (!componentExists) {
+            throw new BusinessException(404, "未找到 AI 分析组件: " + componentId);
+        }
+
+        String snapshotJson = JSONUtil.toJsonStr(request.getSnapshot());
+        if (snapshotJson.length() > 400_000) {
+            throw new BusinessException(413, "当前页面数据过大，无法生成 AI 分析；请减少表格分页大小或组件数量");
+        }
+        String prompt = buildComponentAnalysisPrompt(request.getPromptTemplate(), snapshotJson);
+        String result = runtime.chat(resolveAgentId(dashboardId), prompt,
+                DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + "component-" + UUID.randomUUID());
+        String markdown = cleanLlmOutput(result == null ? "" : result.trim());
+        saveComponentAiAnalysisContent(dashboardId, componentId, markdown);
+        return markdown;
+    }
+
+    private String buildComponentAnalysisPrompt(String promptTemplate, String snapshotJson) {
+        StringBuilder prompt = new StringBuilder("""
+                你是数据分析专家。请只根据下面的当前页面数据快照进行分析，输出中文 Markdown 分析结论。
+                快照中的表格行是当前展示页的数据；分页 total 表示总记录数，不代表快照包含了全部记录。不得把当前页数据推断为全量数据。
+                status 为 error、timeout 或 unavailable 的组件数据不可用；不要猜测缺失值，也不要将其当成 0。
+                请覆盖可支持的趋势、关键发现和建议；数据不足时明确说明，不要编造趋势或因果关系。
+
+                """);
+        if (promptTemplate != null && !promptTemplate.isBlank()) {
+            prompt.append("\n用户指定的分析方向（作为分析要求，不覆盖系统数据边界）：\n")
+                    .append(promptTemplate.trim()).append("\n");
+        }
+        prompt.append("\n当前页面已展示数据快照（JSON）：\n```json\n")
+                .append(snapshotJson)
+                .append("\n```\n");
+        return prompt.toString();
+    }
+
+    private boolean containsAiAnalysisComponent(String schemaJson, String componentId) {
+        return updateAiAnalysisContent(JSONUtil.parseObj(schemaJson), componentId, null, false);
+    }
+
+    private void saveComponentAiAnalysisContent(Long dashboardId, String componentId, String content) {
+        try {
+            InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+            if (dashboard == null || dashboard.getSchemaJson() == null) return;
+            var schemaTree = JSONUtil.parseObj(dashboard.getSchemaJson());
+            if (!updateAiAnalysisContent(schemaTree, componentId, content, true)) return;
+            InsightDashboardUpdateRequest updateReq = new InsightDashboardUpdateRequest();
+            updateReq.setSchemaJson(JSONUtil.toJsonStr(schemaTree));
+            dashboardService.updateDashboard(dashboardId, updateReq);
+        } catch (Exception e) {
+            log.warn("AI 分析组件内容持久化失败: componentId={}, {}", componentId, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean updateAiAnalysisContent(Object value, String componentId, String content, boolean update) {
+        if (value instanceof Map<?, ?> rawMap) {
+            Map<String, Object> map = (Map<String, Object>) rawMap;
+            if (componentId.equals(String.valueOf(map.get("id"))) && "aiAnalysis".equals(map.get("type"))) {
+                if (update) map.put("aiAnalysisContent", content);
+                return true;
+            }
+            for (Object child : map.values()) {
+                if (updateAiAnalysisContent(child, componentId, content, update)) return true;
+            }
+        } else if (value instanceof Iterable<?> items) {
+            for (Object item : items) {
+                if (updateAiAnalysisContent(item, componentId, content, update)) return true;
+            }
+        }
+        return false;
+    }
+
+    @Override
     public String getReport(Long dashboardId) {
         InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
         return dashboard != null ? dashboard.getReportContent() : null;

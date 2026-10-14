@@ -219,6 +219,7 @@
                 :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
                 @edit-tab-title-icon-style="openTabTitleIconStyle"
+                @table-view-change="(payload) => emit('table-view-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
@@ -252,6 +253,7 @@
                 v-else-if="getComponent(item.i)?.type === 'combination'"
                 :component="getComponent(item.i)!"
                 :component-data-map="componentDataMapWithFieldLabels"
+                :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
                 :runtime-filter-state="runtimeFilterState"
                 :editable="editable"
                 :container-resizing="resizingItem?.id === item.i"
@@ -284,6 +286,8 @@
                 @metric-layout-change="(p) => emit('metric-layout-change', p)"
                 @filter-change="(payload) => emit('filter-change', payload)"
                 @time-filter-change="(payload) => emit('time-filter-change', payload)"
+                @table-view-change="(payload) => emit('table-view-change', payload)"
+                @ai-analysis-generate="(id) => emit('ai-analysis-generate', id)"
               />
             </template>
           </div>
@@ -589,6 +593,7 @@ const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
   (e: 'retry-component-query', componentId: string): void
   (e: 'ai-analysis-generate', componentId: string): void
+  (e: 'table-view-change', payload: { componentId: string; currentPage: number; pageSize: number; total: number; columns: string[]; rows: string[][]; sort: { field: string; order: 'ascending' | 'descending' } | null }): void
   (e: 'open-metric-style', payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void
   (e: 'metric-layout-change', payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void
   (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
