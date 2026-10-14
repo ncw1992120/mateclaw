@@ -288,6 +288,70 @@ class LocalProcessPythonExecutionServiceTest {
     }
 
     @Test
+    void installsPackagedWorkerDependenciesOfflineOnceAtApplicationStartup() throws Exception {
+        Path workerHome = tempDir.resolve("offline-worker");
+        writeWorkerAt(workerHome);
+        Path requirements = workerHome.resolve("requirements.txt");
+        Files.writeString(requirements, "polars==1.20.0\n");
+        Path wheelhouse = Files.createDirectories(workerHome.resolve("wheelhouse"));
+        Files.writeString(wheelhouse.resolve("polars-1.20.0.whl"), "wheel fixture");
+        Path invocations = writeBootstrapPythonCommand(workerHome.resolve(".venv/bin/python"), false);
+        properties.setWorkerHome(workerHome.toString());
+        properties.setPythonCommand(null);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.initializePackagedPythonEnvironment();
+        service.initializePackagedPythonEnvironment();
+        Files.writeString(requirements, "polars==1.21.0\n");
+        service.initializePackagedPythonEnvironment();
+
+        List<String> commands = Files.readAllLines(invocations);
+        assertEquals(2, commands.stream().filter(command -> command.contains("-m pip install")).count(), commands.toString());
+        assertTrue(commands.stream().anyMatch(command -> command.contains("--no-index")
+                && command.contains("--find-links") && command.contains("wheelhouse")
+                && command.contains("-r") && command.contains("requirements.txt")), commands.toString());
+    }
+
+    @Test
+    void doesNotModifyExplicitPythonCommandDuringAutomaticInitialization() throws Exception {
+        Path workerHome = tempDir.resolve("explicit-python-worker");
+        writeWorkerAt(workerHome);
+        Files.writeString(workerHome.resolve("requirements.txt"), "polars==1.20.0\n");
+        Path wheelhouse = Files.createDirectories(workerHome.resolve("wheelhouse"));
+        Files.writeString(wheelhouse.resolve("polars-1.20.0.whl"), "wheel fixture");
+        Path explicitPython = tempDir.resolve("explicit-python");
+        properties.setWorkerHome(workerHome.toString());
+        properties.setPythonCommand(explicitPython.toString());
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.initializePackagedPythonEnvironment();
+
+        assertFalse(Files.exists(workerHome.resolve(".venv")));
+        assertFalse(Files.exists(explicitPython));
+    }
+
+    @Test
+    void packagedDependencyInstallationFailureIsReportedByPythonTaskWithoutStoppingService() throws Exception {
+        Path workerHome = tempDir.resolve("failed-offline-worker");
+        writeWorkerAt(workerHome);
+        Files.writeString(workerHome.resolve("requirements.txt"), "polars==1.20.0\n");
+        Path wheelhouse = Files.createDirectories(workerHome.resolve("wheelhouse"));
+        Files.writeString(wheelhouse.resolve("polars-1.20.0.whl"), "wheel fixture");
+        writeBootstrapPythonCommand(workerHome.resolve(".venv/bin/python"), true);
+        properties.setWorkerHome(workerHome.toString());
+        properties.setPythonCommand(null);
+        service = new LocalProcessPythonExecutionService(properties, new ObjectMapper());
+
+        service.initializePackagedPythonEnvironment();
+        service.submit(request("worker-init-failure"));
+        Map<String, Object> failed = awaitStatus("worker-init-failure", LocalProcessPythonExecutionServiceTest::isTerminal);
+
+        assertEquals("FAILED", failed.get("status"));
+        assertTrue(String.valueOf(failed.get("error")).contains("automatic Python Worker setup failed"));
+        assertTrue(String.valueOf(failed.get("error")).contains("exited with code 23"));
+    }
+
+    @Test
     void terminalCacheEvictsOldEntriesButNeverAnActiveTask() throws Exception {
         properties.setMaxCompletedTasks(1);
         properties.setCompletedTaskTtlMillis(1_800_000L);
@@ -508,6 +572,25 @@ class LocalProcessPythonExecutionServiceTest {
             command.toFile().setExecutable(true);
         }
         return markerFile;
+    }
+
+    private Path writeBootstrapPythonCommand(Path command, boolean failInstall) throws Exception {
+        Files.createDirectories(command.getParent());
+        Path invocations = command.resolveSibling(command.getFileName() + ".invocations");
+        String quote = "'" + invocations.toString().replace("'", "'\\''") + "'";
+        String installResult = failInstall ? "case \"$*\" in *'pip install'*) exit 23 ;; esac\n" : "";
+        String script = "#!/bin/sh\nprintf '%s\\n' \"$*\" >> %s\n%sexit 0\n".formatted(
+                "%s", quote, installResult);
+        Files.writeString(command, script);
+        try {
+            Files.setPosixFilePermissions(command, java.util.EnumSet.of(
+                    PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE, PosixFilePermission.OWNER_EXECUTE,
+                    PosixFilePermission.GROUP_READ, PosixFilePermission.GROUP_EXECUTE,
+                    PosixFilePermission.OTHERS_READ, PosixFilePermission.OTHERS_EXECUTE));
+        } catch (UnsupportedOperationException ignored) {
+            command.toFile().setExecutable(true);
+        }
+        return invocations;
     }
 
     private static void awaitFile(Path root, String relativePath) throws Exception {

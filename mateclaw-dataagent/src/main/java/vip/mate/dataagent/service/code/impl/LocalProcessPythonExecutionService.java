@@ -3,8 +3,10 @@ package vip.mate.dataagent.service.code.impl;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PreDestroy;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
 import vip.mate.dataagent.service.code.PythonExecutionService;
@@ -18,9 +20,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -54,6 +59,7 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
     private final ScheduledExecutorService completedTaskCleanup;
     private final ThreadPoolExecutor workerExecutor;
+    private volatile String pythonEnvironmentInitializationError;
     private volatile boolean closed;
 
     @Autowired
@@ -107,6 +113,72 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
             finish(state, "FAILED", null, "Python task queue is full", 1);
         }
         return state.snapshot();
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void initializePackagedPythonEnvironment() {
+        if (!properties.isEnabled() || (properties.getPythonCommand() != null
+                && !properties.getPythonCommand().isBlank())) return;
+
+        Path workerHome;
+        try {
+            workerHome = resolveWorkerHome();
+        } catch (IllegalStateException exception) {
+            return;
+        }
+        Path requirements = workerHome.resolve("requirements.txt");
+        Path wheelhouse = workerHome.resolve("wheelhouse");
+        if (!Files.exists(requirements) && !Files.exists(wheelhouse)) return;
+
+        try {
+            if (!Files.isRegularFile(requirements)) {
+                throw new IllegalStateException("packaged requirements.txt is missing under " + workerHome);
+            }
+            if (!Files.isDirectory(wheelhouse)) {
+                throw new IllegalStateException("packaged Python wheelhouse is missing under " + workerHome);
+            }
+            try (var wheels = Files.list(wheelhouse)) {
+                if (wheels.noneMatch(path -> Files.isRegularFile(path) && path.getFileName().toString().endsWith(".whl"))) {
+                    throw new IllegalStateException("packaged Python wheelhouse contains no .whl files: " + wheelhouse);
+                }
+            }
+
+            Path workerPython = virtualEnvironmentPython(workerHome, System.getProperty("os.name", ""));
+            if (workerPython == null) {
+                String basePython = findPython312(workerHome);
+                runInheritedCommand(List.of(basePython, "-m", "venv", workerHome.resolve(".venv").toString()),
+                        workerHome, "create Python Worker virtual environment");
+                workerPython = virtualEnvironmentPython(workerHome, System.getProperty("os.name", ""));
+                if (workerPython == null) {
+                    throw new IllegalStateException("Python 3.12 did not create the expected .venv interpreter under " + workerHome);
+                }
+            }
+
+            String requirementsHash = sha256(requirements);
+            Path installedMarker = workerHome.resolve(".venv/.mateclaw-worker-requirements.sha256");
+            if (Files.isRegularFile(installedMarker)
+                    && requirementsHash.equals(Files.readString(installedMarker).trim())
+                    && inspectPython(workerPython.toString(), workerHome) == null) {
+                LOGGER.info("Python Worker offline dependencies are already ready under {}", workerHome);
+                pythonEnvironmentInitializationError = null;
+                return;
+            }
+
+            runInheritedCommand(List.of(workerPython.toString(), "-m", "pip", "install",
+                            "--disable-pip-version-check", "--no-index", "--find-links", wheelhouse.toString(),
+                            "-r", requirements.toString()), workerHome, "install Python Worker offline dependencies");
+            String dependencyFailure = inspectPython(workerPython.toString(), workerHome);
+            if (dependencyFailure != null) {
+                throw new IllegalStateException("Python Worker dependency verification failed: " + dependencyFailure);
+            }
+            Files.writeString(installedMarker, requirementsHash + System.lineSeparator());
+            pythonEnvironmentInitializationError = null;
+            LOGGER.info("Python Worker offline dependencies are ready under {}", workerHome);
+        } catch (Exception exception) {
+            pythonEnvironmentInitializationError = "automatic Python Worker setup failed: " + safeMessage(exception, null);
+            LOGGER.error("[python-worker] stage=offline-environment-initialization-failed workerHome={} error={}",
+                    workerHome, pythonEnvironmentInitializationError, exception);
+        }
     }
 
     private void runTask(TaskState state, Map<String, Object> request) {
@@ -323,6 +395,9 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
     }
 
     private String requirePythonCommand(Path workerHome) {
+        if (pythonEnvironmentInitializationError != null) {
+            throw new IllegalStateException(pythonEnvironmentInitializationError);
+        }
         String configured = properties.getPythonCommand();
         if (configured != null && !configured.isBlank()) {
             String command = configured.trim();
@@ -393,6 +468,71 @@ public class LocalProcessPythonExecutionService implements PythonExecutionServic
                 ? workerHome.resolve(".venv/Scripts/python.exe")
                 : workerHome.resolve(".venv/bin/python");
         return Files.isRegularFile(candidate) && (windows || Files.isExecutable(candidate)) ? candidate : null;
+    }
+
+    private String findPython312(Path workerHome) {
+        List<String> candidates = isWindows() ? List.of("python.exe", "python") : List.of("python3", "python");
+        List<String> diagnostics = new ArrayList<>();
+        for (String candidate : candidates) {
+            Process process = null;
+            try {
+                process = new ProcessBuilder(candidate, "-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+                        .directory(workerHome.toFile()).redirectErrorStream(true).start();
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                Process activeProcess = process;
+                Thread reader = Thread.ofVirtual().start(() -> {
+                    try (InputStream input = activeProcess.getInputStream()) {
+                        input.transferTo(output);
+                    } catch (IOException ignored) {
+                        // The process result below carries the useful diagnostic.
+                    }
+                });
+                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                    terminateTree(process);
+                    reader.join(1_000);
+                    diagnostics.add(candidate + ": version check timed out");
+                    continue;
+                }
+                reader.join(1_000);
+                String version = output.toString(StandardCharsets.UTF_8).trim();
+                if (process.exitValue() == 0 && "3.12".equals(version)) return candidate;
+                diagnostics.add(candidate + ": expected Python 3.12, got "
+                        + (version.isBlank() ? "no version output" : version));
+            } catch (IOException exception) {
+                diagnostics.add(candidate + ": " + safeMessage(exception, null));
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                if (process != null) terminateTree(process);
+                throw new IllegalStateException("Python 3.12 discovery was interrupted", exception);
+            }
+        }
+        throw new IllegalStateException("Python 3.12 is required to prepare the offline Worker environment; "
+                + String.join("; ", diagnostics));
+    }
+
+    private void runInheritedCommand(List<String> command, Path workingDirectory, String stage) throws IOException {
+        Process process = new ProcessBuilder(command).directory(workingDirectory.toFile()).inheritIO().start();
+        try {
+            if (!process.waitFor(Duration.ofMinutes(10).toMillis(), TimeUnit.MILLISECONDS)) {
+                terminateTree(process);
+                throw new IllegalStateException(stage + " timed out after 10 minutes");
+            }
+            if (process.exitValue() != 0) {
+                throw new IllegalStateException(stage + " exited with code " + process.exitValue());
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            terminateTree(process);
+            throw new IllegalStateException(stage + " was interrupted", exception);
+        }
+    }
+
+    private static String sha256(Path file) throws IOException {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     private static boolean isWindows() {
