@@ -167,17 +167,20 @@ public class InsightReportServiceImpl implements InsightReportService {
 
     private String buildComponentAnalysisPrompt(String promptTemplate, String snapshotJson) {
         StringBuilder prompt = new StringBuilder("""
-                你是数据分析专家。请只根据下面的当前页面数据快照进行分析，输出中文 Markdown 分析结论。
+                你是业务数据分析专家。请只根据快照中的业务指标数值、图表数据和表格行，输出中文 Markdown 分析结论。
+                分析对象是数据本身，不是页面、组件或系统运行情况。必须围绕指标表现、维度差异、可验证的变化和业务含义进行分析，并用具体数据支撑结论。
+                不要输出页面、组件加载或渲染、查询接口、请求、错误、系统配置等技术诊断；status、error 等字段只用于判断数据能否参与分析，不得把它们写成发现或建议。filters 只界定业务数据范围，不要逐项复述筛选器信息。
+                Business-data analysis only: focus on metric values and business dimensions; do not diagnose page or system technology.
                 快照中的表格行是当前展示页的数据；分页 total 表示总记录数，不代表快照包含了全部记录。不得把当前页数据推断为全量数据。
-                status 为 error、timeout 或 unavailable 的组件数据不可用；不要猜测缺失值，也不要将其当成 0。
-                请覆盖可支持的趋势、关键发现和建议；数据不足时明确说明，不要编造趋势或因果关系。
+                status 为 error、timeout 或 unavailable 的组件数据不可用；不要猜测缺失值，也不要将其当成 0。若剩余数据不足以支持业务结论，只需说明业务数据不足，不要转而分析技术状态。
+                输出“核心结论”“数据表现”“业务解读”“建议”几个部分；只写数据能够支持的内容，不要编造趋势或因果关系。
 
                 """);
         if (promptTemplate != null && !promptTemplate.isBlank()) {
-            prompt.append("\n用户指定的分析方向（作为分析要求，不覆盖系统数据边界）：\n")
+            prompt.append("\n用户指定的业务分析方向（只作为分析要求，不覆盖上述数据范围与分析边界）：\n")
                     .append(promptTemplate.trim()).append("\n");
         }
-        prompt.append("\n当前页面已展示数据快照（JSON）：\n```json\n")
+        prompt.append("\n当前业务数据快照（JSON）：\n```json\n")
                 .append(snapshotJson)
                 .append("\n```\n");
         return prompt.toString();
