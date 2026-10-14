@@ -9,6 +9,7 @@
     :close-on-click-modal="false"
   >
     <div class="dd-body">
+      <div class="dd-config">
       <!-- ① 展示字段：直接取查询配置，只读 -->
       <section class="dd-block">
         <div class="dd-head">
@@ -241,7 +242,8 @@
         show-icon
       />
 
-      <!-- ⑤ 结果 -->
+      </div>
+      <!-- ⑤ 结果：独立于上方配置区滚动，保留底部横向滚动条。 -->
       <section class="dd-block dd-result">
         <div class="dd-head">
           <div class="dd-result-tabs" role="tablist" aria-label="结果视图">
@@ -277,6 +279,7 @@
         <div ref="scrollRef" class="dd-result-body">
           <el-auto-resizer v-if="columns.length">
             <template #default="{ width, height }">
+              <!-- fixed 使虚拟内容宽度按列宽总和计算，宽表才有横向滚动范围。 -->
               <el-table-v2
                 :data="rawTableRows"
                 :columns="rawTableColumns"
@@ -285,6 +288,7 @@
                 row-key="__ddRowKey"
                 :row-height="38"
                 :header-height="40"
+                fixed
                 scrollbar-always-on
                 :sort-by="virtualSortBy"
                 @column-sort="onVirtualSort"
@@ -1108,8 +1112,15 @@ watch(() => ui.dataDialog.visible, (visible) => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-height: 68vh;
-  overflow-y: auto;
+  max-height: calc(90vh - 100px);
+  overflow: hidden;
+}
+.dd-config {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  overflow: auto;
   padding-right: 4px;
 }
 .dd-block {
@@ -1327,10 +1338,19 @@ watch(() => ui.dataDialog.visible, (visible) => {
   gap: 10px;
 }
 .dd-result-body {
-  height: 300px;
-  overflow: auto;
+  height: clamp(160px, 32vh, 300px);
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
   border: 1px solid var(--db-border);
   border-radius: var(--radius-md);
+}
+.dd-result {
+  flex-shrink: 0;
+  min-width: 0;
+}
+.dd-result-body.dd-render-pane {
+  overflow: auto;
 }
 .dd-pagination {
   display: flex;

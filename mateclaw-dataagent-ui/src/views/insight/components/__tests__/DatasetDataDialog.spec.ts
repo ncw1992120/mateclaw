@@ -88,9 +88,9 @@ const stubs = {
     template: '<div class="stub-auto-resizer"><slot :width="960" :height="300" /></div>',
   },
   'el-table-v2': {
-    props: ['data', 'columns', 'width', 'height', 'sortBy', 'rowKey', 'scrollbarAlwaysOn'],
+    props: ['data', 'columns', 'width', 'height', 'sortBy', 'rowKey'],
     emits: ['column-sort', 'end-reached'],
-    template: '<div class="stub-table" :data-row-key="rowKey" :data-scrollbar-always-on="String(scrollbarAlwaysOn)"><button data-testid="sort-amount" @click="$emit(\'column-sort\', { key: \'amount\', order: sortBy.order === \'asc\' ? \'desc\' : \'asc\' })">模拟排序</button><button data-testid="end-reached" @click="$emit(\'end-reached\')">滚动到底</button><div v-for="column in columns" :key="column.key" class="stub-table-column" :data-prop="column.dataKey" :data-label="column.title" :data-sortable="String(column.sortable)" :data-flex-shrink="String(column.flexShrink)" /><div v-for="row in data" :key="row[rowKey]" class="stub-table-row" :data-row-id="row[rowKey]" /></div>',
+    template: '<div class="stub-table" :data-row-key="rowKey"><button data-testid="sort-amount" @click="$emit(\'column-sort\', { key: \'amount\', order: sortBy.order === \'asc\' ? \'desc\' : \'asc\' })">模拟排序</button><button data-testid="end-reached" @click="$emit(\'end-reached\')">滚动到底</button><div v-for="column in columns" :key="column.key" class="stub-table-column" :data-prop="column.dataKey" :data-label="column.title" :data-sortable="String(column.sortable)" :data-flex-shrink="String(column.flexShrink)" /><div v-for="row in data" :key="row[rowKey]" class="stub-table-row" :data-row-id="row[rowKey]" /></div>',
   },
   'el-empty': { props: ['description'], template: '<div class="stub-empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
@@ -140,6 +140,35 @@ beforeEach(() => {
 })
 
 describe('查看数据弹窗 · 保留最近一次执行结果', () => {
+  it('107 列结果的虚拟滚动内容宽度覆盖全部列，而非仅可视区宽度', async () => {
+    const fields = Array.from({ length: 107 }, (_, index) => `metric_${index}`)
+    const dataset = metricViewDataset({
+      queryConfig: {
+        ...queryConfig(),
+        displayFields: fields.map((field) => ({ field, title: field, role: 'measure' as const })),
+      },
+    })
+    previewDatasetDraft.mockResolvedValueOnce({
+      rows: [Object.fromEntries(fields.map((field, index) => [field, index]))],
+      schema: fields, rowCount: 1, last: true, totalCount: 1,
+    })
+    state.ui.dataDialog = { visible: true, datasetId: dataset.id }
+    const wrapper = mount(DatasetDataDialog, {
+      props: { dataset },
+      global: { stubs: { ...stubs, 'el-table-v2': false } },
+      attachTo: document.body,
+    })
+    try {
+      await wrapper.get('[data-testid="run-query"]').trigger('click')
+      await flushPromises()
+
+      const row = wrapper.get('.el-table-v2__row')
+      expect((row.element as HTMLElement).style.width).toBe(`${fields.length * 160}px`)
+    } finally {
+      wrapper.unmount()
+    }
+  })
+
   it('筛选器默认值预填到本次查询条件，时间筛选器拆成日期输入并填入默认区间', async () => {
     state.filterCatalog = [
       { id: 'filter-region', title: '地区', type: 'filter', selectionMode: 'multiple', defaultValue: ['华东', '华南'] },
@@ -199,7 +228,6 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
-    expect(wrapper.get('.stub-table').attributes('data-scrollbar-always-on')).toBeDefined()
     expect(wrapper.emitted('render')).toBeUndefined()
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeUndefined()

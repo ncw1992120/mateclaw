@@ -9,6 +9,7 @@
     :close-on-click-modal="false"
   >
     <div class="dd-body">
+      <div class="dd-config">
       <section class="dd-block">
         <div class="dd-head"><span class="dd-title">结果字段</span><span class="dd-hint">全部 Python 输出 · 可编辑展示名</span></div>
         <div v-if="displayRows.length" class="dd-table-wrap">
@@ -89,6 +90,7 @@
         <el-button type="primary" :loading="loading" data-testid="python-run-query" @click="query">查询</el-button>
       </div>
 
+      </div>
       <section class="dd-block dd-result">
         <div class="dd-head">
           <div class="dd-result-tabs" role="tablist" aria-label="结果视图">
@@ -119,10 +121,10 @@
         </div>
         <template v-if="!component || resultTab === 'raw'">
         <div class="dd-result-body">
-          <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" scrollbar-always-on @sort-change="onSortChange">
+          <el-table v-if="visibleColumns.length && !error" :data="pagedRows" border size="small" height="clamp(160px, 32vh, 300px)" scrollbar-always-on @sort-change="onSortChange">
             <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
           </el-table>
-          <el-empty v-if="loading" description="查询中…" />
+          <el-empty v-else-if="loading" description="查询中…" />
           <div v-else-if="error" class="dd-execution-error" role="alert" data-testid="python-execution-error">
             <div class="dd-execution-error-summary">{{ formattedError.summary }}</div>
             <details v-if="formattedError.details" class="dd-execution-error-details">
@@ -365,7 +367,9 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 </script>
 
 <style scoped>
-.dd-body { display: flex; flex-direction: column; gap: 14px; max-height: 80vh; overflow: auto; }
+.dd-body { display: flex; flex-direction: column; gap: 14px; max-height: calc(90vh - 100px); overflow: hidden; }
+.dd-config { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; padding-right: 4px; }
+.dd-result { flex-shrink: 0; min-width: 0; }
 .dd-block { border: 1px solid var(--db-border); border-radius: var(--radius-md); padding: 12px; background: #fff; }
 .dd-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .dd-result-tabs { display: flex; align-items: center; gap: 18px; }
@@ -393,6 +397,7 @@ watch(() => [ui.preview.visible, ui.preview.kind], ([visible, kind]) => {
 .dd-execution-error-details pre { max-height: 240px; margin: 8px 0 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--el-font-family); }
 .dd-query-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dd-result-actions { display: flex; align-items: center; gap: 10px; }
-.dd-result-body { min-height: 160px; }
+.dd-result-body { min-height: 160px; min-width: 0; overflow: hidden; }
+.dd-result-body.dd-render-pane { max-height: clamp(160px, 32vh, 300px); overflow: auto; }
 .dd-pagination { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; color: var(--db-text-muted); }
 </style>
