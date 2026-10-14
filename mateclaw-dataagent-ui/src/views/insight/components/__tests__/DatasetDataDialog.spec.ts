@@ -88,9 +88,9 @@ const stubs = {
     template: '<div class="stub-auto-resizer"><slot :width="960" :height="300" /></div>',
   },
   'el-table-v2': {
-    props: ['data', 'columns', 'width', 'height', 'sortBy', 'rowKey'],
+    props: ['data', 'columns', 'width', 'height', 'sortBy', 'rowKey', 'scrollbarAlwaysOn'],
     emits: ['column-sort', 'end-reached'],
-    template: '<div class="stub-table" :data-row-key="rowKey"><button data-testid="sort-amount" @click="$emit(\'column-sort\', { key: \'amount\', order: sortBy.order === \'asc\' ? \'desc\' : \'asc\' })">模拟排序</button><button data-testid="end-reached" @click="$emit(\'end-reached\')">滚动到底</button><div v-for="column in columns" :key="column.key" class="stub-table-column" :data-prop="column.dataKey" :data-label="column.title" :data-sortable="String(column.sortable)" :data-flex-shrink="String(column.flexShrink)" /><div v-for="row in data" :key="row[rowKey]" class="stub-table-row" :data-row-id="row[rowKey]" /></div>',
+    template: '<div class="stub-table" :data-row-key="rowKey" :data-scrollbar-always-on="String(scrollbarAlwaysOn)"><button data-testid="sort-amount" @click="$emit(\'column-sort\', { key: \'amount\', order: sortBy.order === \'asc\' ? \'desc\' : \'asc\' })">模拟排序</button><button data-testid="end-reached" @click="$emit(\'end-reached\')">滚动到底</button><div v-for="column in columns" :key="column.key" class="stub-table-column" :data-prop="column.dataKey" :data-label="column.title" :data-sortable="String(column.sortable)" :data-flex-shrink="String(column.flexShrink)" /><div v-for="row in data" :key="row[rowKey]" class="stub-table-row" :data-row-id="row[rowKey]" /></div>',
   },
   'el-empty': { props: ['description'], template: '<div class="stub-empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="stub-alert">{{ title }}</div>' },
@@ -199,6 +199,7 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await wrapper.get('[data-testid="run-query"]').trigger('click')
     await flushPromises()
 
+    expect(wrapper.get('.stub-table').attributes('data-scrollbar-always-on')).toBeDefined()
     expect(wrapper.emitted('render')).toBeUndefined()
     expect(wrapper.find('[data-testid="component-render-preview"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="component-render"]').attributes('disabled')).toBeUndefined()

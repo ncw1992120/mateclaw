@@ -119,7 +119,7 @@
         </div>
         <template v-if="!component || resultTab === 'raw'">
         <div class="dd-result-body">
-          <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" @sort-change="onSortChange">
+          <el-table v-if="visibleColumns.length" :data="pagedRows" border size="small" height="320" scrollbar-always-on @sort-change="onSortChange">
             <el-table-column v-for="column in visibleColumns" :key="column.name" :prop="column.name" :label="fieldTitle(column.name)" min-width="120" show-overflow-tooltip :sortable="isSortable(column.name) ? 'custom' : false" />
           </el-table>
           <el-empty v-if="loading" description="查询中…" />

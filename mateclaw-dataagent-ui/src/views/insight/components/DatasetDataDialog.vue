@@ -285,6 +285,7 @@
                 row-key="__ddRowKey"
                 :row-height="38"
                 :header-height="40"
+                scrollbar-always-on
                 :sort-by="virtualSortBy"
                 @column-sort="onVirtualSort"
                 @end-reached="onVirtualEndReached"

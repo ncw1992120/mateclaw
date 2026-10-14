@@ -17,7 +17,10 @@ const stubs = {
   'el-button': { template: '<button v-bind="$attrs" @click="$emit(\'click\', $event)"><slot /></button>' },
   'el-empty': { props: ['description'], template: '<div class="empty">{{ description }}</div>' },
   'el-alert': { props: ['title'], template: '<div class="alert">{{ title }}</div>' },
-  'el-table': { template: '<div class="result-table"><slot /></div>' },
+  'el-table': {
+    props: ['scrollbarAlwaysOn'],
+    template: '<div class="result-table" :data-scrollbar-always-on="String(scrollbarAlwaysOn)"><slot /></div>',
+  },
   'el-table-column': { props: ['prop', 'label'], template: '<div class="result-column" :data-prop="prop" :data-label="label" />' },
   'el-input': {
     inheritAttrs: false,
@@ -196,6 +199,7 @@ describe('PythonResultDataDialog', () => {
     await wrapper.get('[data-testid="python-run-query"]').trigger('click')
     await flushPromises()
     expect(wrapper.find('.result-table').exists()).toBe(true)
+    expect(wrapper.get('.result-table').attributes('data-scrollbar-always-on')).toBeDefined()
     wrapper.unmount()
   })
 
