@@ -681,6 +681,41 @@ describe('CombinationCardWidget', () => {
     expect(wrapper.find('.tab-edit').exists()).toBe(false)
   })
 
+  it('renaming a tab keeps left and right arrows in the text input instead of switching tabs', async () => {
+    const tabs = [
+      { id: 'tab-one', title: '页签一', children: [] },
+      { id: 'tab-two', title: '页签二', children: [] },
+    ]
+    const component = {
+      id: 'combination-arrow-rename',
+      type: 'combination' as const,
+      title: '组合卡片',
+      children: [],
+      containerConfig: { ...containerConfig, tabs, activeTab: 'tab-one' },
+      position: { x: 0, y: 0, w: 12, h: 8 },
+    }
+    const wrapper = mount(CombinationCardWidget, {
+      props: { editable: true, component },
+      global: {
+        plugins: [i18n],
+        stubs: {
+          KpiCardWidget: true, ChartWidget: true, DataTableWidget: true,
+          FilterSelectWidget: true, TimeFilterWidget: true, AiAnalysisWidget: true,
+          EmptyState: { template: '<div />' }, 'el-icon': true,
+        },
+      },
+    })
+
+    await wrapper.find('.tab-rename-button').trigger('click')
+    const input = wrapper.get('.tab-edit')
+    for (const key of ['ArrowLeft', 'ArrowRight']) {
+      const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+      input.element.dispatchEvent(event)
+      expect(event.defaultPrevented).toBe(false)
+      expect(component.containerConfig.activeTab).toBe('tab-one')
+    }
+  })
+
   it('moves a selected child with keyboard arrows while staying inside the container', async () => {
     const child = {
       ...nestedCombination,

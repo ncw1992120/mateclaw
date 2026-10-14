@@ -40,6 +40,7 @@
           class="tab-edit"
           v-model="editingTabTitle"
           @click.stop
+          @keydown.stop
           @blur="commitTabRename(tab)"
           @keydown.esc.prevent="cancelTabRename"
           @keyup.enter="commitTabRename(tab)"
