@@ -248,7 +248,7 @@ const previewDataReady = ref(false)
 const dataRefreshPending = ref(false)
 let autoAnalysisScheduleSequence = 0
 let aiAnalysisRequestSequence = 0
-const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController }>()
+const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController; waitingForData: boolean }>()
 const lastAutoAnalysisKeys = new Map<string, string>()
 
 /** 报告生成中状态 */
@@ -1299,6 +1299,7 @@ function currentAiAnalysisSnapshot() {
 
 function invalidatePendingAiAnalysis(): void {
   for (const [componentId, request] of aiAnalysisRequests) {
+    if (request.waitingForData) continue
     request.controller.abort()
     aiAnalysisRequests.delete(componentId)
     aiAnalysisGeneratingIds.delete(componentId)
@@ -1325,26 +1326,28 @@ function scheduleAutoAiAnalysis(): void {
 /** 自动模式在当前快照变化后运行；手动模式由卡片按钮调用同一流程。 */
 async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<typeof currentAiAnalysisSnapshot>, promptTemplate?: string): Promise<void> {
   if (aiAnalysisRequests.has(componentId)) return
-  await waitForCurrentAnalysisData()
-  // 让表格在查询完成后先同步实际展示页，快照中的 rows/page/size 才与界面一致。
-  await nextTick()
-  if (previewDisposed || !isCurrentAnalysisDataReady()) return
-  const component = collectVisibleAiAnalysisComponents(currentPageComponents.value).find((item) => item.id === componentId)
-  if (!component) return
-  const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
-  const snapshot = suppliedSnapshot ?? currentAiAnalysisSnapshot()
-  const requestPrompt = promptTemplate ?? config?.promptTemplate
-  const request = { promptTemplate: requestPrompt, snapshot }
   const sequence = ++aiAnalysisRequestSequence
   const controller = new AbortController()
-  aiAnalysisRequests.set(componentId, { sequence, controller })
+  const requestState = { sequence, controller, waitingForData: true }
+  aiAnalysisRequests.set(componentId, requestState)
   aiAnalysisGeneratingIds.add(componentId)
 
   try {
+    while (!previewDisposed && !isCurrentAnalysisDataReady()) {
+      await waitForCurrentAnalysisData()
+      // 让表格在查询完成后先同步实际展示页，快照中的 rows/page/size 才与界面一致。
+      await nextTick()
+    }
+    if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    requestState.waitingForData = false
+    const component = collectVisibleAiAnalysisComponents(currentPageComponents.value).find((item) => item.id === componentId)
+    if (!component) return
+    const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
+    const snapshot = suppliedSnapshot ?? currentAiAnalysisSnapshot()
+    const requestPrompt = promptTemplate ?? config?.promptTemplate
+    const request = { promptTemplate: requestPrompt, snapshot }
     const markdown = await generateComponentAnalysis(props.dashboardId, componentId, request, controller.signal)
     if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
-    aiAnalysisRequests.delete(componentId)
-    aiAnalysisGeneratingIds.delete(componentId)
     const existing = componentDataMap.value[componentId]
     componentDataMap.value = {
       ...componentDataMap.value,
@@ -1360,10 +1363,13 @@ async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<
     }
   } catch (err) {
     if (controller.signal.aborted || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
-    aiAnalysisRequests.delete(componentId)
-    aiAnalysisGeneratingIds.delete(componentId)
     const message = err instanceof Error ? err.message : String(err)
     ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + message)
+  } finally {
+    if (aiAnalysisRequests.get(componentId)?.sequence === sequence) {
+      aiAnalysisRequests.delete(componentId)
+      aiAnalysisGeneratingIds.delete(componentId)
+    }
   }
 }
 

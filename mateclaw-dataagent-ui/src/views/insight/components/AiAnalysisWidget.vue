@@ -24,8 +24,13 @@
         <div class="section-content markdown-body" v-html="renderedDataSection"></div>
       </div>
 
+      <div v-if="generating" class="analysis-loading-state" role="status" aria-live="polite">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ t('insight.aiAnalysis.generating') }}</span>
+      </div>
+
       <!-- AI 生成部分 -->
-      <div v-if="analysisSection" class="analysis-section ai-section" :data-label="t('insight.aiAnalysis.aiSectionLabel')">
+      <div v-else-if="analysisSection" class="analysis-section ai-section" :data-label="t('insight.aiAnalysis.aiSectionLabel')">
         <div class="section-content markdown-body" v-html="renderedAnalysisSection"></div>
       </div>
 
@@ -158,6 +163,22 @@ function handleGenerate(): void {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
+}
+
+.analysis-loading-state {
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  color: var(--db-text-muted);
+  font-size: 13px;
+}
+
+.analysis-loading-state :deep(.el-icon) {
+  color: var(--db-accent);
+  font-size: 16px;
 }
 
 .analysis-section {
