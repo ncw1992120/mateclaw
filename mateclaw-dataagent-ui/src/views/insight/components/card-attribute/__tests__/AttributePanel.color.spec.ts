@@ -15,7 +15,7 @@ const colorFieldStub = {
   name: 'InsightColorField',
   props: ['modelValue', 'label', 'suggestedColors', 'showPicker'],
   emits: ['update:modelValue', 'change'],
-    template: '<input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker ?? true)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" />',
+    template: '<div><label>{{ label }}</label><input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker ?? true)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" /></div>',
 }
 
 function createCard() {
@@ -193,6 +193,7 @@ describe('AttributePanel', () => {
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
     const componentColorField = fields.find(field => field.attributes('aria-label') === '组件配色')!
     expect(toplineField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
+    expect(wrapper.findAll('label').filter(label => label.text() === '自定义顶线颜色')).toHaveLength(1)
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(componentColorField.attributes('data-suggested-colors')).toBeTruthy()
     expect(componentColorField.attributes('data-show-picker')).toBe('true')
@@ -207,7 +208,7 @@ describe('AttributePanel', () => {
     const card = insightFixture.value.activeCard.value
 
     const toplineSelect = wrapper.get('select[aria-label="组件顶线颜色"]')
-    expect(toplineSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '自定义颜色'])
+    expect(toplineSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '自定义颜色', '隐藏顶线'])
     await toplineSelect.setValue('theme')
     expect(card.visualStyle.border.colorMode).toBe('theme')
     expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(false)
@@ -215,6 +216,9 @@ describe('AttributePanel', () => {
     await toplineSelect.setValue('custom')
     expect(card.visualStyle.border.colorMode).toBe('custom')
     expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(true)
+    await toplineSelect.setValue('hidden')
+    expect(card.visualStyle.border.colorMode).toBe('hidden')
+    expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(false)
   })
 
   it('retains theme and transparent mode choices on the active card', async () => {

@@ -47,10 +47,10 @@
             <el-select v-model="localComponent.visualStyle!.border!.colorMode" aria-label="组件顶线颜色" style="width: 100%" @change="emitChange">
               <el-option value="theme" label="跟随主题" />
               <el-option value="custom" label="自定义颜色" />
+              <el-option value="hidden" label="隐藏顶线" />
             </el-select>
           </div>
           <div v-if="!['filter', 'timeFilter'].includes(component.type) && localComponent.visualStyle?.border?.colorMode === 'custom'" class="form-group">
-            <label class="form-label">自定义顶线颜色</label>
             <InsightColorField v-model="localComponent.visualStyle.border.color" label="自定义顶线颜色" @change="emitChange" />
           </div>
           <div class="form-group">

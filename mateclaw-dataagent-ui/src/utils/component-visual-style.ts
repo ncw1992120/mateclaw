@@ -50,7 +50,11 @@ export function resolveComponentVisualStyle(
   const border = normalized.border ?? { mode: 'hidden' as const }
   // 边框颜色语义已迁移为顶线颜色：自定义色不再画边框，而是覆盖卡片顶线（--component-group-accent），
   // 顶线独立于边框模式——设置了自定义色时即使边框隐藏也保留顶线强调色。
-  const topline = border.colorMode === 'custom' && border.color ? border.color : undefined
+  const topline = border.colorMode === 'hidden'
+    ? 'transparent'
+    : border.colorMode === 'custom' && border.color
+      ? border.color
+      : undefined
   const background = normalized.background?.mode === 'custom' && normalized.background.color
     ? normalized.background.color
     : normalized.background?.mode === 'transparent'

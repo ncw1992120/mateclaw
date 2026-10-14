@@ -21,6 +21,13 @@ describe('component-visual-style', () => {
     expect(resolveComponentVisualStyle({ border: { mode: 'theme', colorMode: 'custom', color: '#FF5500' } }, 'kpi')['--component-border']).toBe('1px solid var(--db-border)')
   })
 
+  it('隐藏顶线时覆盖主题或自定义顶线，但保留外框边框配置', () => {
+    expect(resolveComponentVisualStyle({ border: { mode: 'visible', colorMode: 'hidden' } }, 'kpi')).toMatchObject({
+      '--component-group-accent': 'transparent',
+      '--component-border': '1px solid var(--db-border)',
+    })
+  })
+
   it('隐藏边框时顶线被显式置透明以覆盖主题或自定义强调色', () => {
     // 修复：边框隐藏后仍可见主题顶部强调色（被误认为边框未隐藏）
     expect(resolveComponentVisualStyle({ border: { mode: 'hidden' } }, 'kpi')['--component-group-accent']).toBe('transparent')

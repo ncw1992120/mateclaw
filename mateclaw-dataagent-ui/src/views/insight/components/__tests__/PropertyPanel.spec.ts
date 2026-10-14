@@ -61,7 +61,7 @@ const stubs = {
   InsightColorField: {
     name: 'InsightColorField',
     props: ['modelValue', 'label', 'suggestedColors', 'showPicker'],
-    template: '<input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker ?? true)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" @change="$emit(\'change\', $event.target.value)" />',
+    template: '<div><label>{{ label }}</label><input data-testid="insight-color-field" :aria-label="label" :data-show-picker="String(showPicker ?? true)" :data-suggested-colors="JSON.stringify(suggestedColors)" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value); $emit(\'change\', $event.target.value)" @change="$emit(\'change\', $event.target.value)" /></div>',
   },
   'el-radio-group': { template: '<div><slot /></div>' },
   'el-radio': { template: '<label><slot /></label>' },
@@ -114,6 +114,7 @@ describe('PropertyPanel', () => {
     expect(fields).toHaveLength(3)
     const toplineField = fields.find(field => field.attributes('aria-label') === '自定义顶线颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
+    expect(wrapper.findAll('label').filter(label => label.text() === '自定义顶线颜色')).toHaveLength(1)
     expect(toplineField.element.tagName).toBe('INPUT')
     expect(toplineField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
@@ -168,9 +169,15 @@ describe('PropertyPanel', () => {
     expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { border: { mode: 'visible' } } })
     expect(wrapper.find('select[aria-label="组件顶线颜色"]').exists()).toBe(true)
     expect(wrapper.find('select[aria-label="组件背景"]').exists()).toBe(true)
+
+    const toplineSelect = wrapper.get('select[aria-label="组件顶线颜色"]')
+    expect(toplineSelect.findAll('option').map(option => option.text())).toEqual(['跟随主题', '自定义颜色', '隐藏顶线'])
+    await toplineSelect.setValue('hidden')
+    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ visualStyle: { border: { colorMode: 'hidden' } } })
+    expect(wrapper.find('input[aria-label="自定义顶线颜色"]').exists()).toBe(false)
   })
 
-  it('将标题栏样式和组件配色统一放入样式设置，并移除标题栏强调色选项', async () => {
+  it('将标题栏样式统一放入样式设置，并移除标题栏强调色与组件配色选项', async () => {
     const wrapper = mount(PropertyPanel, {
       props: { component, allComponents: [] },
       global: { stubs, plugins: [i18n] },

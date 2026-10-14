@@ -1274,7 +1274,7 @@ export type ComponentTitleBarStyle = 'hidden' | 'standard' | 'minimal' | 'accent
 export interface ComponentVisualStyle {
   border?: {
     mode: 'theme' | 'visible' | 'hidden'
-    colorMode?: 'theme' | 'custom'
+    colorMode?: 'theme' | 'custom' | 'hidden'
     color?: string
     width?: 1 | 2
     style?: 'solid' | 'dashed'
