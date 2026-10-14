@@ -221,7 +221,7 @@ describe('组合卡片页签 · 复制页签', () => {
     expect(copyNestedTabs[0].children[0].title).toBe('nested-child')
   })
 
-  it('复制页签不复制各层组件的数据源配置和 Python 处理脚本，但保留展示配置', () => {
+  it('复制页签保留各层组件的数据源配置和 Python 处理脚本', () => {
     const nested = makeContainer([], [{
       id: 'nested-tab', title: '嵌套页签', children: [{
         ...makeChild('nested-table'),
@@ -244,10 +244,10 @@ describe('组合卡片页签 · 复制页签', () => {
     const copiedChild = res.created!.children[0]
     const copiedNestedChild = copiedChild.containerConfig!.tabs[0].children[0]
 
-    expect(copiedChild.dataSource).toBeUndefined()
-    expect(copiedChild.config).toEqual({ color: 'red' })
-    expect(copiedNestedChild.dataSource).toBeUndefined()
-    expect(copiedNestedChild.config).toEqual({ color: 'blue' })
+    expect(copiedChild.dataSource).toEqual({ datasourceId: 'source', metrics: ['m'], dimensions: [], filters: [], limit: 50 })
+    expect(copiedChild.config).toEqual({ color: 'red', datasetPipeline: { datasetInputs: [{ datasetId: 'ds' }], script: 'process()' } })
+    expect(copiedNestedChild.dataSource).toEqual({ datasourceId: 'nested-source', metrics: ['m'], dimensions: [], filters: [], limit: 50 })
+    expect(copiedNestedChild.config).toEqual({ color: 'blue', datasetPipeline: { datasetInputs: [{ datasetId: 'nested-ds' }], script: 'nested script' } })
     expect(c.containerConfig!.tabs[0].children[0].config).toMatchObject({ datasetPipeline: { script: 'process()' } })
   })
 

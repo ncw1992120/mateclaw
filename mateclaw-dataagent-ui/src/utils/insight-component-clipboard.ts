@@ -116,21 +116,5 @@ export function cloneCombinationTabForPaste(
   clone.id = createId('tab')
   clone.children = (clone.children ?? []).map((child) =>
     cloneCombinationChildForPaste(child, createId, { x: 0, y: 0 }))
-  const clearDataConfiguration = (node: Record<string, any>): void => {
-    delete node.dataSource
-    if (node.config && typeof node.config === 'object' && 'datasetPipeline' in node.config) {
-      const { datasetPipeline: _datasetPipeline, ...config } = node.config
-      node.config = config
-    }
-    node.tabs?.forEach((tab: Record<string, any>) => {
-      delete tab.dataSource
-      tab.children?.forEach((child: Record<string, any>) => clearDataConfiguration(child))
-    })
-    node.children?.forEach((child: Record<string, any>) => clearDataConfiguration(child))
-    node.containerConfig?.tabs?.forEach((tab: Record<string, any>) => {
-      tab.children?.forEach((child: Record<string, any>) => clearDataConfiguration(child))
-    })
-  }
-  clone.children.forEach((child) => clearDataConfiguration(child as unknown as Record<string, any>))
   return clone
 }
