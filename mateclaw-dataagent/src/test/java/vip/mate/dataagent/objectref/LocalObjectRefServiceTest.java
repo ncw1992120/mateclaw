@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -138,6 +139,31 @@ class LocalObjectRefServiceTest {
             service.expire(ref);
             service.expire(ref);
         });
+    }
+
+    @Test
+    void cleanupDeletesExpiredTaskObjectsButPreservesFreshAndManagedDatasetObjects() throws Exception {
+        LocalObjectRefService service = service(60);
+        LocalObjectFileStore files = new LocalObjectFileStore(tempDir);
+        Instant now = Instant.now();
+        String expiredKey = "task-expired/expired-object";
+        String freshKey = "task-fresh/fresh-object";
+        String datasetKey = "datasets/10/persistent-file";
+        byte[] payload = "payload".getBytes(StandardCharsets.UTF_8);
+        files.write(expiredKey, new ByteArrayInputStream(payload));
+        files.write(freshKey, new ByteArrayInputStream(payload));
+        files.write(datasetKey, new ByteArrayInputStream(payload));
+        Files.setLastModifiedTime(tempDir.resolve(expiredKey), FileTime.from(now.minusSeconds(61)));
+        Files.setLastModifiedTime(tempDir.resolve(freshKey), FileTime.from(now.minusSeconds(30)));
+        Files.setLastModifiedTime(tempDir.resolve(datasetKey), FileTime.from(now.minusSeconds(3_600)));
+
+        int deleted = service.cleanupExpiredObjects(now);
+
+        assertEquals(1, deleted);
+        assertFalse(Files.exists(tempDir.resolve(expiredKey)));
+        assertFalse(Files.exists(tempDir.resolve("task-expired")));
+        assertTrue(Files.exists(tempDir.resolve(freshKey)));
+        assertTrue(Files.exists(tempDir.resolve(datasetKey)));
     }
 
     @Test

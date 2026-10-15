@@ -1,7 +1,8 @@
 package vip.mate.dataagent.objectref;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.dataset.DatasetAccessContext;
 import vip.mate.dataagent.dataset.DatasetReadErrorCode;
@@ -21,6 +22,7 @@ import java.util.UUID;
 /** Filesystem-backed temporary object references, scoped to their creating task and workspace. */
 @Service
 public class LocalObjectRefService implements ObjectRefService {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(LocalObjectRefService.class);
     private final LocalObjectFileStore files;
     private final long ttlSeconds;
 
@@ -95,6 +97,20 @@ public class LocalObjectRefService implements ObjectRefService {
         } catch (IllegalArgumentException e) {
             throw new DatasetReadException(DatasetReadErrorCode.INVALID_REQUEST, "对象键无效", e);
         }
+    }
+
+    @Scheduled(fixedDelay = 3_600_000L, initialDelay = 3_600_000L)
+    public void cleanupExpiredTaskObjects() {
+        try {
+            int deleted = cleanupExpiredObjects(Instant.now());
+            if (deleted > 0) LOGGER.info("[object-ref] expired task objects deleted={}", deleted);
+        } catch (IOException e) {
+            LOGGER.warn("[object-ref] failed to clean expired task objects under storage root", e);
+        }
+    }
+
+    int cleanupExpiredObjects(Instant now) throws IOException {
+        return files.deleteTaskObjectsOlderThan(now.minusSeconds(ttlSeconds));
     }
 
     private void requireContext(DatasetAccessContext context) {

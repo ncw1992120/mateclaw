@@ -126,34 +126,6 @@ services:
     volumes:
       - server_data:/app/data
       - skills_data:/root/.mateclaw/skills
-  # DataAgent owns dataset adapters, Worker orchestration and task-scoped endpoints.
-  mateclaw-dataagent:
-    build:
-      context: .
-      dockerfile: mateclaw-dataagent/Dockerfile
-    container_name: mateclaw-dataagent
-    restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
-    environment:
-      SPRING_PROFILES_ACTIVE: mysql
-      DB_HOST: mysql
-      DB_PORT: 3306
-      DB_NAME: ${DB_NAME:-mateclaw}
-      DB_USERNAME: ${DB_USERNAME:-mateclaw}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required in .env}
-      MATECLAW_STORAGE_ROOT: /data/mateclaw-storage
-      MATECLAW_STORAGE_OBJECT_REF_TTL_SECONDS: ${MATECLAW_STORAGE_OBJECT_REF_TTL_SECONDS:-3600}
-      PYTHON_EXECUTOR_ENABLED: ${PYTHON_EXECUTOR_ENABLED:-true}
-      MATECLAW_DATASET_READ_BASE_URL: ${MATECLAW_DATASET_READ_BASE_URL:-http://mateclaw-dataagent:18089/dataagent/api}
-      MATECLAW_DATAAGENT_PWD_AES_KEY: ${MATECLAW_DATAAGENT_PWD_AES_KEY:-MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=}
-      JWT_SECRET: ${JWT_SECRET:-}
-    ports:
-      - "18089:18089"
-    volumes:
-      - ${MATECLAW_STORAGE_ROOT:-./data/object-storage}:/data/mateclaw-storage
-
 volumes:
   mysql_data:
   postgres_data:

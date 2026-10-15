@@ -4,14 +4,18 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /** Controlled filesystem storage for opaque, root-relative object keys. */
 public final class LocalObjectFileStore {
@@ -57,6 +61,41 @@ public final class LocalObjectFileStore {
         } catch (NoSuchFileException ignored) {
             // Idempotent even when an intermediate key directory has already been removed.
         }
+    }
+
+    /** Deletes expired task-scoped objects stored as {taskId}/{objectId}; managed datasets use a deeper key. */
+    public int deleteTaskObjectsOlderThan(Instant cutoff) throws IOException {
+        Objects.requireNonNull(cutoff, "cutoff");
+        if (!Files.isDirectory(root, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(root)) return 0;
+
+        List<Path> expired;
+        try (Stream<Path> paths = Files.walk(root, 2)) {
+            expired = paths
+                    .filter(path -> !path.equals(root))
+                    .filter(path -> root.relativize(path).getNameCount() == 2)
+                    .filter(path -> Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS))
+                    .filter(path -> {
+                        try {
+                            return !Files.getLastModifiedTime(path, LinkOption.NOFOLLOW_LINKS)
+                                    .toInstant().isAfter(cutoff);
+                        } catch (IOException e) {
+                            return false;
+                        }
+                    })
+                    .toList();
+        }
+
+        int deleted = 0;
+        for (Path path : expired) {
+            rejectSymbolicLinks(path);
+            if (Files.deleteIfExists(path)) deleted++;
+            try {
+                Files.deleteIfExists(path.getParent());
+            } catch (DirectoryNotEmptyException ignored) {
+                // Other unexpired task objects may still use this directory.
+            }
+        }
+        return deleted;
     }
 
     public Path resolve(String key) {
