@@ -3,6 +3,7 @@ package vip.mate.dataagent.controller;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -14,8 +15,11 @@ import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.service.InsightReportService;
+import vip.mate.dataagent.service.DashboardExecutionService;
+import vip.mate.dataagent.dto.DashboardExecutionRequest;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 洞察仪表盘控制器
@@ -31,15 +35,50 @@ public class DataAgentInsightDashboardController {
     private final InsightDashboardService dashboardService;
     private final InsightDataBindService dataBindService;
     private final InsightReportService reportService;
+    private final DashboardExecutionService executionService;
+    private final vip.mate.dataagent.service.ResultSetQueryService resultSetQueryService;
 
     /**
      * 仪表盘列表
      */
     @GetMapping
     @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
-    @Operation(summary = "仪表盘列表", description = "获取当前工作区的所有仪表盘")
-    public R<List<InsightDashboardVO>> list() {
-        return R.ok(dashboardService.listDashboards());
+    @Operation(summary = "仪表盘列表", description = "获取当前工作区的仪表盘；可通过 visibility 过滤（如 template,official）")
+    public R<List<InsightDashboardVO>> list(
+            @Parameter(description = "可见性过滤：逗号分隔取值 template,official / private 等；为空返回工作区内全部")
+            @RequestParam(required = false) String visibility) {
+        return R.ok(dashboardService.listDashboards(visibility));
+    }
+
+    /**
+     * 仪表盘列表摘要（分页，轻量投影）
+     * <p>
+     * 列表首屏只取卡片所需字段，不含 schemaJson / reportContent；分页、计数、过滤与排序
+     * 在数据库侧完成。counts 为当前可见范围内的状态总数，不随翻页变化。
+     */
+    @GetMapping("/summary")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "仪表盘列表摘要", description = "分页返回仪表盘摘要（不含 Schema），支持可见性/状态/关键词过滤与排序")
+    public R<InsightDashboardPageVO> summary(
+            @Parameter(description = "页码，从 1 开始") @RequestParam(required = false) Integer page,
+            @Parameter(description = "每页条数，默认 20，最大 100") @RequestParam(required = false) Integer size,
+            @Parameter(description = "可见性过滤：逗号分隔取值 template,official / private 等；为空返回工作区内全部")
+            @RequestParam(required = false) String visibility,
+            @Parameter(description = "状态过滤：draft / published；为空不过滤")
+            @RequestParam(required = false) String status,
+            @Parameter(description = "关键词：匹配名称/描述/负责人名称")
+            @RequestParam(required = false) String keyword,
+            @Parameter(description = "排序字段白名单：updateTime / name") @RequestParam(required = false) String sortBy,
+            @Parameter(description = "排序方向：asc / desc，默认 desc") @RequestParam(required = false) String sortOrder) {
+        InsightDashboardSummaryQuery query = new InsightDashboardSummaryQuery();
+        query.setPage(page);
+        query.setSize(size);
+        query.setVisibility(visibility);
+        query.setStatus(status);
+        query.setKeyword(keyword);
+        query.setSortBy(sortBy);
+        query.setSortOrder(sortOrder);
+        return R.ok(dashboardService.pageDashboards(query));
     }
 
     /**
@@ -99,6 +138,20 @@ public class DataAgentInsightDashboardController {
     }
 
     /**
+     * 存为样例模板
+     */
+    @PostMapping("/{id}/save-as-template")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "存为样例模板", description = "将指定仪表盘派生为团队共享样例模板（visibility=template），副本带示例数据可直接使用")
+    public R<InsightDashboardVO> saveAsTemplate(
+            @Parameter(description = "源仪表盘 ID") @PathVariable Long id,
+            @RequestBody(required = false) InsightDashboardSaveAsTemplateRequest request) {
+        InsightDashboardSaveAsTemplateRequest payload =
+                request != null ? request : new InsightDashboardSaveAsTemplateRequest();
+        return R.ok(dashboardService.saveAsTemplate(id, payload));
+    }
+
+    /**
      * 预览仪表盘
      * <p>
      * 获取仪表盘所有组件的渲染数据（取数 + 图表构建），用于预览模式渲染。
@@ -125,6 +178,71 @@ public class DataAgentInsightDashboardController {
     public R<InsightComponentDataDTO> previewComponent(
             @RequestBody InsightDashboardSchemaDTO.Component component) {
         return R.ok(dataBindService.bindComponent(component));
+    }
+
+    @PostMapping("/{id}/executions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "创建仪表盘 Python 执行", description = "按已保存 Schema 的数据集输入和脚本创建受控 Worker 任务")
+    public R<Map<String, Object>> execute(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id,
+            @RequestBody(required = false) DashboardExecutionRequest request) {
+        return R.ok(executionService.submit(id, request));
+    }
+
+    /** 按当前组件的数据集编排执行；未配置组件管道时由服务端返回明确错误。 */
+    @PostMapping("/{id}/components/{componentId}/executions")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "创建组件数据集执行", description = "按组件级 datasetPipeline 执行 Python 预处理")
+    public R<Map<String, Object>> executeComponent(
+            @PathVariable Long id,
+            @PathVariable String componentId,
+            @RequestBody(required = false) DashboardExecutionRequest request) {
+        DashboardExecutionRequest scoped = new DashboardExecutionRequest(
+                request == null ? Map.of() : request.parameters(), componentId,
+                request == null ? null : request.schemaJson(),
+                request == null ? null : request.queryContext());
+        return R.ok(executionService.submit(id, scoped));
+    }
+
+    @GetMapping("/executions/{executionId}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询仪表盘执行状态")
+    public R<Map<String, Object>> executionStatus(@PathVariable String executionId) {
+        return R.ok(executionService.status(executionId));
+    }
+
+    @GetMapping("/executions/{executionId}/logs")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询仪表盘执行日志")
+    public R<Map<String, Object>> executionLogs(@PathVariable String executionId) {
+        return R.ok(executionService.logs(executionId));
+    }
+
+    @GetMapping("/executions/{executionId}/result")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "读取仪表盘执行结果", description = "受工作区权限和 ObjectRef 任务上下文保护；返回统一结构化结果 {executionId,status,envelope,inline,outputRef?}，envelope 为 table/scalar/message 标准信封（内联与引用结果同构），预览行数受控且 meta 保留真实 rowCount/truncated；输出契约错误返回结构化 stage/path/expected/actual/suggestion")
+    public R<Map<String, Object>> executionResult(@PathVariable String executionId) {
+        return R.ok(executionService.result(executionId));
+    }
+
+    /**
+     * 结果集筛选/排序/分页预览：针对完整 inline 或 ObjectRef 结果执行服务端有界处理，
+     * 返回 columns/rows/totalCount/page/pageSize；GET result 的旧版前 10 行预览语义保持不变。
+     */
+    @PostMapping("/executions/{executionId}/result/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "结果集分页预览", description = "对完整执行结果做服务端排序/分页，返回精确总数；不基于旧接口前 10 行截断")
+    public R<Map<String, Object>> executionResultPreview(
+            @PathVariable String executionId,
+            @RequestBody(required = false) vip.mate.dataagent.dto.ResultPreviewRequest request) {
+        return R.ok(resultSetQueryService.preview(executionId, request));
+    }
+
+    @PostMapping("/executions/{executionId}/cancel")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_MEMBER)
+    @Operation(summary = "取消仪表盘执行")
+    public R<Map<String, Object>> cancelExecution(@PathVariable String executionId) {
+        return R.ok(executionService.cancel(executionId));
     }
 
     /**
@@ -160,6 +278,17 @@ public class DataAgentInsightDashboardController {
     public R<String> generateReport(
             @Parameter(description = "仪表盘 ID") @PathVariable Long id) {
         return R.ok(reportService.generateReport(id));
+    }
+
+    /** 基于预览页面已加载的数据生成单个 AI 分析组件内容。 */
+    @PostMapping("/{id}/components/{componentId}/ai-analysis")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "生成组件 AI 分析", description = "使用当前页面已加载的数据快照生成单个 AI 分析组件内容，不重新查询仪表盘")
+    public R<String> generateComponentAnalysis(
+            @Parameter(description = "仪表盘 ID") @PathVariable Long id,
+            @Parameter(description = "AI 分析组件 ID") @PathVariable String componentId,
+            @Valid @RequestBody InsightComponentAiAnalysisRequest request) {
+        return R.ok(reportService.generateComponentAnalysis(id, componentId, request));
     }
 
     /**

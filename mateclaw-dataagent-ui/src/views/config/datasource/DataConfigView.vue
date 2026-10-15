@@ -1,5 +1,8 @@
 <template>
   <div class="data-config-page">
+    <div class="data-subnav">
+      <span class="data-subnav-title">数据源</span>
+    </div>
     <DatasourceView />
   </div>
 </template>
@@ -17,4 +20,6 @@ import DatasourceView from '@/views/DatasourceView.vue'
   display: flex;
   flex-direction: column;
 }
+.data-subnav { display: flex; align-items: center; gap: 16px; padding: 14px 24px; border-bottom: 1px solid var(--theme-border); background: var(--theme-surface); }
+.data-subnav-title { font-weight: 600; color: var(--theme-text); }
 </style>

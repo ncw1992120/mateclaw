@@ -1,0 +1,30 @@
+{
+  "data": {
+    "analysisViewRoots": [
+      {
+        "categoryId": "CAT_CLJD",
+        "categoryName": "策略解读",
+        "analysisViewList": [
+          {
+            "id": 9001,
+            "viewName": "cljd_zcl_zb_view",
+            "description": "策略解读：子策略粒度的策略归因指标宽表（计划/策略/子策略/渠道）",
+            "displayName": "策略解读-子策略-指标"
+          },
+          {
+            "id": 9002,
+            "viewName": "cljd_zcl_wd_view",
+            "description": "策略解读：子策略维度的下发/触达指标",
+            "displayName": "策略解读-子策略-维度"
+          }
+        ],
+        "subCategory": []
+      }
+    ]
+  },
+  "success": true,
+  "code": "200",
+  "errorMsg": null,
+  "detailErrorMsg": null,
+  "traceId": "mock-trace-tree"
+}

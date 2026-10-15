@@ -3,6 +3,8 @@ import type {
   AloudataCategoryCount,
   AloudataDimensionPage,
   AloudataMetricPage,
+  AloudataSyncedMetric,
+  AloudataSyncedDimension,
   SemanticModel,
   SemanticModelCreateRequest,
   SemanticModelUpdateRequest,
@@ -10,6 +12,19 @@ import type {
 
 /** API 路径常量 */
 const BASE_URL = '/v1/semantic-models'
+
+export interface AloudataMetricDirectoryNode {
+  categoryId: string
+  categoryName: string
+  metricList?: Array<{
+    metricName: string
+    metricDisplayName?: string
+    type?: string
+    unit?: string
+    [key: string]: unknown
+  }>
+  subCategory?: AloudataMetricDirectoryNode[]
+}
 
 /** 查询语义模型列表 */
 export function list(datasourceId: string, tableNames?: string) {
@@ -110,7 +125,13 @@ export function pageAloudataMetrics(
 ) {
   return api.get<AloudataMetricPage>(`/v1/datasources/${datasourceId}/aloudata/metrics/page`, {
     params,
+    timeout: 0,
   })
+}
+
+/** Query the live Aloudata category tree with metrics nested under each category. */
+export function getAloudataMetricDirectory(datasourceId: string) {
+  return api.get<AloudataMetricDirectoryNode[]>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/directory`)
 }
 
 /** 分页查询 Aloudata 维度列表 */
@@ -120,13 +141,29 @@ export function pageAloudataDimensions(
 ) {
   return api.get<AloudataDimensionPage>(`/v1/datasources/${datasourceId}/aloudata/dimensions/page`, {
     params,
+    timeout: 0,
   })
+}
+
+/** 实时获取单个指标详情（同义词、关联维度等，懒加载用） */
+export function getAloudataMetricDetail(datasourceId: string, metricName: string) {
+  return api.get<AloudataSyncedMetric>(
+    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/detail`,
+  )
+}
+
+/** 实时获取单个维度详情（懒加载悬浮详情用） */
+export function getAloudataDimensionDetail(datasourceId: string, dimName: string) {
+  return api.get<AloudataSyncedDimension>(
+    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/detail`,
+  )
 }
 
 /** 查询 Aloudata 类目数量统计 */
 export function listAloudataCategoryCounts(datasourceId: string, categoryType: string) {
   return api.get<AloudataCategoryCount[]>(`/v1/datasources/${datasourceId}/aloudata/categories/counts`, {
     params: { categoryType },
+    timeout: 0,
   })
 }
 

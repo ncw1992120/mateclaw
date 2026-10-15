@@ -1,9 +1,9 @@
 <template>
-  <div class="insight-editor-view">
+  <div class="insight-editor-view" @click="closeComponentContextMenu">
     <!-- 顶部工具栏 -->
     <div class="editor-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
-        <button type="button" class="back-btn" :title="t('common.back')" @click="handleBack">
+        <button type="button" class="back-btn" :title="t('common.back')" :aria-label="t('common.back')" @click="handleBack">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div class="toolbar-title-block">
@@ -11,17 +11,21 @@
             v-if="editingName"
             v-model="dashboardName"
             class="toolbar-name-input"
+            :aria-label="t('insight.editor')"
             :placeholder="t('insight.editor')"
             autofocus
             @blur="commitName"
-            @keyup.enter="blurTarget"
+            @keydown.enter.prevent="blurTarget"
           />
           <h2
             v-else
             class="toolbar-title"
             :class="{ placeholder: !dashboardName }"
+            tabindex="0"
             :title="t('insight.editor')"
             @click="editingName = true"
+            @keydown.enter.prevent="startNameEditing"
+            @keydown.space.prevent="startNameEditing"
           >
             {{ dashboardName || t('insight.editor') }}
           </h2>
@@ -29,16 +33,22 @@
             v-if="editingDesc"
             v-model="dashboardDescription"
             class="toolbar-desc-input"
+            :aria-label="t('insight.description')"
             :placeholder="t('insight.description')"
             autofocus
             @blur="commitDesc"
-            @keyup.enter="blurTarget"
+            @keydown.enter.prevent="blurTarget"
           />
           <div
             v-else
             class="toolbar-subtitle"
             :class="{ placeholder: !dashboardDescription }"
+            role="button"
+            tabindex="0"
+            aria-label="编辑仪表盘描述"
             @click="editingDesc = true"
+            @keydown.enter="editingDesc = true"
+            @keydown.space.prevent="editingDesc = true"
           >
             {{ dashboardDescription || t('insight.description') }}
           </div>
@@ -48,36 +58,81 @@
         <el-input
           v-model="dashboardOwnerName"
           class="toolbar-owner-input"
+          :aria-label="t('insight.ownerName')"
+          size="small"
+          :disabled="isOfficialTemplate"
           :placeholder="t('insight.ownerName')"
           @change="handleOwnerNameChange"
         />
         <span class="toolbar-separator"></span>
-        <el-button class="ai-assistant-btn toolbar-btn" :class="{ on: showAiChat }" @click="toggleAiChat">
+        <el-button class="ai-assistant-btn toolbar-btn" :class="{ on: showAiChat }" :disabled="isOfficialTemplate" @click="toggleAiChat">
           <template #icon>
             <RobotIcon style="width: 16px; height: 16px;" />
           </template>
           {{ t('insight.aiAssistant') }}
         </el-button>
-        <el-button class="toolbar-btn" @click="handleSave" :loading="saving">
+        <el-button class="toolbar-btn" aria-label="主题外观" :disabled="isOfficialTemplate" @click="showThemePanel = true">主题外观</el-button>
+        <el-button v-if="!isOfficialTemplate" class="toolbar-btn" @click="openSaveTemplate">
+          <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></template>
+          {{ t('insight.saveAsTemplate') }}
+        </el-button>
+        <el-button
+          class="toolbar-btn history-action"
+          :disabled="!canUndoEdit || isOfficialTemplate || schemaLoading"
+          title="撤销（⌘Z / Ctrl+Z）"
+          aria-label="撤销"
+          aria-keyshortcuts="Meta+Z Control+Z"
+          @click="undoEdit"
+        >
+          <el-icon><RefreshLeft /></el-icon>
+        </el-button>
+        <el-button
+          class="toolbar-btn history-action"
+          :disabled="!canRedoEdit || isOfficialTemplate || schemaLoading"
+          title="重做（⌘⇧Z / Ctrl+Shift+Z / Ctrl+Y）"
+          aria-label="重做"
+          aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z Control+Y"
+          @click="redoEdit"
+        >
+          <el-icon><RefreshRight /></el-icon>
+        </el-button>
+        <span v-if="dashboard" :class="['editor-save-status', `is-${schemaSaveState}`]" role="status" aria-live="polite">{{ schemaSaveStatusText }}</span>
+        <el-button class="toolbar-btn" @click="handleSave" :loading="saving" :disabled="isOfficialTemplate || schemaLoading">
           <template #icon><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></template>
           {{ t('insight.save') }}
         </el-button>
-        <el-button type="primary" class="toolbar-btn" @click="handlePreview" :disabled="!dashboard">
+        <el-button type="primary" class="toolbar-btn" @click="handlePreview" :disabled="!dashboard || schemaLoading">
           <template #icon><el-icon><View /></el-icon></template>
           {{ t('insight.preview') }}
         </el-button>
       </div>
     </div>
 
+    <!-- 官方样例模板：只读提示条 -->
+    <div v-if="isOfficialTemplate" class="editor-notice notice-readonly" role="status">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      <span class="notice-text">{{ t('insight.officialReadonlyHint') }}</span>
+      <el-button size="small" type="primary" @click="handleCreateFromOfficial">{{ t('insight.createFromTemplate') }}</el-button>
+    </div>
+    <!-- 模板派生副本：示例数据替换提示（非阻塞，可关闭） -->
+    <div v-else-if="derivedFromTemplate" class="editor-notice notice-sample" role="status">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
+      <span class="notice-text">{{ t('insight.sampleDataHint', { name: derivedFromTemplateName }) }}</span>
+      <el-button size="small" text @click="handleReplaceSampleData">{{ t('insight.replaceSampleData') }}</el-button>
+      <button type="button" class="notice-close" :aria-label="t('common.close')" @click="sampleHintDismissed = true">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+
     <!-- 四栏布局：页面菜单 | 物料面板 | 画布 | 属性面板 -->
-    <div class="editor-body">
+    <div class="editor-body" :class="{ 'editor-readonly': isOfficialTemplate }">
       <!-- 页面菜单树 -->
       <div v-if="!pagesCollapsed" class="editor-pages" :class="{ 'mobile-open': showMobilePages }">
         <div class="pages-header">
           <span class="pages-title">页面</span>
           <div class="pages-header-actions">
-            <el-button text size="small" @click="addPage">+</el-button>
-            <button type="button" class="panel-collapse-btn" title="收起面板" @click="pagesCollapsed = true">
+            <el-button text size="small" aria-label="新增页面" @click="addPage">+</el-button>
+            <button type="button" class="panel-collapse-btn" title="收起面板" aria-label="收起面板" @click="pagesCollapsed = true">
               <el-icon :size="14"><Fold /></el-icon>
             </button>
           </div>
@@ -114,7 +169,7 @@
                     size="small"
                     @command="(cmd: string) => handlePageAction(cmd, node)"
                   >
-                    <el-button text size="small" @click.stop>
+                    <el-button text size="small" aria-label="页面操作" @click.stop>
                       <el-icon><More /></el-icon>
                     </el-button>
                     <template #dropdown>
@@ -157,7 +212,7 @@
 
       <!-- 物料面板 -->
       <div v-if="!paletteCollapsed" class="editor-palette" :class="{ 'mobile-open': showMobilePalette }">
-        <ComponentPalette @collapse="paletteCollapsed = true" />
+        <ComponentPalette @collapse="paletteCollapsed = true" @add-component="handleAddComponent" />
       </div>
       <!-- 物料面板折叠态：悬浮按钮 -->
       <PanelFloatButton
@@ -170,15 +225,48 @@
 
       <!-- 画布 -->
       <div class="editor-canvas">
+        <!-- 详情/Schema 未就绪：外壳先可交互，画布区给出加载态；失败时保留返回入口 -->
+        <div v-if="schemaLoading" class="editor-canvas-state" role="status" aria-live="polite">
+          <el-icon class="is-loading editor-canvas-spinner"><Loading /></el-icon>
+          <span class="editor-canvas-state-text">{{ t('insight.loadingSchema') }}</span>
+        </div>
+        <div v-else-if="schemaError" class="editor-canvas-state is-error" role="alert">
+          <span class="editor-canvas-state-text">{{ schemaError }}</span>
+          <el-button class="toolbar-btn" @click="handleBack">{{ t('common.back') }}</el-button>
+        </div>
         <DashboardCanvas
+          v-else
           :components="currentPageComponents"
           :component-data-map="componentDataMap"
+          :dataset-inputs="schema.datasetInputs"
           :editable="true"
+          :dashboard-theme="dashboardTheme"
           :selected-id="selectedComponentId"
           @add-component="handleAddComponent"
           @update-layout="handleUpdateLayout"
           @select-component="handleSelectComponent"
+          @rename-component="handleCanvasComponentRename"
+          @select-child="handleSelectChild"
+          @combination-add-tab="handleCombinationAddTab"
+          @combination-remove-tab="handleCombinationRemoveTab"
+          @combination-move-tab="handleCombinationMoveTab"
+          @combination-copy-tab="handleCombinationCopyTab"
+          @combination-tab-context-menu="handleCombinationTabContextMenu"
+          @combination-delete-child="handleDeleteCombinationChild"
+          @move-component-into="handleMoveComponentInto"
+          @add-component-into="handleAddComponentInto"
+          @move-child-out="handleMoveChildOut"
+          @copy-child="handleCopyChild"
+          @paste-child="handlePasteChild"
           @delete-component="handleDeleteComponent"
+          @copy-component="handleCopyComponent"
+          @paste-component="handlePasteComponent"
+          @context-menu="handleComponentContextMenu"
+          @open-metric-style="handleOpenMetricStyle"
+          @metric-layout-change="handleMetricLayoutChange"
+          @update-title-icon-style="handleCanvasTitleIconStyleUpdate"
+          @update-child-title-icon-style="handleCanvasChildTitleIconStyleUpdate"
+          @update-tab-title-icon-style="handleCanvasTabTitleIconStyleUpdate"
         />
       </div>
 
@@ -186,11 +274,28 @@
       <div v-if="!sidebarCollapsed" class="editor-right-sidebar" :class="{ 'mobile-open': showMobileProperty }">
         <!-- 属性面板 -->
         <div class="editor-property" :class="{ 'mobile-open': showMobileProperty }">
+          <!-- 数据组件（kpi/chart/table）：原型版「卡片属性配置」面板（docs/策略解读/原型设计.md §10~§12 唯一交互依据） -->
+          <!-- combination（组合卡片容器）与筛选类组件走 PropertyPanel（容器配置/页签管理在其内部） -->
+          <CardAttributeSidebar
+            v-if="panelComponent && !['filter', 'timeFilter', 'aiAnalysis', 'combination'].includes(panelComponent.type)"
+            :component="panelComponent"
+            :dashboard-id="dashboardId"
+            :execution-policy="schema.executionPolicy"
+            :filter-components="filterComponents"
+            @change="handleComponentChange"
+            @resultset="handleComponentResultSet"
+            @render="handlePreviewResult"
+          />
+          <!-- 筛选/时间筛选/AI分析组件：沿用正式属性面板 -->
           <PropertyPanel
-            :component="selectedComponent"
+            v-else
+            :component="panelComponent"
             :all-components="currentPageComponents"
+            :use-dataset-pipeline="false"
             @change="handleComponentChange"
             @preview="handlePreviewResult"
+            @combination-add-tab="handleCombinationAddTabFromPanel"
+            @combination-remove-tab="handleCombinationRemoveTabFromPanel"
             @collapse="sidebarCollapsed = true"
           />
         </div>
@@ -220,6 +325,31 @@
         </el-button>
       </div>
 
+      <!-- 「查看数据」弹窗：定义 / 筛选条件 / 结果（条件由用户添加后点查询下推） -->
+      <DatasetDataDialog v-if="dataDialogDataset" :dataset="dataDialogDataset" :component="panelComponent" @render="handlePreviewResult" />
+
+      <!-- 「查询配置」弹窗：展示字段 / 固定筛选 / 筛选器绑定 / 允许排序 / 分页 -->
+      <QueryConfigDialog
+        v-model="insightState.ui.queryConfigDialog.visible"
+        :fields="queryConfigDataset?.fields ?? []"
+        :component-type="queryConfigComponentType"
+        :filter-options="filterOptions"
+        :initial-config="queryConfigDataset?.queryConfig ?? null"
+        :initial-fixed-filters="queryConfigDataset?.filters ?? []"
+        :source-type="queryConfigDataset?.sourceType"
+        :legacy-bindings="queryConfigLegacyBindings"
+        @save="onSaveQueryConfig"
+      />
+
+      <DashboardThemePanel
+        ref="themePanelRef"
+        :model-value="schema.theme ?? { mode: 'preset', presetId: 'blue' }"
+        :visible="showThemePanel"
+        @update:model-value="updateThemeDraft"
+        @update:visible="showThemePanel = $event"
+        @confirm-theme-switch="confirmThemeSwitch"
+      />
+
       <!-- 移动端面板遮罩 -->
       <div
         v-if="showMobilePages || showMobilePalette || showMobileProperty"
@@ -227,11 +357,60 @@
         @click="closeAllMobilePanels"
       />
 
+      <!-- 画布组件右键菜单：复制当前组件或粘贴到当前页面 -->
+      <div
+        v-if="componentContextMenu"
+        class="component-context-menu"
+        :style="componentContextMenuStyle"
+        role="menu"
+        @click.stop
+        @contextmenu.stop.prevent
+      >
+        <!-- 页签右键：复制整个页签（含子组件/嵌套页签/配置）与左右移动 -->
+        <template v-if="componentContextMenu.tabId">
+          <button type="button" role="menuitem" @click="duplicateTabFromContextMenu">
+            <span>{{ t('insight.combination.duplicateTab') }}</span><kbd>⌘ / Ctrl + C</kbd>
+          </button>
+          <button
+            type="button" role="menuitem"
+            :disabled="!canMoveContextMenuTab(-1)"
+            @click="moveTabFromContextMenu(-1)"
+          >
+            <span>{{ t('insight.combination.moveTabLeft') }}</span>
+          </button>
+          <button
+            type="button" role="menuitem"
+            :disabled="!canMoveContextMenuTab(1)"
+            @click="moveTabFromContextMenu(1)"
+          >
+            <span>{{ t('insight.combination.moveTabRight') }}</span>
+          </button>
+        </template>
+        <template v-else>
+          <button
+            v-if="componentContextMenu.childId || componentContextMenu.componentId"
+            type="button"
+            role="menuitem"
+            @click="copyFromContextMenu"
+          >
+            <span>{{ componentContextMenu.childId ? '复制子组件' : '复制组件' }}</span><kbd>⌘ / Ctrl + C</kbd>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            :disabled="componentContextMenu.childId ? !clipboardChild : !clipboardComponent"
+            @click="pasteFromContextMenu"
+          >
+            <span>{{ componentContextMenu.childId ? '粘贴子组件' : '粘贴组件' }}</span><kbd>⌘ / Ctrl + V</kbd>
+          </button>
+        </template>
+      </div>
       <!-- AI助手抽屉 -->
       <el-drawer
         v-model="showAiChat"
         direction="rtl"
         size="400px"
+        append-to-body
         :with-header="false"
         class="ai-drawer-overlay"
       >
@@ -241,25 +420,84 @@
           @dashboard-updated="handleAiDashboardUpdated"
         />
       </el-drawer>
+
+      <!-- 存为样例模板弹窗 -->
+      <el-dialog
+        v-model="saveTemplateVisible"
+        :title="t('insight.saveAsTemplateTitle')"
+        width="480px"
+        append-to-body
+      >
+        <div class="save-template-form">
+          <p class="save-template-hint">{{ t('insight.saveAsTemplateHint') }}</p>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateName') }}</span>
+            <el-input v-model="saveTemplateForm.name" maxlength="100" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateDesc') }}</span>
+            <el-input v-model="saveTemplateForm.description" type="textarea" :rows="2" maxlength="300" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateCategory') }}</span>
+            <el-input v-model="saveTemplateForm.category" :placeholder="t('insight.templateCategoryPlaceholder')" maxlength="50" />
+          </label>
+          <label class="st-field">
+            <span class="st-label">{{ t('insight.templateTags') }}</span>
+            <el-input v-model="saveTemplateForm.tags" :placeholder="t('insight.templateTagsPlaceholder')" maxlength="200" />
+          </label>
+        </div>
+        <template #footer>
+          <el-button @click="saveTemplateVisible = false">{{ t('common.cancel') }}</el-button>
+          <el-button type="primary" :loading="saveTemplateSaving" @click="confirmSaveTemplate">
+            {{ t('common.confirm') }}
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { ElMessage } from 'element-plus'
-import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold } from '@element-plus/icons-vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { ArrowUp, ArrowDown, ChatDotRound, DocumentCopy, Folder, Plus, Setting, More, Edit, Delete, View, Fold, RefreshLeft, RefreshRight, Loading } from '@element-plus/icons-vue'
 import RobotIcon from './components/RobotIcon.vue'
-import type { InsightDashboardSchema, InsightComponent, InsightComponentType, ChartType, InsightComponentData, DashboardPage } from '@/types'
+import type { InsightDashboardSchema, InsightComponent, InsightComponentType, InsightCombinationChild, InsightCombinationConfig, ChartType, InsightComponentData, DashboardPage, DatasetQueryConfig, InsightDashboardTemplateMeta, InsightDashboardSaveAsTemplateInput } from '@/types'
+import type { PanelFilterComponent } from './components/card-attribute/useCardAttributeBridge'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
+import { useUserStore } from '@/stores/useUserStore'
 import { usePermission } from '@/composables/usePermission'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import ComponentPalette from './components/ComponentPalette.vue'
 import DashboardCanvas from './components/DashboardCanvas.vue'
 import PropertyPanel from './components/PropertyPanel.vue'
+import CardAttributeSidebar from './components/card-attribute/CardAttributeSidebar.vue'
+import { useInsight } from './components/card-attribute/useInsight'
+import { toComponentData, restoreResultSetData } from './composables/useResultSetRestore'
+import { persistAppliedComponentResultSet, persistAppliedKpiProjection } from './composables/appliedKpiProjection'
+import { collectFilterComponents, findFilterBindingDependents, removeDanglingFilterBindings, removeFilterBindings } from '@/utils/dashboard-filter-deletion'
+import { mergeCombinationChildComponentUpdate } from './composables/combinationChildComponentUpdate'
+import DatasetDataDialog from './components/DatasetDataDialog.vue'
+import QueryConfigDialog from './components/card-attribute/QueryConfigDialog.vue'
+import { draftQueryConfigFromLegacyBindings } from '@/utils/component-dataset-pipeline'
 import AiChatPanel from './components/AiChatPanel.vue'
 import PanelFloatButton from './components/PanelFloatButton.vue'
+import { rowsToComponentData } from '@/utils/dataset-result'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { componentToCombinationChild, combinationChildToComponent, defaultCombinationChildLayout } from '@/utils/combination-tabs'
+import { addCombinationTab, duplicateCombinationTab, findCombinationChild, moveCombinationTab, removeCombinationTab } from '@/utils/combination-tabs'
+import { insightDashboardListLocation } from './insightDashboardNavigation'
+import { cloneCombinationChildForPaste, cloneInsightComponentForPaste } from '@/utils/insight-component-clipboard'
+import DashboardThemePanel from './components/DashboardThemePanel.vue'
+import { resolveDashboardTheme } from '@/utils/dashboard-theme'
+import { defaultComponentVisualStyle } from '@/utils/component-visual-style'
+import { createComponentPreviewRevisions } from '@/composables/component-preview-revisions'
+import { createDashboardEditHistory, resolveDashboardHistoryShortcut } from './composables/dashboard-edit-history'
+import { markDashboardPerformance } from '@/utils/dashboardPerformance'
 
 defineOptions({
   name: 'InsightDashboardEditorView',
@@ -276,18 +514,161 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
 const store = useInsightDashboardStore()
+const userStore = useUserStore()
 const { canModifyResource } = usePermission()
+// KPI 指标分组：画布「:」直入口打开字段样式弹窗（弹窗本体挂载在 CardAttributeSidebar 内）
+const { openMetricStyle, state: insightState } = useInsight()
+
+/** 全屏「查看数据」工作台：数据集不存在时（如刚被移除）不渲染 */
+const dataDialogDataset = computed(
+  () => insightState.datasets.find((item) => item.id === insightState.ui.dataDialog.datasetId) ?? null,
+)
+
+/* ---- 查询配置弹窗 ---- */
+const { saveQueryConfig, getLoadedDashboardSchema } = useInsight()
+const queryConfigDataset = computed(
+  () => insightState.datasets.find((item) => item.id === insightState.ui.queryConfigDialog.datasetId) ?? null,
+)
+const queryConfigComponentType = computed(() => {
+  const active = insightState.cards.find((card) => card.id === insightState.activeCardId)
+  return active?.type === 'kpi' ? 'kpi' : active?.type === 'table' ? 'table' : 'chart'
+})
+const filterOptions = computed(() =>
+  insightState.filterCatalog.map((filter) => ({
+    id: filter.id,
+    title: filter.title,
+    type: filter.type,
+    field: filter.field,
+    selectionMode: filter.selectionMode,
+  })),
+)
+/** 旧 scriptFilterBindings 的展示草稿：仅当该数据集尚无已保存查询配置时预填 */
+const queryConfigLegacyBindings = computed(() => {
+  const dataset = queryConfigDataset.value
+  if (!dataset || dataset.queryConfig) return []
+  const schema = getLoadedDashboardSchema()
+  const cardComp = insightState.backend.componentId
+    ? schema?.pages?.[0]?.components?.find((c) => c.id === insightState.backend.componentId)
+    : null
+  const pipeline = cardComp ? readComponentDatasetPipeline(cardComp) : null
+  const binding = (pipeline?.scriptFilterBindings ?? []).find((b) => !b.inputNames.length || b.inputNames.includes(dataset.alias))
+  if (!binding) return []
+  return draftQueryConfigFromLegacyBindings([binding]).parameterBindings
+})
+function onSaveQueryConfig(config: DatasetQueryConfig, fixedFilters: Array<{ field: string; op: string; value: string }>): void {
+  const error = saveQueryConfig(insightState.ui.queryConfigDialog.datasetId, config, fixedFilters)
+  if (error) {
+    ElMessage.warning(error)
+    return
+  }
+}
 
 const dashboard = computed(() => store.currentDashboard)
 const saving = ref(false)
+/** 详情/Schema 是否仍在加载：编辑器外壳先呈现，数据相关操作在就绪前禁用 */
+const schemaLoading = ref(true)
+/** 详情加载失败提示：保留外壳与返回入口，给出可理解的错误态 */
+const schemaError = ref('')
+const schemaSaveState = ref<'saved' | 'pending' | 'saving' | 'error'>('saved')
 const selectedComponentId = ref<string>('')
 const dashboardName = ref('')
 const dashboardDescription = ref('')
 const dashboardOwnerName = ref('')
 
+/** 示例数据提示是否已关闭（仅本次会话内生效，不写入后端） */
+const sampleHintDismissed = ref(false)
+
+/** 是否官方样例模板：只读，仅允许「基于此创建」 */
+const isOfficialTemplate = computed(() => dashboard.value?.visibility === 'official')
+
+/** 当前看板的模板元信息（缺失或非法 JSON 时返回空对象） */
+const templateMeta = computed<InsightDashboardTemplateMeta>(() => {
+  const raw = dashboard.value?.templateMeta
+  if (!raw) {
+    return {}
+  }
+  try {
+    return JSON.parse(raw) as InsightDashboardTemplateMeta
+  } catch {
+    return {}
+  }
+})
+
+/** 是否由模板派生的副本：本身不是模板，但带有来源标记 */
+const derivedFromTemplate = computed(() => {
+  const visibility = dashboard.value?.visibility
+  if (sampleHintDismissed.value || visibility === 'template' || visibility === 'official') {
+    return false
+  }
+  return Boolean(templateMeta.value.sourceTemplateId)
+})
+
+const derivedFromTemplateName = computed(
+  () => templateMeta.value.sourceTemplateName || t('insight.unknownTemplate'),
+)
+
+const schemaSaveStatusText = computed(() => ({
+  saved: '已保存',
+  pending: '等待保存…',
+  saving: '正在保存…',
+  error: '自动保存失败，请点击保存重试',
+})[schemaSaveState.value])
+
+let schemaAutoSaveTimer: ReturnType<typeof setTimeout> | null = null
+let schemaSaveQueue: Promise<void> = Promise.resolve()
+let schemaChangeVersion = 0
+
+/** 顺序写入仪表盘，避免自动保存与手动保存并发覆盖。 */
+function enqueueDashboardUpdate(data: Parameters<typeof store.updateDashboard>[1]): Promise<void> {
+  const dashboardId = dashboard.value?.id
+  if (!dashboardId) return Promise.resolve()
+  const pending = schemaSaveQueue.catch(() => undefined).then(() => store.updateDashboard(dashboardId, data))
+  schemaSaveQueue = pending
+  return pending
+}
+
+/** 属性面板确认的配置自动写入现有仪表盘 Schema；短暂防抖合并连续编辑。 */
+function scheduleSchemaAutoSave(): void {
+  if (!dashboard.value) return
+  schemaChangeVersion += 1
+  schemaSaveState.value = 'pending'
+  if (schemaAutoSaveTimer) clearTimeout(schemaAutoSaveTimer)
+  schemaAutoSaveTimer = setTimeout(() => {
+    schemaAutoSaveTimer = null
+    void persistSchemaChanges(schemaChangeVersion)
+  }, 600)
+}
+
+async function persistSchemaChanges(version: number): Promise<void> {
+  if (!dashboard.value) return
+  schemaSaveState.value = 'saving'
+  try {
+    await enqueueDashboardUpdate({ schemaJson: JSON.stringify(schema) })
+    if (version === schemaChangeVersion) schemaSaveState.value = 'saved'
+  } catch {
+    if (version === schemaChangeVersion) schemaSaveState.value = 'error'
+  }
+}
+
+type ComponentContextMenu = { componentId: string | null; containerId?: string; childId?: string; tabId?: string; x: number; y: number }
+const componentContextMenu = ref<ComponentContextMenu | null>(null)
+const clipboardComponent = ref<InsightComponent | null>(null)
+const clipboardChild = ref<InsightCombinationChild | null>(null)
+const componentContextMenuStyle = computed(() => {
+  if (!componentContextMenu.value) return undefined
+  return {
+    left: `${componentContextMenu.value.x}px`,
+    top: `${componentContextMenu.value.y}px`,
+  }
+})
+
 /** AI对话面板可见性 */
 const showAiChat = ref(false)
+const showThemePanel = ref(false)
+const themePanelRef = ref<InstanceType<typeof DashboardThemePanel> | null>(null)
 
 /** topbar 标题/描述点击编辑状态 */
 const editingName = ref(false)
@@ -297,6 +678,11 @@ const editingDesc = ref(false)
 function commitName(): void {
   editingName.value = false
   handleNameChange()
+}
+
+/** 通过键盘进入名称编辑；阻止 h2 的默认按键行为，避免输入框刚挂载就失焦。 */
+function startNameEditing(): void {
+  editingName.value = true
 }
 
 /** 完成描述编辑（失焦/回车） */
@@ -322,12 +708,143 @@ const sidebarCollapsed = ref(false)
 
 /** 本地 Schema 副本 */
 const schema = reactive<InsightDashboardSchema>({
-  version: '1.0',
+  version: '1.1',
   pages: [],
+  datasetInputs: [],
+  parameters: [],
+  executionPolicy: {},
+  scriptBindings: [],
+  scriptFilterBindings: [],
 })
+
+type DashboardEditorHistorySnapshot = {
+  schema: InsightDashboardSchema
+  dashboardName: string
+  dashboardDescription: string
+  dashboardOwnerName: string
+}
+
+const editHistory = createDashboardEditHistory<DashboardEditorHistorySnapshot>(80)
+const editHistoryRevision = ref(0)
+const canUndoEdit = computed(() => {
+  editHistoryRevision.value
+  return editHistory.canUndo
+})
+const canRedoEdit = computed(() => {
+  editHistoryRevision.value
+  return editHistory.canRedo
+})
+let editHistoryReady = false
+let editHistoryTimer: ReturnType<typeof setTimeout> | null = null
+
+function captureEditorState(): DashboardEditorHistorySnapshot {
+  return JSON.parse(JSON.stringify({
+    schema,
+    dashboardName: dashboardName.value,
+    dashboardDescription: dashboardDescription.value,
+    dashboardOwnerName: dashboardOwnerName.value,
+  })) as DashboardEditorHistorySnapshot
+}
+
+function serializeEditorState(): string {
+  return JSON.stringify({
+    schema,
+    dashboardName: dashboardName.value,
+    dashboardDescription: dashboardDescription.value,
+    dashboardOwnerName: dashboardOwnerName.value,
+  })
+}
+
+function commitEditorHistory(): void {
+  if (!editHistoryReady) return
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  if (editHistory.push(captureEditorState())) editHistoryRevision.value += 1
+}
+
+function resetEditorHistory(): void {
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  editHistory.reset(captureEditorState())
+  editHistoryReady = true
+  editHistoryRevision.value += 1
+}
+
+function applyEditorHistoryState(snapshot: DashboardEditorHistorySnapshot): void {
+  const nextSchema = snapshot.schema as unknown as Record<string, unknown>
+  const currentSchema = schema as unknown as Record<string, unknown>
+  Object.keys(currentSchema).forEach((key) => {
+    if (!(key in nextSchema)) delete currentSchema[key]
+  })
+  Object.assign(schema, snapshot.schema)
+  dashboardName.value = snapshot.dashboardName
+  dashboardDescription.value = snapshot.dashboardDescription
+  dashboardOwnerName.value = snapshot.dashboardOwnerName
+  if (!schema.pages.some((page) => page.id === activePageId.value)) {
+    activePageId.value = schema.pages[0]?.id ?? ''
+  }
+  if (!currentPageComponents.value.some((component) => component.id === selectedComponentId.value)) {
+    selectedComponentId.value = ''
+  }
+  selectedChildInfo.value = null
+  editHistoryRevision.value += 1
+  scheduleSchemaAutoSave()
+  void enqueueDashboardUpdate({
+    name: dashboardName.value,
+    description: dashboardDescription.value,
+    ownerName: dashboardOwnerName.value,
+  }).catch(() => undefined)
+}
+
+function undoEdit(): void {
+  commitEditorHistory()
+  const snapshot = editHistory.undo()
+  if (snapshot) applyEditorHistoryState(snapshot)
+  editHistoryRevision.value += 1
+}
+
+function redoEdit(): void {
+  commitEditorHistory()
+  const snapshot = editHistory.redo()
+  if (snapshot) applyEditorHistoryState(snapshot)
+  editHistoryRevision.value += 1
+}
+
+watch(serializeEditorState, () => {
+  if (!editHistoryReady) return
+  if (editHistoryTimer) clearTimeout(editHistoryTimer)
+  editHistoryTimer = setTimeout(commitEditorHistory, 350)
+}, { flush: 'post' })
+
+const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
+
+function updateThemeDraft(value: InsightDashboardSchema['theme']): void {
+  schema.theme = value
+}
+
+async function confirmThemeSwitch(presetId: string): Promise<void> {
+  try {
+    await ElMessageBox.confirm('切换预设会清除当前主题级颜色、圆角和阴影覆盖，但不会影响指标级视觉例外和数据配置。是否继续？', '切换主题预设', { type: 'warning', confirmButtonText: '继续', cancelButtonText: '取消' })
+    themePanelRef.value?.applyPreset(presetId)
+  } catch {
+    // 用户取消时保留当前草稿
+  }
+}
+
+/** 脚本结果的临时绑定目标；用户确认应用结果后写入 scriptBindings。 */
+const scriptTargetComponentId = ref('')
 
 /** 组件渲染数据映射（编辑模式自动预览） */
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
+
+/** 用户最近一次在查看数据弹窗显式应用「组件渲染」的时间；结果集通道在该窗口内不得覆盖。 */
+const manualRenderAt = new Map<string, number>()
+/** 手动渲染的保护窗口：飞行中的面板结果集回包晚于此到达时应丢弃，避免覆盖用户显式应用的数据。 */
+const MANUAL_RENDER_GUARD_MS = 3000
 
 /** 当前激活的页面 ID */
 const activePageId = ref<string>('')
@@ -338,6 +855,8 @@ const editingPageName = ref<string>('')
 
 /** 预览防抖定时器 */
 let previewTimer: ReturnType<typeof setTimeout> | null = null
+/** 阻止过期的自动预览响应覆盖用户刚手动应用到画布的数据。 */
+const componentPreviewRevisions = createComponentPreviewRevisions()
 
 /** 树形节点类型（DashboardPage + children） */
 interface PageTreeNode extends DashboardPage {
@@ -383,6 +902,7 @@ const pageTreeRef = ref<any>(null)
 
 /** activePageId 变化时同步 el-tree 高亮 */
 watch(activePageId, (newId) => {
+  selectedChildInfo.value = null
   nextTick(() => {
     pageTreeRef.value?.setCurrentKey(newId)
   })
@@ -402,8 +922,128 @@ const selectedComponent = computed<InsightComponent | null>(() => {
   return currentPageComponents.value.find((c) => c.id === selectedComponentId.value) ?? null
 })
 
+// ── 组合卡片子组件选中 → 属性面板联动 ──────────────────
+/** 选中子组件信息（画布内点选子卡片时设置） */
+const selectedChildInfo = ref<{ containerId: string; childId: string } | null>(null)
+
+/** 在容器（children 或页签 children）中查找子组件 */
+type CombinationContainer = {
+  id: string
+  type: InsightComponentType
+  children?: InsightCombinationChild[]
+  containerConfig?: InsightComponent['containerConfig']
+}
+
+function findCombinationContainer(containerId: string): CombinationContainer | null {
+  const walk = (items: CombinationContainer[]): CombinationContainer | null => {
+    for (const item of items) {
+      if (item.id === containerId) return item
+      const nested = walk([
+        ...(item.children ?? []).filter((child) => child.type === 'combination'),
+        ...((item.containerConfig?.tabs ?? []).flatMap((tab) => tab.children).filter((child) => child.type === 'combination')),
+      ])
+      if (nested) return nested
+    }
+    return null
+  }
+  return walk(currentPageComponents.value.filter((component) => component.type === 'combination'))
+}
+
+/** 选中子组件的合成组件（供属性面板编辑；position 仅占位，不参与写回） */
+const selectedChildComponent = computed<InsightComponent | null>(() => {
+  const info = selectedChildInfo.value
+  if (!info) return null
+  const container = findCombinationContainer(info.containerId)
+  const child = container ? findCombinationChild(container, info.childId) : null
+  if (!child) return null
+  return { ...child, position: { x: 0, y: 0, w: 6, h: 4 } }
+})
+
+/** 属性面板中的「页签」操作应作用于当前选中的组合卡片，而不是它的父容器。 */
+function selectedCombinationContainer(): InsightComponent | null {
+  const info = selectedChildInfo.value
+  if (info) {
+    const parent = findCombinationContainer(info.containerId)
+    const child = parent ? findCombinationChild(parent, info.childId) : null
+    if (child?.type === 'combination') return child as InsightComponent
+    return parent as InsightComponent | null
+  }
+  return selectedComponent.value?.type === 'combination' ? selectedComponent.value : null
+}
+
+/** 属性面板当前编辑对象：优先画布选中的子组件，其次顶层组件 */
+const panelComponent = computed<InsightComponent | null>(() => selectedChildComponent.value ?? selectedComponent.value)
+
+/**
+ * 递归收集页面内所有筛选类组件，供历史数据管道绑定按名称回查真实组件 ID。
+ *
+ * 覆盖三类此前收集不到的筛选器（2026-09-18 修）：
+ *  1. **组合卡片容器内**的子筛选器 —— 旧实现只看 `currentPageComponents`（顶层），
+ *     容器内的 `children` 与 `containerConfig.tabs[].children` 完全扫不到；
+ *  2. **各页签内**的子筛选器（同一容器不同页签下的筛选器都要能绑定）；
+ *  3. **时间筛选器**（`type === 'timeFilter'`）—— 旧实现只认 `'filter'`，
+ *     导致「所有时间筛选器都选不到」。
+ */
+function collectPanelFilters(list: InsightComponent[]): PanelFilterComponent[] {
+  const out: PanelFilterComponent[] = []
+  const seen = new Set<string>()
+  // 筛选类组件形态：保留完整 config，供属性面板查看数据时复用默认值与选项来源。
+  type FilterLike = { id: unknown; type: InsightComponentType; title?: string; config?: Record<string, unknown> }
+  const push = (item: FilterLike) => {
+    if (!item.id || seen.has(String(item.id))) return
+    const selectionMode = item.type === 'filter'
+      ? ((item.config?.selectionMode as 'single' | 'multiple' | undefined) ?? 'single')
+      : undefined
+    seen.add(String(item.id))
+    out.push({
+      id: String(item.id),
+      type: item.type,
+      title: item.title || String(item.id),
+      field: typeof item.config?.field === 'string' ? item.config.field : undefined,
+      selectionMode,
+      defaultTimeGranularity: item.type === 'timeFilter'
+        ? (item.config?.defaultTimeGranularity as import('@/types').TimeGranularity | undefined)
+        : undefined,
+      config: item.config,
+    })
+  }
+  const isFilterLike = (type: unknown) => type === 'filter' || type === 'timeFilter'
+  const walkChildren = (children?: FilterLike[]) => {
+    ;(children ?? []).forEach((child) => {
+      if (isFilterLike(child.type)) push(child)
+    })
+  }
+  list.forEach((c) => {
+    if (isFilterLike(c.type)) push(c)
+    // 组合卡片容器：默认 Tab 的子卡片 + 每个页签各自的子卡片
+    walkChildren(c.children as FilterLike[] | undefined)
+    c.containerConfig?.tabs?.forEach((tab) => walkChildren((tab as { children?: FilterLike[] }).children))
+  })
+  return out
+}
+
+/** 当前页面内的筛选类组件（filter / timeFilter，含组合卡片容器与页签内的子筛选器） */
+const filterComponents = computed<PanelFilterComponent[]>(() =>
+  collectPanelFilters(currentPageComponents.value),
+)
+
 onMounted(async () => {
+  markDashboardPerformance('insight-editor-interactive')
+  document.addEventListener('keydown', handleEditorClipboardKeydown)
   await loadDashboard(props.dashboardId)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('keydown', handleEditorClipboardKeydown)
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  if (schemaAutoSaveTimer) {
+    clearTimeout(schemaAutoSaveTimer)
+    schemaAutoSaveTimer = null
+    void persistSchemaChanges(schemaChangeVersion)
+  }
 })
 
 /** 监听 dashboardId 变化时重新加载 */
@@ -421,29 +1061,220 @@ function generateId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
 }
 
+function closeComponentContextMenu(): void {
+  componentContextMenu.value = null
+}
+
+function handleComponentContextMenu(payload: ComponentContextMenu): void {
+  if (payload.containerId && payload.childId) {
+    selectedComponentId.value = payload.containerId
+    selectedChildInfo.value = { containerId: payload.containerId, childId: payload.childId }
+  } else if (payload.componentId) {
+    handleSelectComponent(payload.componentId)
+  }
+  componentContextMenu.value = payload
+}
+
+function handleCopyComponent(id: string): void {
+  const source = currentPageComponents.value.find((component) => component.id === id)
+  if (!source) return
+  clipboardComponent.value = JSON.parse(JSON.stringify(source)) as InsightComponent
+  clipboardChild.value = null
+  selectedComponentId.value = id
+  selectedChildInfo.value = null
+  closeComponentContextMenu()
+  ElMessage.success('组件已复制')
+}
+
+function getActiveCombinationChildren(container: CombinationContainer): InsightCombinationChild[] {
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (activeTab) return activeTab.children
+  container.children ??= []
+  return container.children
+}
+
+function handleCopyChild(payload: { containerId: string; childId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (!child) return
+  clipboardChild.value = JSON.parse(JSON.stringify(child)) as InsightCombinationChild
+  clipboardComponent.value = null
+  selectedComponentId.value = payload.containerId
+  selectedChildInfo.value = { containerId: payload.containerId, childId: payload.childId }
+  closeComponentContextMenu()
+  ElMessage.success('子组件已复制')
+}
+
+function handlePasteChild(payload: { containerId: string; childId: string | null }): void {
+  const container = findCombinationContainer(payload.containerId)
+  const source = clipboardChild.value
+  if (!container || !source) return
+  const children = getActiveCombinationChildren(container)
+  const pasted = cloneCombinationChildForPaste(source, generateId)
+  const overlaps = (left: number, top: number): boolean => children.some((child) => (
+    left < child.layout.x + child.layout.col * 80
+      && left + pasted.layout.col * 80 > child.layout.x
+      && top < child.layout.y + (child.layout.h ?? 180)
+      && top + (pasted.layout.h ?? 180) > child.layout.y
+  ))
+  let x = pasted.layout.x
+  let y = pasted.layout.y
+  while (overlaps(x, y)) {
+    x += 12
+    if (x + pasted.layout.col * 80 > 960) {
+      x = 0
+      y += 12
+    }
+  }
+  pasted.layout = { ...pasted.layout, x, y }
+  children.push(pasted)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: pasted.id }
+  closeComponentContextMenu()
+  ElMessage.success('子组件已粘贴')
+}
+
+function handlePasteComponent(): void {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  const source = clipboardComponent.value
+  if (!page || !source) return
+
+  const pasted = cloneInsightComponentForPaste(source, generateId)
+  let x = pasted.position.x
+  let y = pasted.position.y
+  const overlaps = (left: number, top: number): boolean => page.components.some((component) => (
+    left < component.position.x + component.position.w
+      && left + pasted.position.w > component.position.x
+      && top < component.position.y + component.position.h
+      && top + pasted.position.h > component.position.y
+  ))
+  while (overlaps(x, y)) {
+    x += 1
+    if (x + pasted.position.w > 24) {
+      x = 0
+      y += 1
+    }
+  }
+  pasted.position = { ...pasted.position, x, y }
+  page.components.push(pasted)
+  selectedComponentId.value = pasted.id
+  selectedChildInfo.value = null
+  scriptTargetComponentId.value ||= pasted.id
+  closeComponentContextMenu()
+  ElMessage.success('组件已粘贴')
+}
+
+function copyFromContextMenu(): void {
+  const childTarget = componentContextMenu.value
+  if (childTarget?.containerId && childTarget.childId) {
+    handleCopyChild({ containerId: childTarget.containerId, childId: childTarget.childId })
+    return
+  }
+  const id = componentContextMenu.value?.componentId
+  if (id) handleCopyComponent(id)
+}
+
+function pasteFromContextMenu(): void {
+  const childTarget = componentContextMenu.value
+  if (childTarget?.containerId && childTarget.childId) {
+    handlePasteChild({ containerId: childTarget.containerId, childId: childTarget.childId })
+    return
+  }
+  handlePasteComponent()
+}
+
+/** 页签右键菜单动作 */
+function contextMenuTabContainer(): { container: InsightComponent; tabId: string; tabIndex: number } | null {
+  const ctx = componentContextMenu.value
+  if (!ctx?.containerId || !ctx.tabId) return null
+  const container = findCombinationContainer(ctx.containerId)
+  if (container?.type !== 'combination') return null
+  const tabIndex = (container as InsightComponent).containerConfig?.tabs.findIndex((x) => x.id === ctx.tabId) ?? -1
+  if (tabIndex < 0) return null
+  return { container: container as InsightComponent, tabId: ctx.tabId, tabIndex }
+}
+
+function canMoveContextMenuTab(direction: -1 | 1): boolean {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return false
+  const total = ctx.container.containerConfig?.tabs.length ?? 0
+  return ctx.tabIndex + direction >= 0 && ctx.tabIndex + direction < total
+}
+
+function moveTabFromContextMenu(direction: -1 | 1): void {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return
+  handleCombinationMoveTab({ containerId: ctx.container.id, tabId: ctx.tabId, toIndex: ctx.tabIndex + direction })
+  closeComponentContextMenu()
+}
+
+function duplicateTabFromContextMenu(): void {
+  const ctx = contextMenuTabContainer()
+  if (!ctx) return
+  handleCombinationCopyTab({ containerId: ctx.container.id, tabId: ctx.tabId })
+}
+
+function handleEditorClipboardKeydown(event: KeyboardEvent): void {
+  const target = event.target instanceof HTMLElement ? event.target : null
+  const editingText = Boolean(target?.isContentEditable || target?.closest(
+    'input, textarea, select, [contenteditable="true"], [role="textbox"], .monaco-editor, .CodeMirror, .cm-editor',
+  ))
+  const protectedFocusContext = editingText || Boolean(target?.closest('.el-overlay, .el-dialog, .el-drawer'))
+  const historyAction = resolveDashboardHistoryShortcut(event, protectedFocusContext)
+  if (historyAction) {
+    event.preventDefault()
+    if (historyAction === 'undo') undoEdit()
+    else redoEdit()
+    return
+  }
+
+  if (!event.ctrlKey && !event.metaKey) return
+  if (event.altKey || event.key.toLowerCase() !== 'v') return
+  if (target?.matches('input, textarea, select, [contenteditable="true"]')) return
+  if (selectedChildInfo.value && clipboardChild.value) {
+    event.preventDefault()
+    handlePasteChild({ containerId: selectedChildInfo.value.containerId, childId: selectedChildInfo.value.childId })
+    return
+  }
+  if (!clipboardComponent.value) return
+  event.preventDefault()
+  handlePasteComponent()
+}
+
 /** 迁移旧 Schema（单 components 数组 → pages[0]） */
 function migrateSchema(parsed: any): InsightDashboardSchema {
-  // 新格式：已有 pages 数组
-  if (parsed.pages && Array.isArray(parsed.pages)) {
-    return parsed as InsightDashboardSchema
-  }
-  // 旧格式：components + perspectives，迁移为单页面
-  const oldComponents = parsed.components ?? []
-  return {
-    version: parsed.version ?? '1.0',
-    pages: [{
-      id: generateId('page'),
-      name: t('insight.firstPageName'),
-      components: oldComponents,
-    }],
-  }
+  return migrateInsightDashboardSchema(parsed, t('insight.firstPageName'))
 }
 
 /** 加载仪表盘数据 */
 async function loadDashboard(id: string): Promise<void> {
-  await store.selectDashboard(id)
+  editHistoryReady = false
+  schemaLoading.value = true
+  schemaError.value = ''
+  if (editHistoryTimer) {
+    clearTimeout(editHistoryTimer)
+    editHistoryTimer = null
+  }
+  // App.vue 会异步恢复 /auth/me；编辑器不能在 userId 尚未恢复时先做归属校验，
+  // 否则真实刷新或 E2E 直达编辑器会把创建者误判成无权限并留下空画布。
+  if (userStore.token && userStore.userId == null) {
+    await userStore.fetchCurrentUser()
+  }
+  if (!userStore.token) {
+    schemaLoading.value = false
+    return
+  }
+  markDashboardPerformance('insight-editor-request-start')
+  try {
+    await store.selectDashboard(id)
+  } catch {
+    schemaLoading.value = false
+    schemaError.value = t('insight.loadFailed')
+    return
+  }
   // 归属守卫：非创建者且非工作区管理员不可进入编辑（防止 localStorage 残留的编辑模式）
   if (dashboard.value && !canModifyResource(dashboard.value.ownerId)) {
+    schemaLoading.value = false
     ElMessage.warning(t('insight.noEditPerm'))
     emit('back')
     return
@@ -455,8 +1286,21 @@ async function loadDashboard(id: string): Promise<void> {
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson)
       const migrated = migrateSchema(parsed)
-      schema.version = migrated.version
+      schema.version = migrated.version || '1.1'
       schema.pages = migrated.pages
+      schema.datasetInputs = migrated.datasetInputs ?? []
+      schema.script = migrated.script
+      schema.parameters = migrated.parameters ?? []
+      schema.scriptFilterBindings = migrated.scriptFilterBindings ?? []
+      schema.executionPolicy = migrated.executionPolicy ?? {}
+      schema.scriptBindings = migrated.scriptBindings ?? []
+      schema.theme = migrated.theme
+      scriptTargetComponentId.value = schema.scriptBindings[0]?.componentId ?? ''
+      const repairedFilterIds = removeDanglingFilterBindings(schema)
+      if (repairedFilterIds.length) {
+        console.info('[InsightDashboard] Removed stale filter bindings:', repairedFilterIds)
+        scheduleSchemaAutoSave()
+      }
     } catch {
       // Schema 解析失败时使用空 Schema（含一个默认页面）
       schema.pages = [{
@@ -464,11 +1308,25 @@ async function loadDashboard(id: string): Promise<void> {
         name: t('insight.firstPageName'),
         components: [],
       }]
+      schema.version = '1.1'
+      schema.datasetInputs = []
+      schema.script = undefined
+      schema.parameters = []
+      schema.scriptFilterBindings = []
+      schema.executionPolicy = {}
+      schema.scriptBindings = []
+      schema.theme = undefined
+      scriptTargetComponentId.value = ''
     }
     // 默认选中第一个页面
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
+    markDashboardPerformance('insight-editor-schema-ready')
+    schemaLoading.value = false
+    resetEditorHistory()
+    // 结果集持久化（决策 B）：按各组件已保存的结果集恢复画布数据，不阻塞编辑器打开
+    void restorePipelineResults()
   }
 }
 
@@ -486,40 +1344,84 @@ function getDefaultTitle(type: InsightComponentType, chartType?: ChartType): str
     filter: t('insight.component.filter'),
     timeFilter: t('insight.component.timeFilter'),
     aiAnalysis: t('insight.component.aiAnalysis'),
+    combination: t('insight.component.combination'),
   }
   const key = type === 'chart' && chartType ? `chart-${chartType}` : type
   return titleMap[key] ?? type
 }
 
-/** 添加新组件到当前页面 */
-function handleAddComponent(payload: { type: InsightComponentType; chartType?: ChartType }): void {
-  const page = schema.pages.find((p) => p.id === activePageId.value)
-  if (!page) {
-    return
-  }
-  const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
+type NewComponentPayload = { type: InsightComponentType; chartType?: ChartType }
+
+/** 构造画布组件配置，供顶层添加和组合卡片内添加共用。 */
+function createNewComponent(payload: NewComponentPayload, position: InsightComponent['position']): InsightComponent {
+  const { type } = payload
   const newComponent: InsightComponent = {
     id: generateId('comp'),
-    type: payload.type,
-    title: getDefaultTitle(payload.type, payload.chartType),
-    position: { x: 0, y: maxY, w: 6, h: 4 },
+    type,
+    title: getDefaultTitle(type, payload.chartType),
+    position,
     chartType: payload.chartType,
-    dataSource: payload.type !== 'filter' && payload.type !== 'timeFilter' && payload.type !== 'aiAnalysis' ? {
+    titleBarStyle: 'standard',
+    visualStyle: defaultComponentVisualStyle(type),
+    dataSource: type !== 'filter' && type !== 'timeFilter' && type !== 'aiAnalysis' && type !== 'combination' ? {
       datasourceId: '',
       metrics: [],
       dimensions: [],
       filters: [],
       limit: 100,
     } : undefined,
-    config: payload.type === 'timeFilter' ? {
+    config: type === 'timeFilter' ? {
       field: 'metric_time',
       availablePresets: ['today', '7d', '30d', '90d', 'custom'],
-    } : payload.type === 'aiAnalysis' ? {
+    } : type === 'aiAnalysis' ? {
       autoGenerate: false,
     } : undefined,
+    // 组合卡片：默认空子卡片 + 容器配置
+    children: type === 'combination' ? [] : undefined,
+    containerConfig: type === 'combination' ? {
+      layoutMode: 'free',
+      tabs: [],
+      activeTab: undefined,
+    } : undefined,
   }
+  return newComponent
+}
+
+/** 添加新组件到当前页面（拖入时携带鼠标落点的栅格坐标，点选物料面板时落到画布底部） */
+function handleAddComponent(payload: NewComponentPayload & { position?: { x: number; y: number } }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
+  const maxY = page.components.reduce((max, c) => Math.max(max, c.position.y + c.position.h), 0)
+  const w = 6
+  const h = 4
+  // 拖入落点优先：新组件放在鼠标松开的位置（列钳制到画布内），与物料面板点选的「追加到底部」区分
+  const x = payload.position ? Math.max(0, Math.min(payload.position.x, 24 - w)) : 0
+  const y = payload.position ? Math.max(0, payload.position.y) : maxY
+  const newComponent = createNewComponent(payload, { x, y, w, h })
   page.components.push(newComponent)
   selectedComponentId.value = newComponent.id
+  selectedChildInfo.value = null
+  // 新增组件后立即作为脚本结果的默认目标，避免用户还要再次点击画布组件。
+  if (!scriptTargetComponentId.value) {
+    scriptTargetComponentId.value = newComponent.id
+  }
+}
+
+/** 将物料面板新组件直接创建为组合卡片当前页签的子组件。 */
+function handleAddComponentInto(payload: NewComponentPayload & { containerId: string; x: number; y: number }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (!container || container.type !== 'combination') return
+  const component = createNewComponent(payload, { x: 0, y: 0, w: 6, h: 4 })
+  const child = componentToCombinationChild(
+    component,
+    defaultCombinationChildLayout(payload.type, payload.x, payload.y),
+  )
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (container.containerConfig?.tabs.length && activeTab) activeTab.children.push(child)
+  else (container.children ??= []).push(child)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: child.id }
+  if (!scriptTargetComponentId.value) scriptTargetComponentId.value = child.id
 }
 
 /** 更新布局（拖动/缩放后） */
@@ -536,28 +1438,390 @@ function handleUpdateLayout(layout: Array<{ id: string; x: number; y: number; w:
   })
 }
 
-/** 选中组件 */
-function handleSelectComponent(id: string): void {
-  selectedComponentId.value = id
+/** 画布内直接编辑顶层组件标题。 */
+function handleCanvasComponentRename(payload: { componentId: string; title: string }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  const component = page?.components.find((item) => item.id === payload.componentId)
+  if (!component) return
+  const title = payload.title.trim()
+  if (!title) return
+  component.title = title
 }
 
-/** 删除组件 */
-function handleDeleteComponent(id: string): void {
-  const page = schema.pages.find((p) => p.id === activePageId.value)
-  if (!page) {
+function handleCanvasTitleIconStyleUpdate(payload: { componentId: string; titleIconStyle: InsightComponent['titleIconStyle'] }): void {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  const component = page?.components.find((item) => item.id === payload.componentId)
+  if (component) component.titleIconStyle = payload.titleIconStyle
+}
+
+function handleCanvasChildTitleIconStyleUpdate(payload: {
+  containerId: string
+  childId: string
+  titleIconStyle: InsightComponent['titleIconStyle']
+}): void {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (child) child.titleIconStyle = payload.titleIconStyle
+}
+
+function handleCanvasTabTitleIconStyleUpdate(payload: {
+  componentId: string
+  tabId: string
+  tabKind: 'component' | 'combination'
+  titleIconStyle: InsightComponent['titleIconStyle']
+}): void {
+  const topComponent = currentPageComponents.value.find((component) => component.id === payload.componentId)
+  const owner = topComponent ?? currentPageComponents.value
+    .filter((component) => component.type === 'combination')
+    .map((container) => findCombinationChild(container, payload.componentId))
+    .find((child): child is InsightCombinationChild => child !== null)
+  if (!owner) return
+  const tabs = payload.tabKind === 'component'
+    ? owner.tabs
+    : owner.containerConfig?.tabs
+  const tab = tabs?.find((item) => item.id === payload.tabId)
+  if (tab) tab.titleIconStyle = payload.titleIconStyle
+}
+
+function mergeComponentTabIconStyles(
+  existing: InsightComponent['tabs'],
+  updated: InsightComponent['tabs'],
+): InsightComponent['tabs'] {
+  if (!updated) return undefined
+  return updated.map((tab) => {
+    const currentStyle = existing?.find((item) => item.id === tab.id)?.titleIconStyle
+    return tab.titleIconStyle || !currentStyle
+      ? tab
+      : { ...tab, titleIconStyle: currentStyle }
+  })
+}
+
+/** 选中组件（顶层） */
+function handleSelectComponent(id: string): void {
+  selectedComponentId.value = id
+  selectedChildInfo.value = null
+  if (!scriptTargetComponentId.value) {
+    scriptTargetComponentId.value = id
+  }
+}
+
+/** 画布 KPI 指标「:」直入口：先选中该组件（触发属性面板 hydrate），再打开字段样式弹窗 */
+function handleOpenMetricStyle(payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void {
+  if (payload.containerId && payload.childId) {
+    handleSelectChild({ containerId: payload.containerId, childId: payload.childId })
+    const { containerId, childId } = payload
+    nextTick(() => {
+      if (selectedChildInfo.value?.containerId === containerId && selectedChildInfo.value.childId === childId) {
+        openMetricStyle(payload.fieldKey, payload.field)
+      }
+    })
     return
   }
+  if (!payload.componentId) return
+  handleSelectComponent(payload.componentId)
+  const targetId = payload.componentId
+  nextTick(() => {
+    if (selectedComponentId.value === targetId) {
+      openMetricStyle(payload.fieldKey, payload.field)
+    }
+  })
+}
+
+/** KPI 渲染时可能使用结果字段投影副本；指标布局必须写回仪表盘原始组件配置。 */
+function handleMetricLayoutChange(payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void {
+  const findOwner = (items: Array<InsightComponent | InsightCombinationChild>): InsightComponent | InsightCombinationChild | undefined => {
+    for (const item of items) {
+      if (item.id === payload.componentId) return item
+      if (item.type !== 'combination') continue
+      const descendants = [
+        ...(item.children ?? []),
+        ...((item.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+      ]
+      const nested = findOwner(descendants)
+      if (nested) return nested
+    }
+    return undefined
+  }
+  const owner = findOwner(currentPageComponents.value)
+  const metric = owner?.kpiMetrics?.find((item) => item.fieldKey === payload.fieldKey)
+  if (!metric) return
+  Object.assign(metric, { x: payload.x, y: payload.y, w: payload.w, h: payload.h })
+}
+
+/** 画布内组合卡片子组件选中/取消（childId=null 表示回到容器） */
+function handleSelectChild(payload: { containerId: string; childId: string | null }): void {
+  selectedChildInfo.value = payload.childId
+    ? { containerId: payload.containerId, childId: payload.childId }
+    : null
+}
+
+// ── 组合卡片页签增删（画布与属性面板两个入口统一走这里，操作 schema）──
+/** 新增页签：首次添加时把容器内已有子卡片平移进第一个页签，避免已配置的组件丢失 */
+function addTabToContainer(container: InsightComponent): void {
+  const res = addCombinationTab(container)
+  if (!res.tab) return
+  if (res.migratedFromContainer) {
+    ElMessage.success(t('insight.combination.tabMigratedHint', { count: res.migratedCount, name: res.tab.title }))
+  }
+}
+
+/**
+ * 删除页签：
+ * - 页签内有组件且不是最后一个页签 → 二次确认（组件会随页签一并删除）；
+ * - 删除最后一个页签 → 页签内组件平移回容器（回到无页签态），不丢配置。
+ */
+async function removeTabFromContainer(container: InsightComponent, tabId: string): Promise<void> {
+  const cfg = container.containerConfig
+  if (!cfg) return
+  const tab = cfg.tabs.find((x) => x.id === tabId)
+  if (!tab) return
+  const isLastTab = cfg.tabs.length === 1
+  const deletedFilters = !isLastTab ? collectFilterComponents(tab.children) : []
+  const bindingImpact = filterDeletionImpactText(deletedFilters)
+  if (!isLastTab && tab.children.length > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `${t('insight.combination.deleteTabConfirm', { name: tab.title, count: tab.children.length })}${bindingImpact ? `\n\n${bindingImpact}` : ''}`,
+        '',
+        {
+          confirmButtonText: t('common.confirm'),
+          cancelButtonText: t('common.cancel'),
+          type: 'warning',
+        },
+      )
+    } catch {
+      return // 用户取消
+    }
+  }
+  deletedFilters.forEach((filter) => removeFilterBindings(schema, filter.id))
+  const res = removeCombinationTab(container, tabId)
+  if (!res.removed) return
+  // 选中的子卡片若随页签一起没了，清掉面板选中态
+  if (selectedChildInfo.value?.containerId === container.id) {
+    if (!findCombinationChild(container, selectedChildInfo.value.childId)) {
+      selectedChildInfo.value = null
+    }
+  }
+  if (res.migrated && res.migratedCount > 0) {
+    ElMessage.success(t('insight.combination.tabChildrenBackHint', { count: res.migratedCount }))
+  }
+}
+
+/** 画布内页签栏「+」 */
+function handleCombinationAddTab(payload: { containerId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') addTabToContainer(container as InsightComponent)
+}
+
+/** 画布内页签栏「✕」 */
+function handleCombinationRemoveTab(payload: { containerId: string; tabId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') void removeTabFromContainer(container as InsightComponent, payload.tabId)
+}
+
+/** 页签拖拽排序 / 右键左右移动：统一走 moveCombinationTab（钳制 + 激活态保持） */
+function handleCombinationMoveTab(payload: { containerId: string; tabId: string; toIndex: number }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type === 'combination') moveCombinationTab(container as InsightComponent, payload.tabId, payload.toIndex)
+}
+
+/** 复制页签：内容深拷贝 + 全量重生成 ID，插入源页签之后并激活 */
+function handleCombinationCopyTab(payload: { containerId: string; tabId: string }): void {
+  const container = findCombinationContainer(payload.containerId)
+  if (container?.type !== 'combination') return
+  const res = duplicateCombinationTab(container as InsightComponent, payload.tabId, generateId)
+  if (!res.created) return
+  closeComponentContextMenu()
+  ElMessage.success(t('insight.combination.tabDuplicated', { name: res.created.title, count: res.created.children.length }))
+}
+
+/** 页签右键：选中该组合卡片并记录 tabId 上下文，弹出统一右键菜单 */
+function handleCombinationTabContextMenu(payload: { containerId: string; tabId: string; x: number; y: number }): void {
+  selectedComponentId.value = payload.containerId
+  selectedChildInfo.value = null
+  componentContextMenu.value = { componentId: payload.containerId, containerId: payload.containerId, tabId: payload.tabId, x: payload.x, y: payload.y }
+}
+
+/** 将画布已有的顶层组件拖入组合卡片当前页签，并从顶层栅格中移除。 */
+function handleMoveComponentInto(payload: { containerId: string; componentId: string; x: number; y: number }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  const container = page?.components.find((c) => c.id === payload.containerId)
+  if (!page || !container || container.type !== 'combination' || container.id === payload.componentId) return
+
+  const sourceIndex = page.components.findIndex((c) => c.id === payload.componentId)
+  if (sourceIndex < 0) return
+  const source = page.components[sourceIndex]
+  const layoutBase = defaultCombinationChildLayout(source.type, payload.x, payload.y)
+  const child = componentToCombinationChild(source, layoutBase)
+  const activeTab = container.containerConfig?.tabs.find((tab) => tab.id === container.containerConfig?.activeTab)
+  if (container.containerConfig?.tabs.length && activeTab) {
+    activeTab.children.push(child)
+  } else {
+    ;(container.children ??= []).push(child)
+  }
+  page.components.splice(sourceIndex, 1)
+  selectedComponentId.value = container.id
+  selectedChildInfo.value = { containerId: container.id, childId: child.id }
+}
+
+/** 从组合容器（children 或页签 children，含嵌套组合）中移除并返回子卡片 */
+function removeChildFromCombination(container: CombinationContainer, childId: string): InsightCombinationChild | null {
+  const cfg = container.containerConfig
+  if (cfg?.tabs.length) {
+    for (const tab of cfg.tabs) {
+      const idx = tab.children.findIndex((c) => c.id === childId)
+      if (idx >= 0) return tab.children.splice(idx, 1)[0] ?? null
+    }
+  }
+  if (container.children) {
+    const idx = container.children.findIndex((c) => c.id === childId)
+    if (idx >= 0) return container.children.splice(idx, 1)[0] ?? null
+  }
+  const nestedContainers = [
+    ...(container.children ?? []).filter((child) => child.type === 'combination'),
+    ...(cfg?.tabs ?? []).flatMap((tab) => tab.children).filter((child) => child.type === 'combination'),
+  ]
+  for (const nested of nestedContainers) {
+    const removed = removeChildFromCombination(nested, childId)
+    if (removed) return removed
+  }
+  return null
+}
+
+/** 子卡片拖出组合卡片：从容器/页签移除，转回顶层组件并落到画布栅格位置 */
+function handleMoveChildOut(payload: { containerId: string; childId: string; position: { x: number; y: number } }): void {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
+  const container = findCombinationContainer(payload.containerId)
+  if (!container || container.type !== 'combination' || container.id === payload.childId) return
+  const child = removeChildFromCombination(container, payload.childId)
+  if (!child) return
+  const component = combinationChildToComponent(child, payload.position)
+  page.components.push(component)
+  selectedComponentId.value = component.id
+  selectedChildInfo.value = null
+}
+
+/** 属性面板「添加页签」 */
+function handleCombinationAddTabFromPanel(): void {
+  const container = selectedCombinationContainer()
+  if (container?.type === 'combination') addTabToContainer(container)
+}
+
+/** 属性面板页签行「✕」 */
+function handleCombinationRemoveTabFromPanel(tabId: string): void {
+  const container = selectedCombinationContainer()
+  if (container?.type === 'combination') void removeTabFromContainer(container, tabId)
+}
+
+function filterDeletionImpactText(filters: Array<{ id: string; title: string; type: 'filter' | 'timeFilter' }>): string {
+  return filters.flatMap((filter) => {
+    const dependents = findFilterBindingDependents(schema, filter.id)
+    if (!dependents.length) return []
+    const title = filter.title || (filter.type === 'timeFilter' ? '未命名时间筛选' : '未命名筛选器')
+    const dependentList = dependents
+      .map((dependent) => `  • ${dependent.componentTitle}（${dependent.pageName}）`)
+      .join('\n')
+    return [`筛选器“${title}”绑定了以下组件：\n${dependentList}`]
+  }).join('\n\n')
+}
+
+async function confirmFilterDeletion(
+  filters: Array<{ id: string; title: string; type: 'filter' | 'timeFilter' }>,
+  deletingTitle: string,
+): Promise<boolean> {
+  const impact = filterDeletionImpactText(filters)
+  if (impact) {
+    try {
+      await ElMessageBox.confirm(
+        `删除“${deletingTitle}”后，将同时移除以下绑定关系：\n\n${impact}\n\n绑定的组件本身不会删除。确认继续吗？`,
+        '删除筛选器',
+        {
+          confirmButtonText: '确认删除',
+          cancelButtonText: '取消',
+          type: 'warning',
+          customClass: 'dashboard-filter-delete-confirm',
+        },
+      )
+    } catch {
+      return false
+    }
+  }
+  filters.forEach((filter) => removeFilterBindings(schema, filter.id))
+  return true
+}
+
+/** 删除画布顶层组件；组件树中含筛选器时先确认并清理全仪表盘引用。 */
+async function handleDeleteComponent(id: string): Promise<void> {
+  const page = schema.pages.find((p) => p.id === activePageId.value)
+  if (!page) return
   const idx = page.components.findIndex((c) => c.id === id)
   if (idx >= 0) {
+    const component = page.components[idx]
+    const filters = collectFilterComponents([component])
+    if (filters.length && !await confirmFilterDeletion(filters, component.title || '组件')) return
     page.components.splice(idx, 1)
     if (selectedComponentId.value === id) {
       selectedComponentId.value = ''
     }
+    // 删除的是组合卡片容器时，同步清掉子组件选中态
+    if (selectedChildInfo.value?.containerId === id) {
+      selectedChildInfo.value = null
+    }
+    scheduleSchemaAutoSave()
   }
+}
+
+/** 删除组合卡片中的筛选子组件，也走相同确认与清理逻辑。 */
+async function handleDeleteCombinationChild(payload: { containerId: string; childId: string }): Promise<void> {
+  const container = findCombinationContainer(payload.containerId)
+  const child = container ? findCombinationChild(container, payload.childId) : null
+  if (!container || !child) return
+  const filters = collectFilterComponents([child])
+  if (filters.length && !await confirmFilterDeletion(filters, child.title || '子组件')) return
+  removeChildFromCombination(container, child.id)
+  if (selectedChildInfo.value?.childId === child.id) selectedChildInfo.value = null
+  scheduleSchemaAutoSave()
+}
+
+/**
+ * 组合卡片容器配置合并：面板只负责外观/页签元信息，页签内的子卡片数据一律以 schema（画布侧）为准，
+ * 避免属性面板的本地副本过期时把子卡片配置覆盖掉。
+ */
+function mergeCombinationConfig(
+  existing: Pick<InsightComponent, 'containerConfig'>,
+  updated: Pick<InsightComponent, 'containerConfig'>,
+): InsightCombinationConfig | undefined {
+  const exCfg = existing.containerConfig
+  const upCfg = updated.containerConfig
+  if (!exCfg) return upCfg
+  if (!upCfg) return exCfg
+  const tabs = upCfg.tabs.map((t) => {
+    const ex = exCfg.tabs.find((x) => x.id === t.id)
+    return ex ? { ...t, titleIconStyle: t.titleIconStyle ?? ex.titleIconStyle, children: ex.children } : t
+  })
+  // 面板副本若没回显到画布侧新增的页签，这里补回，避免回写把新页签弄丢
+  for (const ex of exCfg.tabs) {
+    if (!tabs.some((t) => t.id === ex.id)) tabs.push(ex)
+  }
+  return { ...exCfg, ...upCfg, tabs }
 }
 
 /** 组件属性变更（保留画布管理的 position） */
 function handleComponentChange(updated: InsightComponent): void {
+  // 组合卡片子组件：把面板编辑结果写回容器内的 child；位置/尺寸仍由容器布局管理。
+  if (selectedChildInfo.value) {
+    const container = findCombinationContainer(selectedChildInfo.value!.containerId)
+    const child = container ? findCombinationChild(container, selectedChildInfo.value.childId) : null
+    if (child) {
+      const merged = mergeCombinationChildComponentUpdate(child, updated)
+      merged.tabs = mergeComponentTabIconStyles(child.tabs, updated.tabs)
+      if (child.type === 'combination') merged.containerConfig = mergeCombinationConfig(child, updated)
+      Object.assign(child, merged)
+      scheduleSchemaAutoSave()
+    }
+    return
+  }
   const page = schema.pages.find((p) => p.id === activePageId.value)
   if (!page) {
     return
@@ -567,9 +1831,20 @@ function handleComponentChange(updated: InsightComponent): void {
     const existing = page.components[idx]
     page.components[idx] = {
       ...updated,
+      titleIconStyle: updated.titleIconStyle ?? existing.titleIconStyle,
+      tabs: mergeComponentTabIconStyles(existing.tabs, updated.tabs),
       // 保留画布拖拽/缩放管理的 position，不被属性面板覆盖
       position: existing.position,
+      // 组合卡片：children（子卡片）只在画布内维护，属性面板不参与编辑，
+      // 回写时一律保留 schema 中的现有值，避免被面板的本地副本覆盖为空
+      ...(existing.type === 'combination'
+        ? {
+            children: existing.children ?? [],
+            containerConfig: mergeCombinationConfig(existing, updated),
+          }
+        : {}),
     }
+    scheduleSchemaAutoSave()
   }
   // 数据源变更时触发自动预览
   schedulePreview()
@@ -578,8 +1853,56 @@ function handleComponentChange(updated: InsightComponent): void {
 /** 处理属性面板验证数据结果，写入 componentDataMap 让画布组件渲染 */
 function handlePreviewResult(data: InsightComponentData): void {
   if (data.componentId) {
+    if (previewTimer) {
+      clearTimeout(previewTimer)
+      previewTimer = null
+    }
+    componentPreviewRevisions.begin(data.componentId)
+    manualRenderAt.set(data.componentId, Date.now())
     componentDataMap.value[data.componentId] = data
+    const component = currentPageComponents.value.find((item) => item.id === data.componentId)
+      ?? currentPageComponents.value
+        .filter((item) => item.type === 'combination')
+        .map((container) => findCombinationChild(container, data.componentId))
+        .find((item) => item !== null)
+    let schemaChanged = false
+    if (component && persistAppliedComponentResultSet(component, data)) {
+      schemaChanged = true
+    }
+    if (component && data.pythonResultPreview && data.pythonAppliedResultView) {
+      component.config = {
+        ...component.config,
+        pythonAppliedResultView: data.pythonAppliedResultView,
+      }
+      schemaChanged = true
+    }
+    if (component && persistAppliedKpiProjection(component as InsightComponent, data)) {
+      schemaChanged = true
+    }
+    if (schemaChanged) scheduleSchemaAutoSave()
   }
+}
+
+/** 将用户确认的脚本结果应用到当前选中组件；未选中组件时只保留预览，不覆盖画布。 */
+function handleScriptResult(rows: Record<string, unknown>[]): void {
+  const component = currentPageComponents.value.find((item) => item.id === scriptTargetComponentId.value)
+  if (!component) {
+    ElMessage.warning('请先选择要应用结果的组件')
+    return
+  }
+  const renderType = component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table'
+  componentDataMap.value[component.id] = rowsToComponentData(
+    component.id,
+    rows,
+    renderType,
+    component.type === 'kpi' ? (component.kpiMetrics ?? []).map(({ fieldKey, displayName, unit }) => ({ fieldKey, displayName, unit })) : [],
+    insightState.resultSet.fieldLabels,
+    { chartType: component.chartType, config: component.config },
+  )
+  schema.scriptBindings = [
+    ...(schema.scriptBindings ?? []).filter((binding) => binding.componentId !== component.id),
+    { componentId: component.id, renderType },
+  ]
 }
 
 /** 延迟预览：数据源变更后 500ms 自动获取组件数据 */
@@ -588,8 +1911,64 @@ function schedulePreview(): void {
     clearTimeout(previewTimer)
   }
   previewTimer = setTimeout(() => {
+    previewTimer = null
     previewAllConfiguredComponents()
   }, 500)
+}
+
+/* ── 结果集：卡片唯一数据来源 ─────────────────────────────── */
+
+/**
+ * 结果集回写：把属性面板产出的结果集渲染到卡片上。
+ *
+ * 结果集是卡片唯一的数据来源（数据集 / 筛选 / 脚本只是产出它的手段），
+ * 所以这里不设任何「直连数据源」的旁路，保证「预览所见 = 卡片所见」。
+ */
+function handleComponentResultSet(payload: {
+  componentId: string
+  status: string
+  source: 'dataset' | 'script'
+  rows: Record<string, unknown>[]
+  error: string
+}): void {
+  const topLevel = currentPageComponents.value.find((item) => item.id === payload.componentId)
+  const nestedChild = topLevel ? null : currentPageComponents.value
+    .filter((item) => item.type === 'combination')
+    .map((item) => findCombinationChild(item, payload.componentId))
+    .find((item) => item !== null)
+  const component = topLevel ?? (nestedChild as InsightComponent | null)
+  if (!component) return
+  // 手动「组件渲染」保护窗口内，面板结果集回包（飞行中查询晚到）不得覆盖用户显式应用的数据
+  if (Date.now() - (manualRenderAt.get(payload.componentId) ?? 0) < MANUAL_RENDER_GUARD_MS) return
+  if (payload.status === 'ready') {
+    componentDataMap.value[payload.componentId] = toComponentData(component, payload.rows, payload.fieldLabels)
+    return
+  }
+  if (payload.status === 'stale' || payload.status === 'running') {
+    // 沿用上一次渲染（不动 componentDataMap）：配置微调时不闪白；
+    // 「已过期」提示由属性面板的结果集节点呈现
+    return
+  }
+  if (payload.status === 'failed' && payload.error) {
+    componentDataMap.value[payload.componentId] = {
+      componentId: payload.componentId,
+      renderType: component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table',
+      error: payload.error,
+    }
+    ElMessage.warning(payload.error)
+  }
+}
+
+/**
+ * 打开仪表盘 / 切换页面时恢复结果集（决策 B：结果集持久化）。
+ * 回读策略见 composables/useResultSetRestore：有脚本按 executionId 回读、
+ * 无脚本回源重算；取不到就保持空态，不阻塞编辑器打开。
+ */
+async function restorePipelineResults(): Promise<void> {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  if (!page) return
+  const data = await restoreResultSetData(page.components)
+  Object.assign(componentDataMap.value, data)
 }
 
 /** 为当前页面所有已配置数据源的组件获取预览数据 */
@@ -599,12 +1978,19 @@ async function previewAllConfiguredComponents(): Promise<void> {
     return
   }
   const tasks = page.components
-    .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter' && c.dataSource?.datasourceId && c.dataSource?.metrics?.length)
+    // 管道卡片由「结果集」链路取数（面板产出结果集 → 回写画布）；
+    // 这里只处理旧版直连 dataSource 的卡片，避免两条取数路径互相覆盖
+    .filter((c) => c.type !== 'filter' && c.type !== 'timeFilter'
+      && c.dataSource?.datasourceId && c.dataSource?.metrics?.length
+      && !readComponentDatasetPipeline(c))
     .map(async (c) => {
+      const revision = componentPreviewRevisions.begin(c.id)
       try {
         const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+        if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
         componentDataMap.value[c.id] = result
       } catch (e: any) {
+        if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
         componentDataMap.value[c.id] = {
           componentId: c.id,
           renderType: 'table',
@@ -616,20 +2002,99 @@ async function previewAllConfiguredComponents(): Promise<void> {
 }
 
 /** 保存仪表盘 */
+/** 存为样例模板弹窗 */
+const saveTemplateVisible = ref(false)
+const saveTemplateSaving = ref(false)
+const saveTemplateForm = ref({ name: '', description: '', category: '', tags: '' })
+
+/** 打开「存为样例模板」弹窗 */
+function openSaveTemplate(): void {
+  saveTemplateForm.value = {
+    name: dashboard.value?.name || '',
+    description: dashboard.value?.description || '',
+    category: '',
+    tags: '',
+  }
+  saveTemplateVisible.value = true
+}
+
+/** 确认存为样例模板 */
+async function confirmSaveTemplate(): Promise<void> {
+  const id = props.dashboardId
+  if (!id) {
+    return
+  }
+  saveTemplateSaving.value = true
+  try {
+    const payload: InsightDashboardSaveAsTemplateInput = {
+      name: saveTemplateForm.value.name.trim() || dashboard.value?.name,
+      description: saveTemplateForm.value.description.trim() || undefined,
+      category: saveTemplateForm.value.category.trim() || undefined,
+      tags: saveTemplateForm.value.tags
+        .split(/[,，\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    }
+    await store.saveAsTemplate(id, payload)
+    ElMessage.success(t('insight.saveTemplateSuccess'))
+    saveTemplateVisible.value = false
+  } catch {
+    ElMessage.error(t('insight.saveTemplateFailed'))
+  } finally {
+    saveTemplateSaving.value = false
+  }
+}
+
+/** 官方样例模板：复制为当前用户的私有副本后跳转编辑 */
+async function handleCreateFromOfficial(): Promise<void> {
+  const id = props.dashboardId
+  if (!id) {
+    return
+  }
+  try {
+    const copy = await store.copyDashboard(id)
+    ElMessage.success(t('insight.createFromTemplateSuccess'))
+    void router.push({ name: 'insight-dashboard-editor', query: { dashboardId: copy.id } })
+  } catch {
+    ElMessage.error(t('insight.createFromTemplateFailed'))
+  }
+}
+
+/** 替换示例数据：定位到第一个带数据集的组件并打开其属性配置 */
+function handleReplaceSampleData(): void {
+  const target = currentPageComponents.value.find((c) => {
+    const ds = (c as InsightComponent & { dataSource?: { datasourceId?: string } }).dataSource
+    return Boolean(ds?.datasourceId)
+  }) ?? currentPageComponents.value[0]
+  if (!target) {
+    ElMessage.info(t('insight.noComponentToEdit'))
+    return
+  }
+  selectedComponentId.value = target.id
+}
+
 async function handleSave(): Promise<void> {
   if (!dashboard.value) {
     return
   }
+  if (schemaAutoSaveTimer) {
+    clearTimeout(schemaAutoSaveTimer)
+    schemaAutoSaveTimer = null
+  }
+  const version = ++schemaChangeVersion
   saving.value = true
+  schemaSaveState.value = 'saving'
   try {
-    await store.updateDashboard(dashboard.value.id, {
+    await enqueueDashboardUpdate({
       name: dashboardName.value,
       description: dashboardDescription.value,
       ownerName: dashboardOwnerName.value,
       schemaJson: JSON.stringify(schema),
     })
+    if (version === schemaChangeVersion) schemaSaveState.value = 'saved'
     ElMessage.success(t('insight.saveSuccess'))
   } catch {
+    if (version === schemaChangeVersion) schemaSaveState.value = 'error'
     ElMessage.error(t('insight.saveFailed'))
   } finally {
     saving.value = false
@@ -639,7 +2104,7 @@ async function handleSave(): Promise<void> {
 /** 名称变更时自动保存 */
 function handleNameChange(): void {
   if (dashboard.value && dashboardName.value.trim()) {
-    store.updateDashboard(dashboard.value.id, { name: dashboardName.value.trim() }).catch(() => {
+    enqueueDashboardUpdate({ name: dashboardName.value.trim() }).catch(() => {
       // 静默失败
     })
   }
@@ -648,7 +2113,7 @@ function handleNameChange(): void {
 /** 描述变更时自动保存 */
 function handleDescriptionChange(): void {
   if (dashboard.value) {
-    store.updateDashboard(dashboard.value.id, { description: dashboardDescription.value }).catch(() => {
+    enqueueDashboardUpdate({ description: dashboardDescription.value }).catch(() => {
       // 静默失败
     })
   }
@@ -657,7 +2122,7 @@ function handleDescriptionChange(): void {
 /** 负责人变更时自动保存 */
 function handleOwnerNameChange(): void {
   if (dashboard.value) {
-    store.updateDashboard(dashboard.value.id, { ownerName: dashboardOwnerName.value }).catch(() => {
+    enqueueDashboardUpdate({ ownerName: dashboardOwnerName.value }).catch(() => {
       // 静默失败
     })
   }
@@ -672,7 +2137,7 @@ function handlePreview(): void {
 
 /** 返回列表 */
 function handleBack(): void {
-  emit('back')
+  void router.push(insightDashboardListLocation(route.query))
 }
 
 /** 切换AI对话面板 */
@@ -732,6 +2197,7 @@ async function handleAiDashboardUpdated(): Promise<void> {
   // 4. 应用新 schema
   schema.version = newSchema.version
   schema.pages = newSchema.pages
+  schema.theme = newSchema.theme
 
   // 5. 增量预览：只对新增或签名变化的组件重新取数，未变组件保留已有数据
   scheduleIncrementalPreview(oldSignatures)
@@ -757,6 +2223,7 @@ function scheduleIncrementalPreview(oldSignatures: Map<string, string>): void {
     clearTimeout(previewTimer)
   }
   previewTimer = setTimeout(() => {
+    previewTimer = null
     previewChangedComponents(oldSignatures)
   }, 500)
 }
@@ -779,10 +2246,13 @@ async function previewChangedComponents(oldSignatures: Map<string, string>): Pro
         continue
       }
       tasks.push((async () => {
+        const revision = componentPreviewRevisions.begin(c.id)
         try {
           const result = await insightDashboardApi.previewComponent(c) as unknown as InsightComponentData
+          if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
           componentDataMap.value[c.id] = result
         } catch (e: any) {
+          if (!componentPreviewRevisions.isCurrent(c.id, revision)) return
           componentDataMap.value[c.id] = {
             componentId: c.id,
             renderType: 'table',
@@ -998,6 +2468,86 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
   padding: var(--space-md) var(--space-lg) var(--space-lg);
 }
 
+/* 顶部非阻塞提示条：官方样例只读 / 模板副本的示例数据说明 */
+.editor-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--db-border);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.editor-notice.notice-readonly {
+  background: color-mix(in srgb, var(--main-orange) 8%, transparent);
+  color: var(--db-text);
+}
+
+.editor-notice.notice-sample {
+  background: var(--db-bg);
+  color: var(--db-text-secondary);
+}
+
+.notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notice-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.notice-close:hover {
+  background: color-mix(in srgb, var(--db-text-muted) 12%, transparent);
+  color: var(--db-text);
+}
+
+/* 官方样例模板只读：禁用主要编辑区交互（工具栏按钮另由 disabled 控制） */
+.editor-readonly .editor-palette,
+.editor-readonly .editor-canvas,
+.editor-readonly .editor-property {
+  pointer-events: none;
+  opacity: 0.65;
+}
+
+/* 存为样例模板弹窗 */
+.save-template-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.save-template-hint {
+  margin: 0 0 2px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--db-text-muted);
+}
+
+.st-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.st-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--db-text-secondary);
+}
+
 /* 页头工具栏：白色纸面卡片（描边+圆角+投影），与列表页 .page-card 同一层级语言，
    覆盖 .mc-toolbar 的默认通栏白底/下边框/定高 */
 .editor-toolbar {
@@ -1166,6 +2716,20 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 
 .toolbar-right {
   gap: 8px;
+}
+
+.editor-save-status {
+  color: var(--db-text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.editor-save-status.is-saved {
+  color: var(--el-color-success);
+}
+
+.editor-save-status.is-error {
+  color: var(--el-color-danger);
 }
 
 .toolbar-right :deep(.el-button.toolbar-btn) {
@@ -1401,10 +2965,79 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-canvas {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  min-height: 0;
+  overflow: auto;
   background: var(--db-bg);
   border: 1px solid var(--db-border);
   border-radius: 12px;
+}
+
+/* 详情/Schema 加载与错误态：占满画布区，不阻塞外壳其他面板 */
+.editor-canvas-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 100%;
+  padding: 32px;
+}
+
+.editor-canvas-state.is-error .editor-canvas-state-text {
+  color: var(--el-color-danger, #f56c6c);
+}
+
+.editor-canvas-state-text {
+  font-size: 13px;
+  color: var(--db-text-muted);
+}
+
+.editor-canvas-spinner {
+  font-size: 22px;
+  color: var(--db-text-muted);
+}
+
+.component-context-menu {
+  position: fixed;
+  z-index: 2000;
+  min-width: 188px;
+  padding: 6px;
+  background: var(--db-card);
+  border: 1px solid var(--db-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-dropdown, 0 12px 32px rgba(24, 39, 75, 0.16));
+}
+
+.component-context-menu button {
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  background: transparent;
+  color: var(--db-text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.component-context-menu button:hover:not(:disabled) {
+  background: var(--db-hover);
+  color: var(--db-accent);
+}
+
+.component-context-menu button:disabled {
+  color: var(--db-text-muted);
+  cursor: not-allowed;
+}
+
+.component-context-menu kbd {
+  color: var(--db-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* 编辑画布淡点阵底纹：与页面灰底区分出工作区；
@@ -1431,7 +3064,8 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-property {
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   animation: fadeIn var(--transition-base) both;
 }
 
@@ -1439,6 +3073,10 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 .editor-property :deep(.property-panel) {
   border-left: none;
   background: transparent;
+  /* 属性面板与脚本数据集面板同属右侧栏，不能用 100% 高度把后者裁掉。 */
+  height: auto;
+  min-height: 160px;
+  flex: 0 0 auto;
 }
 
 .editor-ai-chat {
@@ -1468,6 +3106,11 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 /* ─── 悬浮折叠按钮（样式在 PanelFloatButton.vue 内） ─────────────────────────────────── */
 
 @media (max-width: 1279px) {
+  .editor-canvas {
+    min-width: 0;
+    overflow: auto;
+  }
+
   .editor-pages,
   .editor-palette {
     width: 56px;
@@ -1531,6 +3174,12 @@ function handlePageAction(cmd: string, page: DashboardPage): void {
 }
 
 @media (max-width: 767px) {
+  .editor-canvas {
+    width: 100%;
+    min-width: 0;
+    overflow-x: hidden;
+  }
+
   .insight-editor-view {
     padding: var(--space-sm) var(--space-md) var(--space-md);
   }

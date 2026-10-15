@@ -1,9 +1,9 @@
 <template>
-  <div class="dashboard-preview-view">
+  <div class="dashboard-preview-view" :style="dashboardThemeVariables">
     <!-- 顶部工具栏 -->
     <div class="preview-toolbar mc-toolbar">
       <div class="toolbar-left mc-toolbar-left">
-        <button type="button" class="back-btn" :title="t('common.back')" @click="handleBack">
+        <button type="button" class="back-btn" :title="t('common.back')" :aria-label="t('common.back')" @click="handleBack">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
         </button>
         <div class="toolbar-title-block">
@@ -14,6 +14,16 @@
         </div>
       </div>
       <div class="toolbar-right mc-toolbar-right">
+        <el-button
+          v-if="currentPageComponents.length > 0"
+          class="toolbar-btn preview-fill-btn"
+          :class="{ active: previewFillWidth }"
+          :aria-pressed="previewFillWidth"
+          title="收拢栅格列数铺满浏览器宽度，再次点击恢复 100% 原始大小"
+          @click="togglePreviewFillWidth"
+        >
+          自适应宽度
+        </el-button>
         <el-button
           v-if="canCreate && !reportGenerating"
           type="primary"
@@ -49,12 +59,18 @@
     <!-- 仪表盘预览区 -->
     <div class="preview-body">
       <!-- 页面菜单 Tab 栏（多页面时显示） -->
-      <div v-if="schema.pages.length > 1" class="page-bar mc-tabs">
+      <div v-if="schema.pages.length > 1" class="page-bar mc-tabs" role="tablist" aria-label="仪表盘页面">
         <button
           v-for="page in topLevelPages"
           :key="page.id"
+          type="button"
+          role="tab"
+          :data-page-id="page.id"
           class="page-tab mc-tab"
           :class="{ active: activePageId === page.id || isDescendantPage(activePageId, page.id) }"
+          :aria-selected="activePageId === page.id || isDescendantPage(activePageId, page.id)"
+          :tabindex="activePageId === page.id || isDescendantPage(activePageId, page.id) ? 0 : -1"
+          @keydown="handlePageTabKeydown($event, topLevelPages.map(item => item.id), page.id)"
           @click="handlePageChange(page.id)"
         >
           <span v-if="page.icon" class="page-icon">{{ page.icon }}</span>
@@ -62,12 +78,18 @@
         </button>
       </div>
       <!-- 子页面 Tab 栏（当前页面有子页面时显示） -->
-      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar mc-tabs">
+      <div v-if="activeSubPages.length > 0" class="page-bar sub-page-bar mc-tabs" role="tablist" aria-label="仪表盘子页面">
         <button
           v-for="sub in activeSubPages"
           :key="sub.id"
+          type="button"
+          role="tab"
+          :data-page-id="sub.id"
           class="page-tab mc-tab mc-tab-sub"
           :class="{ active: activePageId === sub.id }"
+          :aria-selected="activePageId === sub.id"
+          :tabindex="activePageId === sub.id ? 0 : -1"
+          @keydown="handlePageTabKeydown($event, activeSubPages.map(item => item.id), sub.id)"
           @click="handlePageChange(sub.id)"
         >
           <span v-if="sub.icon" class="page-icon">{{ sub.icon }}</span>
@@ -75,9 +97,13 @@
         </button>
       </div>
 
-      <div v-if="dataLoading" class="preview-loading">
-        <el-icon class="loading-icon is-loading"><Loading /></el-icon>
-        <div class="loading-text">{{ t('insight.loadingData') }}</div>
+      <div v-if="dashboardLoading" class="preview-load-state" role="status" aria-live="polite" data-test="dashboard-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ t('insight.loadingSchema') }}</span>
+      </div>
+      <div v-else-if="dashboardLoadError" class="preview-load-state is-error" role="alert">
+        <span>{{ dashboardLoadError }}</span>
+        <el-button class="toolbar-btn" @click="handleBack">{{ t('common.back') }}</el-button>
       </div>
       <div v-else-if="currentPageComponents.length === 0" class="preview-empty">
         <div class="empty-illustration">
@@ -103,12 +129,19 @@
         v-else
         :components="currentPageComponents"
         :component-data-map="componentDataMap"
+        :runtime-filter-state="getRuntimeFilterState()"
+        :dataset-inputs="schema.datasetInputs"
         :editable="false"
+        :preview-fill-width="previewFillWidth"
+        :dashboard-theme="dashboardTheme"
+        :canvas-background="'var(--dashboard-preview-background)'"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
         @component-time-range-change="handleComponentTimeRangeChange"
+        @retry-component-query="retryComponentQuery"
         @ai-analysis-generate="handleAiAnalysisGenerate"
+        @table-view-change="handleTableViewChange"
       />
     </div>
 
@@ -117,6 +150,7 @@
       v-model="reportDrawerVisible"
       direction="rtl"
       size="50%"
+      append-to-body
       :close-on-press-escape="true"
       class="report-detail-drawer"
       @close="handleReportDrawerClose"
@@ -144,7 +178,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, reactive, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, View, Loading, Upload, EditPen, Download } from '@element-plus/icons-vue'
@@ -155,15 +189,32 @@ import type {
   InsightComponentData,
   InsightComponent,
   TimeRangeValue,
+  TimeGranularity,
   DashboardFilterContext,
   DashboardPage,
+  DashboardRuntimeFilterState,
 } from '@/types'
 import { useInsightDashboardStore } from '@/stores/useInsightDashboardStore'
-import { preview } from '@/api/insight-dashboard'
-import { generateReport, getReport, publishReport } from '@/api/insight-report'
-import { useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
+import * as insightDashboardApi from '@/api/insight-dashboard'
+import * as datasetApi from '@/api/dataset'
+import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
+import { generateComponentAnalysis, generateReport, getReport, publishReport } from '@/api/insight-report'
+import { collectDashboardComponents, useDashboardFilterContext } from '@/composables/useDashboardFilterContext'
 import { usePermission, PERMISSION } from '@/composables/usePermission'
 import DashboardCanvas from './components/DashboardCanvas.vue'
+import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
+import { extractResultSchema, parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
+import { toComponentData } from './composables/useResultSetRestore'
+import { buildScriptParameters } from '@/utils/script-parameters'
+import { DASHBOARD_CANVAS_BACKGROUND, resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
+import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
+import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { buildAiAnalysisSnapshot, collectVisibleAiAnalysisComponents, collectVisibleAnalysisComponents, type AiAnalysisTableView } from '@/utils/ai-analysis-context'
+import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { finalResultQueryConfigStatus, isFinalResultQueryConfigured } from '@/utils/final-result-query'
+import { removeDanglingFilterBindings } from '@/utils/dashboard-filter-deletion'
+import { markDashboardPerformance } from '@/utils/dashboardPerformance'
 
 defineOptions({
   name: 'DashboardPreviewView',
@@ -187,22 +238,46 @@ const store = useInsightDashboardStore()
 
 const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
+/** 详情与 Schema 尚未就绪时不能把初始空数组误报成真正的空看板。 */
+const dashboardLoading = ref(true)
+const dashboardLoadError = ref('')
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
+const tableViews = reactive<Record<string, AiAnalysisTableView>>({})
+const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
+const dashboardThemeVariables = computed(() => ({
+  ...themeCssVariables(dashboardTheme.value),
+  // 主题改变组件外观，但编辑器与预览画布始终使用相同的中性底色。
+  '--dashboard-preview-background': DASHBOARD_CANVAS_BACKGROUND,
+}))
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
 const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
 
 /** 正在生成 AI 分析的组件 ID 集合 */
 const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
-
-/** AI 分析内容状态（componentId → analysisSection） */
-const aiAnalysisContents = reactive<Record<string, string>>({})
-
-/** 组件数据加载中状态（预览/筛选刷新时） */
-const dataLoading = ref(false)
+const previewDataReady = ref(false)
+const dataRefreshPending = ref(false)
+let autoAnalysisScheduleSequence = 0
+let aiAnalysisRequestSequence = 0
+const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController; waitingForData: boolean }>()
+const lastAutoAnalysisKeys = new Map<string, string>()
 
 /** 报告生成中状态 */
 const reportGenerating = ref(false)
+
+/** 预览态「自适应宽度」：按仪表盘保存用户偏好，离开后再次进入仍恢复原状态。 */
+const previewFillWidth = ref(false)
+
+watch(() => props.dashboardId, (dashboardId) => {
+  previewFillWidth.value = readDashboardPreviewFillWidth(dashboardId)
+}, { immediate: true })
+
+watch(previewFillWidth, (enabled) => saveDashboardPreviewFillWidth(props.dashboardId, enabled))
+
+/** 切换预览态「自适应宽度」 */
+function togglePreviewFillWidth(): void {
+  previewFillWidth.value = !previewFillWidth.value
+}
 
 /** 报告抽屉可见性 */
 const reportDrawerVisible = ref(false)
@@ -221,6 +296,13 @@ const reportChartInstances = ref<echarts.ECharts[]>([])
 
 /** 防抖定时器 */
 let filterReloadTimer: ReturnType<typeof setTimeout> | null = null
+/** 视图是否已卸载：卸载后所有异步回调不再回写状态 */
+let previewDisposed = false
+/** 旧直连 preview 与组件查询共用的单调请求序列；晚到的整页响应不能覆盖新查询。 */
+let queryRequestSequence = 0
+const latestComponentRequest = new Map<string, number>()
+let previousRuntimeFilterState: DashboardRuntimeFilterState = {}
+let previewDatasetMaterialization: Promise<void> | null = null
 
 /** 当前激活的页面 ID */
 const activePageId = ref<string>('')
@@ -282,20 +364,7 @@ function generateId(prefix: string): string {
 
 /** 迁移旧 Schema（单 components 数组 → pages[0]） */
 function migrateSchema(parsed: any): InsightDashboardSchema {
-  // 新格式：已有 pages 数组
-  if (parsed.pages && Array.isArray(parsed.pages)) {
-    return parsed as InsightDashboardSchema
-  }
-  // 旧格式：components + perspectives，迁移为单页面
-  const oldComponents = parsed.components ?? []
-  return {
-    version: parsed.version ?? '1.0',
-    pages: [{
-      id: generateId('page'),
-      name: t('insight.firstPageName'),
-      components: oldComponents,
-    }],
-  }
+  return migrateInsightDashboardSchema(parsed, t('insight.firstPageName'))
 }
 
 /** 筛选上下文管理（基于当前页面组件） */
@@ -303,13 +372,28 @@ const {
   filterContext,
   setTimeRange,
   setDimensionFilter,
+  initializeDefaults,
+  getRuntimeFilterState,
 } = useDashboardFilterContext(
   () => currentPageComponents.value,
   (context) => scheduleReloadWithFilters(context),
 )
 
 onMounted(async () => {
+  // 返回预览时恢复页面顶部，避免长画布的旧滚动位置将页面筛选器移出视口。
+  window.scrollTo(0, 0)
   await loadDashboard()
+})
+
+onUnmounted(() => {
+  previewDisposed = true
+  if (filterReloadTimer) {
+    clearTimeout(filterReloadTimer)
+    filterReloadTimer = null
+  }
+  autoAnalysisScheduleSequence += 1
+  for (const request of aiAnalysisRequests.values()) request.controller.abort()
+  aiAnalysisRequests.clear()
 })
 
 watch(
@@ -319,18 +403,142 @@ watch(
   }
 )
 
+/** 本轮预览需要取数的组件 ID；为空表示尚未开始，避免误判「全部完成」 */
+let expectedQueryComponentIds = new Set<string>()
+/** 已进入终态（success/empty/error/timeout）的组件 ID */
+const settledQueryComponentIds = new Set<string>()
+/** 是否已经写下「首个组件出数」阶段点 */
+let firstComponentSettled = false
+
+/**
+ * 本轮预览会取数的组件 ID（直连通道 + 脚本绑定通道 + 数据集管线通道）。
+ * 与三个通道各自的目标集合保持同一口径，用于判定「全部组件完成」。
+ */
+function previewQueryComponentIds(): string[] {
+  const allComponents = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+  const allIds = new Set(allComponents.map((component) => component.id))
+  const directIds = new Set(directQueryComponents().map((component) => component.id))
+  const pipelineIds = new Set(pipelineComponents().map((component) => component.id))
+  // 与 reloadScriptBindings 的唯一数据源仲裁保持同一口径：被管线/直连覆盖的组件不走脚本绑定
+  const scriptBound = schema.script?.trim() && schema.scriptBindings?.length
+    ? schema.scriptBindings
+        .map((binding) => binding.componentId)
+        .filter((id) => allIds.has(id) && !directIds.has(id) && !pipelineIds.has(id))
+    : []
+  return Array.from(new Set([
+    ...directIds,
+    ...scriptBound,
+    ...pipelineIds,
+  ]))
+}
+
+/** 开始一轮取数前重置阶段进度；expected 为本轮所有会取数的组件 ID */
+function resetPreviewProgress(expected: string[]): void {
+  expectedQueryComponentIds = new Set(expected)
+  settledQueryComponentIds.clear()
+  firstComponentSettled = false
+}
+
+/** 组件数据进入终态时推进阶段标记（首个组件出数 / 全部组件完成） */
+function trackComponentSettled(componentId: string): void {
+  if (!expectedQueryComponentIds.has(componentId) || settledQueryComponentIds.has(componentId)) {
+    return
+  }
+  settledQueryComponentIds.add(componentId)
+  if (!firstComponentSettled) {
+    firstComponentSettled = true
+    markDashboardPerformance('insight-preview-first-component')
+  }
+  if (settledQueryComponentIds.size >= expectedQueryComponentIds.size) {
+    markDashboardPerformance('insight-preview-all-components')
+  }
+}
+
+/** 组件数据终态统一出口：任何通道写入终态都在这里推进阶段标记 */
+watch(
+  componentDataMap,
+  (map) => {
+    for (const [componentId, data] of Object.entries(map)) {
+      const status = data?.queryStatus
+      if (status && status !== 'loading') {
+        trackComponentSettled(componentId)
+      }
+    }
+  },
+  { deep: true },
+)
+
+const visibleAnalysisScopeKey = computed(() => {
+  const visible = [...collectVisibleAnalysisComponents(currentPageComponents.value), ...collectVisibleAiAnalysisComponents(currentPageComponents.value)]
+  return JSON.stringify({
+    pageId: activePageId.value,
+    components: visible.map((component) => ({
+      id: component.id,
+      type: component.type,
+      autoGenerate: (component.config as { autoGenerate?: boolean } | undefined)?.autoGenerate,
+      promptTemplate: (component.config as { promptTemplate?: string } | undefined)?.promptTemplate,
+    })),
+  })
+})
+
+const visibleAnalysisDataKey = computed(() => {
+  const visible = collectVisibleAnalysisComponents(currentPageComponents.value)
+  return JSON.stringify({
+    scope: visibleAnalysisScopeKey.value,
+    filters: getRuntimeFilterState(),
+    ready: previewDataReady.value,
+    pending: dataRefreshPending.value,
+    data: visible.map((component) => ({
+      componentId: component.id,
+      data: componentDataMap.value[component.id],
+      tableView: tableViews[component.id],
+    })),
+  })
+})
+
+watch(visibleAnalysisDataKey, () => {
+  invalidatePendingAiAnalysis()
+  scheduleAutoAiAnalysis()
+})
+
 /** 加载仪表盘 */
 async function loadDashboard(): Promise<void> {
   if (!props.dashboardId) {
+    dashboardLoading.value = false
     return
   }
-  await store.selectDashboard(props.dashboardId)
+  autoAnalysisScheduleSequence += 1
+  for (const request of aiAnalysisRequests.values()) request.controller.abort()
+  aiAnalysisRequests.clear()
+  aiAnalysisGeneratingIds.clear()
+  lastAutoAnalysisKeys.clear()
+  previewDataReady.value = false
+  dataRefreshPending.value = true
+  componentDataMap.value = {}
+  for (const key of Object.keys(tableViews)) delete tableViews[key]
+  dashboardLoading.value = true
+  dashboardLoadError.value = ''
+  markDashboardPerformance('insight-preview-start')
+  try {
+    await store.selectDashboard(props.dashboardId)
+  } catch {
+    dashboardLoadError.value = t('insight.loadFailed')
+    dashboardLoading.value = false
+    return
+  }
   if (dashboard.value) {
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson)
       const migrated = migrateSchema(parsed)
       schema.version = migrated.version
       schema.pages = migrated.pages
+      schema.datasetInputs = migrated.datasetInputs ?? []
+      schema.script = migrated.script
+      schema.parameters = migrated.parameters ?? []
+      schema.executionPolicy = migrated.executionPolicy ?? {}
+      schema.scriptBindings = migrated.scriptBindings ?? []
+      schema.theme = migrated.theme
+      removeDanglingFilterBindings(schema)
     } catch {
       schema.pages = [{
         id: generateId('page'),
@@ -338,20 +546,157 @@ async function loadDashboard(): Promise<void> {
         components: [],
       }]
     }
+    for (const component of collectDashboardComponents(schema.pages.flatMap((page) => page.components))) {
+      if (component.type !== 'aiAnalysis') continue
+      componentDataMap.value[component.id] = {
+        componentId: component.id,
+        renderType: 'aiAnalysis',
+        aiAnalysis: { dataSection: '', analysisSection: component.aiAnalysisContent ?? '' },
+      }
+    }
     // 默认选中第一个页面
     if (schema.pages.length > 0) {
       activePageId.value = schema.pages[0].id
     }
-    await reloadComponentData(filterContext.value)
-    // 加载已生成的报告
-    await loadReport()
+    initializeDefaults()
+    // 自动分析从预览画布出现时就进入加载态，覆盖首轮组件数据查询阶段。
+    for (const component of collectVisibleAiAnalysisComponents(currentPageComponents.value)) {
+      const config = component.config as { autoGenerate?: boolean } | undefined
+      if (config?.autoGenerate === true) aiAnalysisGeneratingIds.add(component.id)
+    }
+    // Schema 已可用，画布骨架可以先呈现；后续数据阶段各自回填
+    markDashboardPerformance('insight-preview-canvas-ready')
+    dashboardLoading.value = false
+    await materializePreviewDatasetInputs()
+    previousRuntimeFilterState = getRuntimeFilterState()
+    resetPreviewProgress(previewQueryComponentIds())
+    // 直连组件查询、Python 绑定执行、数据集管线三个通道互不依赖，并行启动；
+    // 各通道内部会把单组件的 loading/success/empty/error/timeout 写入 componentDataMap，
+    // 单通道失败只影响其目标组件，不会拖垮其他通道。
+    const channelResults = await Promise.allSettled([
+      reloadComponentData(filterContext.value),
+      reloadScriptBindings(filterContext.value),
+      refreshPipelineComponents(getRuntimeFilterState(), true),
+    ])
+    for (const result of channelResults) {
+      if (result.status === 'rejected') {
+        // 防御兜底：通道本身抛出未捕获异常时记录，不让页面停留在整体加载态
+        console.error('[preview] 数据通道执行失败', result.reason)
+      }
+    }
+    dataRefreshPending.value = false
+    previewDataReady.value = true
+    // 报告读取是独立后台任务，不阻塞组件数据渲染路径；卸载后不回写状态
+    void loadReport()
+  } else {
+    dashboardLoadError.value = t('insight.loadFailed')
+    dashboardLoading.value = false
   }
 }
 
-/** 加载已生成的报告 */
+/**
+ * QueryPlanPreview 与脚本执行接口只接受已落库的数字 datasetId。旧看板可能保存
+ * `ds-*` 草稿 ID；预览时按来源定义复用现有数据集或确认草稿，并只回填当前内存
+ * Schema，避免把临时 ID 发送到 long 参数接口，也不在只读预览时覆盖看板记录。
+ */
+async function materializePreviewDatasetInputs(): Promise<void> {
+  if (previewDatasetMaterialization) return previewDatasetMaterialization
+  const operation = materializePreviewDatasetInputsOnce()
+  previewDatasetMaterialization = operation
+  try {
+    await operation
+  } finally {
+    if (previewDatasetMaterialization === operation) previewDatasetMaterialization = null
+  }
+}
+
+async function materializePreviewDatasetInputsOnce(): Promise<void> {
+  const configuredInputs = pipelineComponents().flatMap((component) => {
+    const pipeline = readComponentDatasetPipeline(component)
+    return (pipeline?.datasetInputs ?? [])
+      .filter((input) => Boolean(input.sourceType && input.sourceConfig))
+      .map((input) => ({ component, pipeline: pipeline!, input }))
+  })
+  if (!configuredInputs.length) return
+
+  const existing = await datasetApi.list() as unknown as Array<{
+    id: string; datasourceId?: string; sourceType?: string; sourceConfig?: string | Record<string, unknown>
+  }>
+  const staleInputs = configuredInputs.filter(({ input }) =>
+    !isPersistedDatasetReferenceAvailable(input.datasetId, existing),
+  )
+  if (!staleInputs.length) return
+  const sourceConfigFor = (sourceType: string, config: Record<string, unknown>): Record<string, unknown> => {
+    switch (sourceType) {
+      case 'ALOUDATA_METRICS': return { metrics: config.metrics ?? [], dimensions: config.dimensions ?? [] }
+      case 'ALOUDATA_ANALYSIS_VIEW': return { analysisViewId: config.analysisViewId ?? '' }
+      case 'JDBC_SQL': return { sql: config.sql ?? '' }
+      case 'HTTP_API': return { apiDefinitionId: config.apiDefinitionId ?? '' }
+      case 'FILE': return { objectId: config.objectId ?? '', format: config.format ?? 'CSV' }
+      default: throw new Error(`暂不支持自动落库的数据集类型：${sourceType || '未知'}`)
+    }
+  }
+  const stableValue = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(stableValue)
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, child]) => [key, stableValue(child)]))
+    }
+    return value
+  }
+  const canonical = (value: Record<string, unknown>) => JSON.stringify(stableValue(value))
+  const hashSource = (value: string): string => {
+    const mask = (1n << 64n) - 1n
+    let hash = 14695981039346656037n
+    for (let index = 0; index < value.length; index += 1) {
+      hash = ((hash ^ BigInt(value.charCodeAt(index))) * 1099511628211n) & mask
+    }
+    return hash.toString(36)
+  }
+  const confirmedBySource = new Map<string, string>()
+  for (const { component, pipeline, input } of staleInputs) {
+    const sourceType = String(input.sourceType ?? '').toUpperCase()
+    const source = input.sourceConfig as Record<string, unknown> | undefined
+    const datasourceId = String(source?.datasourceId ?? '')
+    if (!sourceType || !source || !datasourceId) {
+      throw new Error(`组件「${component.title || component.id}」的数据集「${input.inputName}」缺少来源配置，无法解析临时 ID`)
+    }
+    const definition = sourceConfigFor(sourceType, source)
+    const signature = `${sourceType}:${datasourceId}:${canonical(definition)}`
+    const datasetName = `preview_${props.dashboardId}_${component.id.slice(-8)}_${input.inputName}_${hashSource(signature)}`
+    let datasetId = confirmedBySource.get(signature)
+    if (!datasetId) {
+      const match = existing.find((candidate) => {
+        // DatasetVO intentionally omits sourceConfig; the stable name embeds a hash of it.
+        return candidate.name === datasetName
+          && String(candidate.sourceType ?? '').toUpperCase() === sourceType
+          && String(candidate.datasourceId ?? '') === datasourceId
+      })
+      if (match) datasetId = String(match.id)
+      else {
+        const result = await datasetApi.confirmDraft({
+          sourceType,
+          datasourceId,
+          sourceConfig: definition,
+          name: datasetName,
+          description: `看板预览自动确认的数据集：${component.title || component.id}`,
+        }) as unknown as { datasetId: string }
+        datasetId = String(result.datasetId)
+        existing.push({ id: datasetId, datasourceId, sourceType, sourceConfig: { ...definition, datasourceId, sourceType } })
+      }
+      confirmedBySource.set(signature, datasetId)
+    }
+    input.datasetId = datasetId
+    component.config = writeComponentDatasetPipeline(component, pipeline).config
+  }
+}
+
+/** 加载已生成的报告（后台任务：卸载后不回写状态） */
 async function loadReport(): Promise<void> {
   try {
     const content = await getReport(props.dashboardId)
+    if (previewDisposed) return
     if (content) {
       reportHtmlContent.value = content
     }
@@ -360,20 +705,468 @@ async function loadReport(): Promise<void> {
   }
 }
 
-/** 带筛选条件重新加载组件数据（全量替换） */
+function componentRenderType(component: InsightComponent): InsightComponentData['renderType'] {
+  return component.type === 'chart' ? 'echarts' : component.type === 'kpi' ? 'kpi' : 'table'
+}
+
+function isQueryTimeout(error: unknown): boolean {
+  const value = error as { name?: string; code?: string; message?: string } | null
+  return /timeout|timed.?out|超时|deadline|expired|ECONNABORTED|ETIMEDOUT/i.test(`${value?.name ?? ''} ${value?.code ?? ''} ${value?.message ?? error ?? ''}`)
+}
+
+function resolvedQueryData(data: InsightComponentData): InsightComponentData {
+  if (data.error) return { ...data, queryStatus: isQueryTimeout(new Error(data.error)) ? 'timeout' : 'error' }
+  let empty = false
+  if (data.renderType === 'table') empty = !data.table?.rows.length
+  else if (data.renderType === 'kpi') empty = !data.kpi && !data.kpiList?.length
+  else if (data.renderType === 'echarts') {
+    const series = data.option?.series
+    empty = !Array.isArray(series) || series.length === 0 || series.every((item) => {
+      const values = item && typeof item === 'object' ? (item as { data?: unknown[] }).data : undefined
+      return Array.isArray(values) && values.length === 0
+    })
+  }
+  return { ...data, queryStatus: empty ? 'empty' : 'success' }
+}
+
+function writeComponentQueryState(component: InsightComponent, queryStatus: NonNullable<InsightComponentData['queryStatus']>, error?: string): void {
+  const previous = componentDataMap.value[component.id]
+  componentDataMap.value = {
+    ...componentDataMap.value,
+    [component.id]: {
+      ...previous,
+      componentId: component.id,
+      renderType: previous?.renderType ?? componentRenderType(component),
+      queryStatus,
+      error,
+    },
+  }
+}
+
+/** 脚本状态轮询退避：首次 500ms，之后 1s、2s 翻倍推进，封顶 5s */
+function scriptPollDelayMs(attempt: number): number {
+  if (attempt <= 0) return 500
+  return Math.min(500 * 2 ** attempt, 5000)
+}
+
+/**
+ * 脚本状态轮询循环：终态（SUCCEEDED/RESULT_REF）或业务失败立即返回；
+ * 视图卸载或执行被新请求替代时静默放弃（不写状态）。attempt 从 0 开始。
+ */
+async function pollScriptExecution(
+  executionId: string,
+  requestId: number,
+  requestOwner: string,
+): Promise<{ status: string; envelope: unknown }> {
+  const pollingStartedAt = performance.now()
+  let pollCount = 0
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    // 每次唤醒先检查：视图已卸载或执行已被新请求替代时，放弃本轮等待（旧结果不再回写）
+    if (attempt > 0 && (previewDisposed || latestComponentRequest.get(requestOwner) !== requestId)) {
+      return { status: '__abandoned__', envelope: undefined }
+    }
+    const status = await insightDashboardApi.getExecutionStatus(executionId) as unknown as {
+      status?: string; result?: string; error?: string
+    }
+    pollCount += 1
+    if (status.status === 'SUCCEEDED') {
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'poll-complete', executionId, requestId, requestOwner,
+        polls: pollCount, elapsedMs: Math.round(performance.now() - pollingStartedAt), status: status.status,
+      }))
+      return { status: status.status, envelope: status.result ? JSON.parse(status.result) : undefined }
+    }
+    if (status.status === 'RESULT_REF') {
+      const result = await insightDashboardApi.getExecutionResult(executionId) as unknown as { envelope?: unknown }
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'poll-complete', executionId, requestId, requestOwner,
+        polls: pollCount, elapsedMs: Math.round(performance.now() - pollingStartedAt), status: status.status,
+      }))
+      return { status: status.status, envelope: result.envelope }
+    }
+    if (status.status && status.status !== 'RUNNING' && status.status !== 'SUBMITTING') {
+      throw new Error(`${status.status}: ${status.error || '脚本执行未成功'}`)
+    }
+    await new Promise((resolve) => setTimeout(resolve, scriptPollDelayMs(attempt)))
+  }
+  throw new Error('脚本执行等待超时')
+}
+
+
+/** 旧版直连数据集（非管线）组件：仍走整页 preview 接口 */
+function directQueryComponents(): InsightComponent[] {
+  return collectDashboardComponents(currentPageComponents.value)
+    .filter((component) => component.dataSource && !readComponentDatasetPipeline(component))
+}
+
+/** 旧版直连组件仍走预览接口，但按组件合并并拒绝过期整页响应。 */
 async function reloadComponentData(context: DashboardFilterContext): Promise<void> {
-  dataLoading.value = true
+  const requestId = ++queryRequestSequence
+  const directComponents = directQueryComponents()
+  const directIds = new Set(directComponents.map((component) => component.id))
+  if (directComponents.length === 0) return
+  directIds.forEach((componentId) => latestComponentRequest.set(componentId, requestId))
+  directComponents.forEach((component) => writeComponentQueryState(component, 'loading'))
   try {
-    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
-    const dataMap: Record<string, InsightComponentData> = {}
-    for (const item of dataList ?? []) {
-      dataMap[item.componentId] = item
+    const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    const dataMap = { ...componentDataMap.value }
+    const returned = new Set<string>()
+    for (const rawItem of dataList ?? []) {
+      if (directIds.has(rawItem.componentId) && latestComponentRequest.get(rawItem.componentId) === requestId) {
+        dataMap[rawItem.componentId] = resolvedQueryData(rawItem)
+        returned.add(rawItem.componentId)
+      }
+    }
+    for (const component of directComponents) {
+      if (latestComponentRequest.get(component.id) !== requestId || returned.has(component.id)) continue
+      dataMap[component.id] = { componentId: component.id, renderType: componentRenderType(component), queryStatus: 'empty' }
     }
     componentDataMap.value = dataMap
-  } catch {
-    ElMessage.warning(t('insight.previewDataFailed'))
-  } finally {
-    dataLoading.value = false
+  } catch (error) {
+    const dataMap = { ...componentDataMap.value }
+    for (const componentId of directIds) {
+      if (latestComponentRequest.get(componentId) !== requestId) continue
+      const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+      if (!component) continue
+      dataMap[componentId] = {
+        componentId,
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: error instanceof Error ? error.message : t('insight.previewDataFailed'),
+      }
+    }
+    componentDataMap.value = dataMap
+  }
+}
+
+function pipelineComponents(): InsightComponent[] {
+  return collectDashboardComponents(currentPageComponents.value)
+    .filter((component) => ['kpi', 'chart', 'table'].includes(component.type)
+      && Boolean(readComponentDatasetPipeline(component)?.datasetInputs?.length))
+}
+
+function componentUsesFilter(component: InsightComponent, filterId: string): boolean {
+  const pipeline = readComponentDatasetPipeline(component)
+  const inputBound = pipeline?.datasetInputs?.some((input) =>
+    input.queryConfig?.parameterBindings?.some((binding) => binding.filterComponentId === filterId))
+  const outputBound = pipeline?.finalResultQueryConfig?.filterFields?.some((field) => field.filterComponentId === filterId)
+  return Boolean(inputBound || outputBound)
+}
+
+function filterTargetsComponent(filterId: string, component: InsightComponent, state: DashboardRuntimeFilterState): boolean {
+  const filter = state[filterId]
+  return !filter || filter.scope !== 'scoped' || filter.targetComponentIds.includes(component.id)
+}
+
+function finalResultFilterParameters(component: InsightComponent, state: DashboardRuntimeFilterState): Record<string, unknown> {
+  const pipeline = readComponentDatasetPipeline(component)
+  const config = pipeline?.finalResultQueryConfig
+  const parameters: Record<string, unknown> = {}
+  for (const field of config?.filterFields ?? []) {
+    if (!field.filterComponentId) continue
+    const runtimeFilter = state[field.filterComponentId]
+    if (!runtimeFilter || runtimeFilter.value == null || runtimeFilter.value === ''
+      || (Array.isArray(runtimeFilter.value) && runtimeFilter.value.length === 0)) continue
+    const value = runtimeFilter.value
+    const operators = field.operators ?? []
+    let operator: string | undefined
+    let parameterValue: unknown = value
+    if (Array.isArray(value)) operator = operators.includes('in') ? 'in' : operators[0]
+    else if (typeof value === 'object' && 'preset' in value) {
+      if (operators.includes('between') && value.start && value.end) {
+        operator = 'between'
+        parameterValue = [value.start, value.end]
+      } else if (operators.includes('gte') && value.start) {
+        operator = 'gte'
+        parameterValue = value.start
+      } else if (operators.includes('lt') && value.end) {
+        operator = 'lt'
+        parameterValue = value.end
+      }
+    } else operator = operators.includes('eq') ? 'eq' : operators[0]
+    if (!operator) continue
+    parameters[field.parameterName] = parameterValue
+  }
+  return parameters
+}
+
+function finalResultQueryConfig(component: InsightComponent, state: DashboardRuntimeFilterState): Record<string, unknown> | undefined {
+  const config = readComponentDatasetPipeline(component)?.finalResultQueryConfig
+  if (!config || !isFinalResultQueryConfigured(config)) return undefined
+  return {
+    ...config,
+    parameterBindings: config.filterFields
+      .filter((field) => field.filterComponentId && field.operators?.length)
+      .map((field) => ({
+        parameterName: field.parameterName,
+        field: field.field,
+        operator: (() => {
+          const value = field.filterComponentId ? state[field.filterComponentId]?.value : undefined
+          if (Array.isArray(value)) return field.operators.includes('in') ? 'in' : field.operators[0]
+          if (value && typeof value === 'object' && 'preset' in value) {
+            return field.operators.includes('between') ? 'between'
+              : field.operators.includes('gte') ? 'gte' : field.operators[0]
+          }
+          return field.operators.includes('eq') ? 'eq' : field.operators[0]
+        })(),
+      })),
+  }
+}
+
+/** 将图表私有时间范围覆盖到该管道实际绑定的时间筛选器，仅影响本次组件查询。 */
+function filtersWithComponentTimeRange(
+  component: InsightComponent,
+  filters: DashboardRuntimeFilterState,
+  timeRange: TimeRangeValue,
+): DashboardRuntimeFilterState {
+  const pipeline = readComponentDatasetPipeline(component)
+  const filterIds = new Set<string>()
+  for (const input of pipeline?.datasetInputs ?? []) {
+    for (const binding of input.queryConfig?.parameterBindings ?? []) {
+      filterIds.add(binding.filterComponentId)
+    }
+  }
+  for (const field of pipeline?.finalResultQueryConfig?.filterFields ?? []) {
+    if (field.filterComponentId) filterIds.add(field.filterComponentId)
+  }
+
+  const timeFilters = collectDashboardComponents(currentPageComponents.value).filter((candidate) => {
+    if (candidate.type !== 'timeFilter' || !filterIds.has(candidate.id)) return false
+    const config = candidate.config as { scope?: string; targetComponentIds?: string[] } | undefined
+    return config?.scope !== 'scoped' || config.targetComponentIds?.includes(component.id) === true
+  })
+  if (timeFilters.length === 0) {
+    throw new Error('组件级时间筛选无法作用于此数据集管道，请先在查询配置中绑定时间筛选器')
+  }
+
+  const nextFilters = { ...filters }
+  for (const timeFilter of timeFilters) {
+    const config = timeFilter.config as { field?: string; scope?: 'global' | 'scoped'; targetComponentIds?: string[] } | undefined
+    nextFilters[timeFilter.id] = {
+      field: config?.field || 'metric_time',
+      scope: config?.scope ?? 'global',
+      targetComponentIds: [...(config?.targetComponentIds ?? [])],
+      value: { ...timeRange },
+    }
+  }
+  return nextFilters
+}
+
+/** 对一个当前页管道组件执行受控输入查询，必要时再运行 Python 和输出阶段过滤。 */
+async function refreshPipelineComponent(
+  component: InsightComponent,
+  filters: DashboardRuntimeFilterState,
+  componentTimeRange?: TimeRangeValue,
+): Promise<void> {
+  const pipeline = readComponentDatasetPipeline(component)
+  if (!pipeline?.datasetInputs?.length) return
+  const componentStartedAt = performance.now()
+  const requestId = ++queryRequestSequence
+  latestComponentRequest.set(component.id, requestId)
+  writeComponentQueryState(component, 'loading')
+  try {
+    const effectiveFilters = componentTimeRange
+      ? filtersWithComponentTimeRange(component, filters, componentTimeRange)
+      : filters
+    const invalidInput = pipeline.datasetInputs.find((input) => !/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
+    if (invalidInput) throw new Error(`数据集「${invalidInput.inputName}」尚未落库，无法在预览中查询`)
+    const queryContext = {
+      dashboardId: props.dashboardId,
+      componentId: component.id,
+      parameters: buildComponentQueryParameters(component, effectiveFilters),
+      requestId: String(requestId),
+    }
+    let rows: Record<string, unknown>[]
+    let fieldLabels: Record<string, string> | undefined
+    let totalCount: number | undefined
+    const script = pipeline.script?.trim()
+    if (script) {
+      const submitStartedAt = performance.now()
+      const created = await insightDashboardApi.executeComponent(
+        props.dashboardId, component.id, {}, JSON.stringify(schema), queryContext,
+      ) as unknown as { executionId?: string }
+      console.info('[dashboard-perf]', JSON.stringify({
+        stage: 'submit-response', dashboardId: props.dashboardId, componentId: component.id,
+        requestId, executionId: created.executionId,
+        elapsedMs: Math.round(performance.now() - submitStartedAt),
+      }))
+      if (!created.executionId) throw new Error('未获取到组件执行 ID')
+      const polled = await pollScriptExecution(created.executionId, requestId, component.id)
+      if (polled.status === '__abandoned__') return
+      const envelope = polled.envelope
+      const outputConfig = finalResultQueryConfig(component, effectiveFilters)
+      const parsed = parseScriptResultEnvelope(envelope)
+      if (parsed.kind !== 'table') throw new Error(parsed.kind === 'message' ? parsed.message : 'Python 输出不是表格结果')
+      const pipelineConfig = pipeline.finalResultQueryConfig
+      const outputConfigStatus = finalResultQueryConfigStatus(
+        pipelineConfig,
+        outputConfig ? extractResultSchema(parsed) : undefined,
+      )
+      if (outputConfig && outputConfigStatus !== 'conflict') {
+        const resultQueryStartedAt = performance.now()
+        const result = await insightDashboardApi.previewExecutionResult(created.executionId, {
+          parameters: finalResultFilterParameters(component, effectiveFilters), requestId: String(requestId),
+          finalResultQueryConfig: outputConfig,
+        }) as unknown as { rows?: Record<string, unknown>[]; columns?: string[]; totalCount?: number }
+        console.info('[dashboard-perf]', JSON.stringify({
+          stage: 'final-result-query', executionId: created.executionId, componentId: component.id,
+          requestId, elapsedMs: Math.round(performance.now() - resultQueryStartedAt), rowCount: result.rows?.length ?? 0,
+        }))
+        rows = result.rows ?? []
+        totalCount = result.totalCount
+        const configured = pipeline.finalResultQueryConfig?.displayFields ?? []
+        fieldLabels = Object.fromEntries(configured.map((field) => [field.field, field.title]))
+      } else {
+        rows = parsed.data.rows
+        fieldLabels = Object.fromEntries(parsed.data.columns.map((column) => [column.name, column.title ?? column.name]))
+      }
+    } else {
+      if (pipeline.datasetInputs.length !== 1) {
+        throw new Error(`组件 ${component.title || component.id} 配置了多个输入但没有 Python 脚本，无法确定组合方式`)
+      }
+      const input = pipeline.datasetInputs[0]
+      const result = await datasetApi.previewQueryPlan({
+        datasetId: input.datasetId,
+        inputName: input.inputName,
+        queryConfig: input.queryConfig,
+        queryContext,
+      })
+      rows = result.rows ?? []
+      totalCount = result.totalCount
+      fieldLabels = Object.fromEntries((input.queryConfig?.displayFields ?? []).map((field) => [field.field, field.title]))
+    }
+    if (latestComponentRequest.get(component.id) !== requestId) return
+    const queryStatus = rows.length === 0 ? 'empty' : 'success'
+    const renderedData = toComponentData(component, rows, fieldLabels, {
+      projectKpiFromResult: Boolean(script && component.type === 'kpi'),
+    })
+    if (component.type === 'table' && typeof totalCount === 'number' && renderedData.table) {
+      renderedData.table.totalCount = totalCount
+    }
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [component.id]: {
+        ...renderedData,
+        queryStatus,
+      },
+    }
+    console.info('[dashboard-perf]', JSON.stringify({
+      stage: 'component-complete', dashboardId: props.dashboardId, componentId: component.id,
+      requestId, elapsedMs: Math.round(performance.now() - componentStartedAt), rowCount: rows.length,
+      hasPython: Boolean(script),
+    }))
+  } catch (error) {
+    if (latestComponentRequest.get(component.id) !== requestId) return
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [component.id]: {
+        componentId: component.id,
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: error instanceof Error ? error.message : String(error),
+      },
+    }
+    console.info('[dashboard-perf]', JSON.stringify({
+      stage: 'component-failed', dashboardId: props.dashboardId, componentId: component.id,
+      requestId, elapsedMs: Math.round(performance.now() - componentStartedAt),
+      errorType: error instanceof Error ? error.name : 'UnknownError',
+    }))
+  }
+}
+
+async function refreshPipelineComponents(filters: DashboardRuntimeFilterState, initial = false): Promise<void> {
+  const changedFilterIds = Object.keys({ ...previousRuntimeFilterState, ...filters }).filter((filterId) =>
+    JSON.stringify([previousRuntimeFilterState[filterId]?.value, previousRuntimeFilterState[filterId]?.timeGranularity])
+      !== JSON.stringify([filters[filterId]?.value, filters[filterId]?.timeGranularity]))
+  previousRuntimeFilterState = filters
+  const components = pipelineComponents().filter((component) => initial
+    || changedFilterIds.some((filterId) => filterTargetsComponent(filterId, component, filters)
+      && componentUsesFilter(component, filterId)))
+  await Promise.all(components.map((component) => refreshPipelineComponent(component, filters)))
+}
+
+/** 执行已保存脚本，并将用户确认过的结果绑定覆盖到对应组件。 */
+async function reloadScriptBindings(
+  context: DashboardFilterContext = filterContext.value,
+  componentIds?: Set<string>,
+): Promise<void> {
+  if (!schema.script?.trim() || !schema.scriptBindings?.length) return
+  const components = collectDashboardComponents(schema.pages.flatMap((page) => page.components))
+  // 唯一数据源仲裁：组件已由数据集管线或旧版直连通道提供数据时，整页脚本绑定让位，
+  // 避免同一组件被两个通道并发写入产生竞态（优先级：管线 > 直连 > 脚本绑定）。
+  const channelCovered = new Set<string>([
+    ...pipelineComponents().map((component) => component.id),
+    ...directQueryComponents().map((component) => component.id),
+  ])
+  const bindings = schema.scriptBindings.filter((binding) =>
+    (!componentIds || componentIds.has(binding.componentId)) && !channelCovered.has(binding.componentId))
+  if (!bindings.length) return
+  const requestId = ++queryRequestSequence
+  bindings.forEach((binding) => {
+    latestComponentRequest.set(binding.componentId, requestId)
+    const component = components.find((item) => item.id === binding.componentId)
+    if (component) writeComponentQueryState(component, 'loading')
+  })
+  try {
+    const created = await insightDashboardApi.execute(
+      props.dashboardId,
+      buildScriptParameters(schema.parameters ?? [], context, schema.scriptFilterBindings ?? []),
+    )
+    const executionId = (created as unknown as { executionId?: string }).executionId
+    if (!executionId) throw new Error('未获取到脚本执行 ID')
+    const polled = await pollScriptExecution(executionId, requestId, bindings[0]?.componentId ?? '')
+    if (polled.status === '__abandoned__') return
+    const resultEnvelope = polled.envelope
+    for (const binding of bindings) {
+      if (latestComponentRequest.get(binding.componentId) !== requestId) continue
+      const component = components.find((item) => item.id === binding.componentId)
+      if (!component) continue
+      const envelope = parseScriptResultEnvelope(resultEnvelope)
+      const adapted = resultEnvelopeToComponentData({
+        id: component.id,
+        type: component.type,
+        chartType: component.chartType,
+        config: component.config,
+        kpiMetrics: component.kpiMetrics,
+      }, envelope)
+      if (adapted.state === 'message') {
+        const queryStatus = isQueryTimeout(new Error(adapted.message)) ? 'timeout' : 'error'
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, queryStatus, error: adapted.message }
+      } else if (adapted.state === 'empty') {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: binding.renderType, queryStatus: 'empty', fieldLabels: adapted.fieldLabels, table: { columns: adapted.columns.map((column) => column.name), rows: [] } }
+      } else if (binding.renderType === 'echarts') {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'echarts', queryStatus: 'success', option: adapted.option, fieldLabels: adapted.fieldLabels }
+      } else if (binding.renderType === 'kpi') {
+        const kpiList = (adapted.kpiList ?? (adapted.value === undefined ? [] : [{ name: '值', value: adapted.value }]))
+          .map((item, index) => ({
+            fieldKey: item.fieldKey ?? component.kpiMetrics?.[index]?.fieldKey ?? `value_${index}`,
+            name: item.name,
+            value: String(item.value),
+            unit: component.kpiMetrics?.[index]?.unit,
+          }))
+        componentDataMap.value[binding.componentId] = {
+          componentId: binding.componentId,
+          renderType: 'kpi',
+          queryStatus: kpiList.length > 0 ? 'success' : 'empty',
+          kpi: kpiList[0],
+          kpiList,
+          fieldLabels: adapted.fieldLabels,
+        }
+      } else {
+        componentDataMap.value[binding.componentId] = { componentId: binding.componentId, renderType: 'table', queryStatus: adapted.table.rows.length > 0 ? 'success' : 'empty', table: adapted.table, fieldLabels: adapted.fieldLabels }
+      }
+    }
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    for (const binding of bindings) {
+      if (latestComponentRequest.get(binding.componentId) !== requestId) continue
+      componentDataMap.value[binding.componentId] = {
+        componentId: binding.componentId,
+        renderType: binding.renderType,
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: errorMessage,
+      }
+    }
   }
 }
 
@@ -383,17 +1176,41 @@ async function reloadScopedComponentData(context: DashboardFilterContext): Promi
 }
 
 /** 防抖重载（筛选频繁变化时避免过多请求） */
-function scheduleReloadWithFilters(context: DashboardFilterContext): void {
+function scheduleReloadWithFilters(context: DashboardFilterContext, refreshAllPipelines = false): void {
+  dataRefreshPending.value = true
   if (filterReloadTimer) {
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
-    reloadScopedComponentData(context)
+    if (previewDisposed) return
+    const state = getRuntimeFilterState()
+    void Promise.allSettled([
+      reloadScopedComponentData(context),
+      reloadScriptBindings(context),
+      refreshPipelineComponents(state, refreshAllPipelines),
+    ]).finally(() => {
+      dataRefreshPending.value = false
+      scheduleAutoAiAnalysis()
+    })
   }, 300)
 }
 
+function handleTableViewChange(view: AiAnalysisTableView & { componentId: string }): void {
+  const previous = tableViews[view.componentId]
+  const next: AiAnalysisTableView = {
+    currentPage: view.currentPage,
+    pageSize: view.pageSize,
+    total: view.total,
+    columns: [...view.columns],
+    rows: view.rows.map((row) => [...row]),
+    sort: view.sort ? { ...view.sort } : null,
+  }
+  if (JSON.stringify(previous) === JSON.stringify(next)) return
+  tableViews[view.componentId] = next
+}
+
 /** 筛选组件值变化 */
-function handleFilterChange(payload: { componentId: string; field: string; value: string }): void {
+function handleFilterChange(payload: { componentId: string; field: string; value: string | string[] | undefined }): void {
   if (!payload.field) {
     return
   }
@@ -401,12 +1218,8 @@ function handleFilterChange(payload: { componentId: string; field: string; value
 }
 
 /** 时间筛选组件值变化 */
-function handleTimeFilterChange(payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void {
-  if (!payload.timeRange?.preset) {
-    setTimeRange(undefined, payload.componentId)
-    return
-  }
-  setTimeRange(payload.timeRange, payload.componentId)
+function handleTimeFilterChange(payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void {
+  setTimeRange(payload.timeRange, payload.componentId, payload.timeGranularity)
 }
 
 /** 组件级时间筛选变化（图表右上角时间选择器） */
@@ -416,11 +1229,22 @@ function handleComponentTimeRangeChange(payload: { componentId: string; timeRang
   } else {
     delete componentTimeRanges[payload.componentId]
   }
+  const component = collectDashboardComponents(currentPageComponents.value)
+    .find((item) => item.id === payload.componentId)
+  if (component && readComponentDatasetPipeline(component)?.datasetInputs?.length) {
+    void refreshPipelineComponent(component, getRuntimeFilterState(), payload.timeRange)
+    return
+  }
   reloadSingleComponentData(payload.componentId, payload.timeRange)
 }
 
 /** 重新加载单个组件数据（组件级时间筛选变化时） */
 async function reloadSingleComponentData(componentId: string, componentTimeRange?: TimeRangeValue): Promise<void> {
+  const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+  if (!component) return
+  const requestId = ++queryRequestSequence
+  latestComponentRequest.set(componentId, requestId)
+  writeComponentQueryState(component, 'loading')
   // 构建该组件专属的筛选上下文：合并全局筛选 + 组件级时间覆盖
   const context: DashboardFilterContext = {
     ...filterContext.value,
@@ -429,44 +1253,163 @@ async function reloadSingleComponentData(componentId: string, componentTimeRange
     sourceFilterId: `__component_${componentId}`,
   }
   try {
-    const dataList = await preview(props.dashboardId, context) as unknown as InsightComponentData[]
-    const dataMap = { ...componentDataMap.value }
-    for (const item of dataList ?? []) {
-      if (item.componentId === componentId) {
-        dataMap[item.componentId] = item
-      }
+    const dataList = await insightDashboardApi.preview(props.dashboardId, context) as unknown as InsightComponentData[]
+    if (latestComponentRequest.get(componentId) !== requestId) return
+    const item = (dataList ?? []).find((candidate) => candidate.componentId === componentId)
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: item
+        ? resolvedQueryData(item)
+        : { componentId, renderType: componentRenderType(component), queryStatus: 'empty' },
     }
-    componentDataMap.value = dataMap
-  } catch {
-    ElMessage.warning(t('insight.previewDataFailed'))
+  } catch (error) {
+    if (latestComponentRequest.get(componentId) !== requestId) return
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: {
+        componentId,
+        renderType: componentRenderType(component),
+        queryStatus: isQueryTimeout(error) ? 'timeout' : 'error',
+        error: error instanceof Error ? error.message : t('insight.previewDataFailed'),
+      },
+    }
   }
 }
 
-/** AI 分析组件触发生成（同步接口） */
-async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
-  if (aiAnalysisGeneratingIds.has(componentId)) return
+function retryComponentQuery(componentId: string): void {
+  const component = collectDashboardComponents(currentPageComponents.value).find((item) => item.id === componentId)
+  if (!component) return
+  if (readComponentDatasetPipeline(component)?.datasetInputs?.length) {
+    void refreshPipelineComponent(component, getRuntimeFilterState(), componentTimeRanges[componentId])
+    return
+  }
+  if (component.dataSource) {
+    void reloadSingleComponentData(componentId, componentTimeRanges[componentId])
+    return
+  }
+  if (schema.scriptBindings?.some((binding) => binding.componentId === componentId)) {
+    void reloadScriptBindings(filterContext.value, new Set([componentId]))
+  }
+}
+
+function isQueryExpected(component: InsightComponent): boolean {
+  return Boolean(component.dataSource)
+    || Boolean(readComponentDatasetPipeline(component)?.datasetInputs?.length)
+    || Boolean(schema.scriptBindings?.some((binding) => binding.componentId === component.id))
+}
+
+function isCurrentAnalysisDataReady(): boolean {
+  if (!previewDataReady.value || dataRefreshPending.value) return false
+  return collectVisibleAnalysisComponents(currentPageComponents.value).every((component) => {
+    if (!isQueryExpected(component)) return true
+    const status = componentDataMap.value[component.id]?.queryStatus
+    return Boolean(status && status !== 'loading')
+  })
+}
+
+function waitForCurrentAnalysisData(): Promise<void> {
+  if (isCurrentAnalysisDataReady()) return Promise.resolve()
+  return new Promise((resolve) => {
+    const stop = watch(isCurrentAnalysisDataReady, (ready) => {
+      if (ready || previewDisposed) {
+        stop()
+        resolve()
+      }
+    }, { immediate: true })
+  })
+}
+
+function currentAiAnalysisSnapshot() {
+  const page = schema.pages.find((item) => item.id === activePageId.value)
+  return buildAiAnalysisSnapshot({
+    pageId: activePageId.value,
+    pageTitle: page?.name ?? '',
+    components: currentPageComponents.value,
+    componentDataMap: componentDataMap.value,
+    tableViews,
+    filters: getRuntimeFilterState(),
+  })
+}
+
+function invalidatePendingAiAnalysis(): void {
+  for (const [componentId, request] of aiAnalysisRequests) {
+    if (request.waitingForData) continue
+    request.controller.abort()
+    aiAnalysisRequests.delete(componentId)
+    aiAnalysisGeneratingIds.delete(componentId)
+  }
+}
+
+function scheduleAutoAiAnalysis(): void {
+  const scheduleSequence = ++autoAnalysisScheduleSequence
+  if (previewDisposed || !isCurrentAnalysisDataReady()) return
+  void nextTick().then(() => {
+    if (previewDisposed || scheduleSequence !== autoAnalysisScheduleSequence || !isCurrentAnalysisDataReady()) return
+    const snapshot = currentAiAnalysisSnapshot()
+    for (const component of collectVisibleAiAnalysisComponents(currentPageComponents.value)) {
+      const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
+      if (config?.autoGenerate !== true) continue
+      const key = JSON.stringify({ promptTemplate: config.promptTemplate ?? '', snapshot })
+      if (lastAutoAnalysisKeys.get(component.id) === key) continue
+      lastAutoAnalysisKeys.set(component.id, key)
+      void runAiAnalysis(component.id, snapshot, config.promptTemplate)
+    }
+  })
+}
+
+/** 自动模式在当前快照变化后运行；手动模式由卡片按钮调用同一流程。 */
+async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<typeof currentAiAnalysisSnapshot>, promptTemplate?: string): Promise<void> {
+  if (aiAnalysisRequests.has(componentId)) return
+  const sequence = ++aiAnalysisRequestSequence
+  const controller = new AbortController()
+  const requestState = { sequence, controller, waitingForData: true }
+  aiAnalysisRequests.set(componentId, requestState)
   aiAnalysisGeneratingIds.add(componentId)
 
   try {
-    const analysisMarkdown = await generateReport(props.dashboardId)
-    aiAnalysisContents[componentId] = analysisMarkdown
-    const dataMap = { ...componentDataMap.value }
-    const existing = dataMap[componentId]
-    if (existing) {
-      dataMap[componentId] = {
-        ...existing,
-        aiAnalysis: {
-          dataSection: existing.aiAnalysis?.dataSection ?? '',
-          analysisSection: analysisMarkdown,
-        },
-      }
-      componentDataMap.value = dataMap
+    while (!previewDisposed && !isCurrentAnalysisDataReady()) {
+      await waitForCurrentAnalysisData()
+      // 让表格在查询完成后先同步实际展示页，快照中的 rows/page/size 才与界面一致。
+      await nextTick()
     }
-  } catch (err: any) {
-    ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + (err?.message || String(err)))
+    if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    requestState.waitingForData = false
+    const component = collectVisibleAiAnalysisComponents(currentPageComponents.value).find((item) => item.id === componentId)
+    if (!component) return
+    const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
+    const snapshot = suppliedSnapshot ?? currentAiAnalysisSnapshot()
+    const requestPrompt = promptTemplate ?? config?.promptTemplate
+    const request = { promptTemplate: requestPrompt, snapshot }
+    const markdown = await generateComponentAnalysis(props.dashboardId, componentId, request, controller.signal)
+    if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    const existing = componentDataMap.value[componentId]
+    componentDataMap.value = {
+      ...componentDataMap.value,
+      [componentId]: {
+        ...existing,
+        componentId,
+        renderType: 'aiAnalysis',
+        aiAnalysis: {
+          dataSection: existing?.aiAnalysis?.dataSection ?? '',
+          analysisSection: markdown,
+        },
+      },
+    }
+  } catch (err) {
+    if (controller.signal.aborted || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    const message = err instanceof Error ? err.message : String(err)
+    ElMessage.error(t('insight.aiAnalysis.generateFailed') + ': ' + message)
   } finally {
-    aiAnalysisGeneratingIds.delete(componentId)
+    if (aiAnalysisRequests.get(componentId)?.sequence === sequence) {
+      aiAnalysisRequests.delete(componentId)
+      aiAnalysisGeneratingIds.delete(componentId)
+    }
   }
+}
+
+/** 手动模式只在明确点击时生成；同样等待当前可见数据进入终态。 */
+async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
+  await runAiAnalysis(componentId)
 }
 
 /** 生成报告 */
@@ -656,8 +1599,29 @@ function handlePageChange(pageId: string): void {
     return
   }
   activePageId.value = pageId
+  initializeDefaults()
   // 页面切换后重新加载数据（筛选上下文不变，但可见组件变化）
-  scheduleReloadWithFilters(filterContext.value)
+  scheduleReloadWithFilters(filterContext.value, true)
+}
+
+function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: string): void {
+  if (pageIds.length < 2 || !['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+    return
+  }
+  event.preventDefault()
+  const currentIndex = pageIds.indexOf(pageId)
+  if (currentIndex < 0) return
+  let nextIndex = currentIndex
+  if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = pageIds.length - 1
+  else if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % pageIds.length
+  else nextIndex = (currentIndex - 1 + pageIds.length) % pageIds.length
+  const nextPageId = pageIds[nextIndex]
+  handlePageChange(nextPageId)
+  nextTick(() => {
+    const nextTab = document.querySelector<HTMLElement>(`.page-tab[data-page-id="${CSS.escape(nextPageId)}"]`)
+    nextTab?.focus()
+  })
 }
 </script>
 
@@ -667,7 +1631,7 @@ function handlePageChange(pageId: string): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--db-bg);
+  background: var(--dashboard-preview-background, var(--db-bg));
   overflow: hidden;
   /* 与列表页/编辑页一致：四周留灰底边距，页头与预览卡片悬浮于页面底色之上 */
   padding: var(--space-md) var(--space-lg) var(--space-lg);
@@ -756,11 +1720,11 @@ function handlePageChange(pageId: string): void {
 }
 
 .toolbar-status-dot.published {
-  background: #14a05a;
+  background: var(--db-status-success-fg);
 }
 
 .toolbar-status-dot.draft {
-  background: #dd8a1d;
+  background: var(--db-status-warning-fg);
 }
 
 .toolbar-right {
@@ -797,6 +1761,13 @@ function handlePageChange(pageId: string): void {
   background: var(--main-orange);
   border-color: var(--main-orange);
   filter: brightness(1.08);
+}
+
+/* 「自适应宽度」激活态：填充主题强调色，与 100% 原始大小区分 */
+.toolbar-right :deep(.el-button.preview-fill-btn.active) {
+  background: var(--db-accent);
+  border-color: var(--db-accent);
+  color: #fff;
 }
 
 .generating-indicator {
@@ -1036,8 +2007,7 @@ function handlePageChange(pageId: string): void {
   color: var(--db-text-muted);
 }
 
-/* 预览区卡片容器：Tab 行与内容一起框进同一张卡片，
-   Tab 行是卡片白色头部，画布保持灰底作为卡片内嵌区域 */
+/* 预览内容区与仪表盘画布使用同一主题底色；页签和组件卡片保留各自表面色 */
 .preview-body {
   flex: 1;
   overflow: hidden;
@@ -1045,10 +2015,25 @@ function handlePageChange(pageId: string): void {
   flex-direction: column;
   /* 外边距已由根容器统一提供，与列表页灰底留边一致 */
   margin: 0;
-  background: var(--db-card);
+  background: var(--dashboard-preview-background, var(--db-bg));
   border: 1px solid var(--db-border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
+}
+
+.preview-load-state {
+  flex: 1;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--db-text-muted);
+}
+
+.preview-load-state.is-error {
+  color: var(--db-negative, #b42318);
 }
 
 /* Tab 行：卡片头部平铺式标签，激活项主题色下划线，

@@ -28,7 +28,7 @@
           <span class="step-label">{{ t('dsForm.stepFinish') }}</span>
         </div>
       </div>
-      <span class="close-btn" @click="handleClose">{{ '\u2715' }}</span>
+      <button type="button" class="close-btn" aria-label="关闭数据源配置" @click="handleClose">{{ '\u2715' }}</button>
     </header>
 
     <!-- 主体区域 -->
@@ -44,8 +44,9 @@
             {{ t('dsForm.selfHostedDB') }} - {{ datasourceInfo.name }}
           </h2>
 
-          <p v-if="selectedDbId !== 60" class="version-hint">{{ '\uD83D\uDCA1' }} {{ t('dsForm.versionHint', { versions: '5.5、5.6、5.7、8.0' }) }}</p>
-          <p v-else class="version-hint">{{ '\uD83D\uDCA1' }} Aloudata CAN 指标平台，支持指标查询、维度分析等功能</p>
+          <p v-if="selectedDbId === 3" class="version-hint">{{ '\uD83D\uDCA1' }} {{ t('dsForm.versionHint', { versions: '5.5、5.6、5.7、8.0' }) }}</p>
+          <p v-else-if="selectedDbId === 60" class="version-hint">{{ '\uD83D\uDCA1' }} Aloudata CAN 指标平台，支持指标查询、维度分析等功能</p>
+          <p v-else class="version-hint">{{ '\uD83D\uDCA1' }} 通过对应数据库的 JDBC 驱动建立连接</p>
 
           <div class="form-grid">
             <!-- 显示名称 -->
@@ -54,6 +55,7 @@
               <input
                 v-model="form.displayName"
                 class="form-input"
+                :aria-label="t('dsForm.fieldDisplayName')"
                 :placeholder="t('dsForm.placeholderDisplayName')"
               />
             </div>
@@ -66,6 +68,7 @@
                 <input
                   v-model="form.productHost"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldProductAddress')"
                   :placeholder="t('metricPlatform.placeholderProductAddress')"
                 />
               </div>
@@ -76,6 +79,7 @@
                 <input
                   v-model="form.aloudataPort"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldProductPort')"
                   placeholder="8083"
                 />
               </div>
@@ -86,6 +90,7 @@
                 <input
                   v-model="form.semanticHost"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldSemanticAddress')"
                   :placeholder="t('metricPlatform.placeholderSemanticAddress')"
                 />
               </div>
@@ -96,6 +101,7 @@
                 <input
                   v-model="form.semanticPort"
                   class="form-input"
+                  :aria-label="t('metricPlatform.fieldSemanticPort')"
                   placeholder="8085"
                 />
               </div>
@@ -111,6 +117,7 @@
                 <input
                   v-model="form.tenantId"
                   class="form-input"
+                  aria-label="租户 ID"
                   placeholder="请输入租户 ID"
                 />
               </div>
@@ -123,7 +130,7 @@
                     <span class="form-tip">?</span>
                   </el-tooltip>
                 </label>
-                <select v-model="form.authType" class="form-select">
+                <select v-model="form.authType" class="form-select" aria-label="认证方式">
                   <option value="UID">UID</option>
                   <option value="TOKEN">TOKEN</option>
                   <option value="ACCOUNT">ACCOUNT</option>
@@ -143,6 +150,7 @@
                   <input
                     v-model="form.authValue"
                     class="form-input"
+                    aria-label="认证值"
                     :type="showPassword ? 'text' : 'password'"
                     :placeholder="isEditMode ? '请输入新认证值，留空表示不修改' : ''"
                   />
@@ -150,6 +158,7 @@
                     type="button"
                     class="eye-btn"
                     :title="showPassword ? '隐藏' : '显示'"
+                    :aria-label="showPassword ? '隐藏认证值' : '显示认证值'"
                     @click="showPassword = !showPassword"
                   >
                     <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -185,6 +194,7 @@
                 <input
                   v-model="form.host"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldHost')"
                   :placeholder="t('dsForm.placeholderHost')"
                 />
               </div>
@@ -195,6 +205,7 @@
                 <input
                   v-model="form.port"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldPort')"
                   style="max-width: 120px;"
                 />
               </div>
@@ -205,6 +216,7 @@
                 <input
                   v-model="form.database"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldDatabase')"
                   :placeholder="t('dsForm.placeholderDatabase')"
                 />
               </div>
@@ -215,6 +227,7 @@
                 <input
                   v-model="form.username"
                   class="form-input"
+                  :aria-label="t('dsForm.fieldUsername')"
                   :placeholder="t('dsForm.placeholderUsername')"
                 />
               </div>
@@ -226,6 +239,7 @@
                   <input
                     v-model="form.password"
                     class="form-input"
+                    :aria-label="t('dsForm.fieldPassword')"
                     :type="showPassword ? 'text' : 'password'"
                     :placeholder="isEditMode ? '请输入新密码，留空表示不修改' : ''"
                   />
@@ -233,6 +247,7 @@
                     type="button"
                     class="eye-btn"
                     :title="showPassword ? '隐藏' : '显示'"
+                    :aria-label="showPassword ? '隐藏密码' : '显示密码'"
                     @click="showPassword = !showPassword"
                   >
                     <svg v-if="showPassword" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
@@ -244,7 +259,7 @@
               <!-- 服务器版本 -->
               <div class="form-field">
                 <label class="form-label">{{ t('dsForm.fieldVersion') }}</label>
-                <select v-model="form.version" class="form-select">
+                <select v-model="form.version" class="form-select" :aria-label="t('dsForm.fieldVersion')">
                   <option v-for="v in versionOptions" :key="v.value" :value="v.value">{{ v.label }}</option>
                 </select>
               </div>
@@ -252,14 +267,14 @@
               <!-- VPC/线路配置 -->
               <div class="form-field form-field-wide">
                 <label class="form-label" style="font-weight: 600; margin-bottom: 4px;">{{ t('dsForm.vpcConfig') }}</label>
-                <p class="field-desc" style="margin: 0; font-size: 12px; color: #86909c;">{{ t('dsForm.vpcDesc') }}</p>
+                <p class="field-desc">{{ t('dsForm.vpcDesc') }}</p>
               </div>
 
               <!-- SSL -->
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.sslEnabled" type="checkbox" />
+                    <input v-model="form.sslEnabled" type="checkbox" :aria-label="t('dsForm.ssl')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.ssl') }}</span>
@@ -270,30 +285,30 @@
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.sshEnabled" type="checkbox" />
+                    <input v-model="form.sshEnabled" type="checkbox" :aria-label="t('dsForm.ssh')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.ssh') }}</span>
                 </label>
-                <p v-if="form.sshEnabled" class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">{{ t('dsForm.sshDesc') }}</p>
+                <p v-if="form.sshEnabled" class="field-desc field-desc-indented">{{ t('dsForm.sshDesc') }}</p>
               </div>
 
               <!-- 跨 VPC/SQL -->
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
                   <label class="switch">
-                    <input v-model="form.crossVpcEnabled" type="checkbox" />
+                    <input v-model="form.crossVpcEnabled" type="checkbox" :aria-label="t('dsForm.crossVpcSql')" />
                     <span class="slider"></span>
                   </label>
                   <span class="switch-text">{{ t('dsForm.crossVpcSql') }}</span>
                 </label>
-                <p v-if="form.crossVpcEnabled" class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">{{ t('dsForm.crossVpcDesc') }}</p>
+                <p v-if="form.crossVpcEnabled" class="field-desc field-desc-indented">{{ t('dsForm.crossVpcDesc') }}</p>
               </div>
 
               <!-- 开启上传文件入口 -->
               <div class="form-field form-field-wide">
                 <label class="checkbox-label">
-                  <input v-model="form.uploadEnabled" type="checkbox" checked />
+                  <input v-model="form.uploadEnabled" type="checkbox" checked :aria-label="t('dsForm.uploadFileEntry')" />
                   <span class="checkmark-new"></span>
                   <span class="switch-text">{{ t('dsForm.uploadFileEntry') }}</span>
                 </label>
@@ -313,12 +328,12 @@
             <div class="form-field form-field-wide">
               <label class="checkbox-label">
                 <label class="switch">
-                  <input v-model="form.metaShared" type="checkbox" />
+                  <input v-model="form.metaShared" type="checkbox" aria-label="共享元数据" />
                   <span class="slider"></span>
                 </label>
                 <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
               </label>
-              <p class="field-desc" style="margin: 4px 0 0 40px; font-size: 12px; color: #86909c;">
+              <p class="field-desc field-desc-indented">
                 开启后，同工作区其他用户可查看该数据源的元数据（不包含连接配置）
               </p>
             </div>
@@ -413,7 +428,6 @@ onMounted(async () => {
         }
         form.productHost = cpAnyHost || ds.productHost || ds.host || ''
         form.semanticHost = cpSemHost || ds.semanticHost || ds.host || ''
-        form.port = String(ds.port || 3306)
         form.aloudataPort = String((ds.sourceType === 'aloudata' && ds.connectionParams)
           ? (JSON.parse(ds.connectionParams).anymetricsPort || 8083)
           : (ds.port || 8083))
@@ -425,9 +439,13 @@ onMounted(async () => {
           mysql: 3,
           postgresql: 15,
           sqlserver: 17,
+          doris: 61,
+          clickhouse: 62,
+          starrocks: 63,
           aloudata: 60,
         }
         selectedDbId.value = sourceTypeMap[ds.sourceType?.toLowerCase()] || 3
+        form.port = String(ds.port || defaultPort(selectedDbId.value))
         // 加载 Aloudata 额外配置
         if (ds.connectionParams) {
           try {
@@ -467,9 +485,12 @@ onMounted(async () => {
 /** 当前选中的数据源信息 */
 const datasourceInfo = computed(() => {
   const allSources: Record<number, { name: string; icon: string }> = {
-    3: { name: 'MySQL', icon: '\uD83D\uDC17' },
+    3: { name: 'MySQL', icon: '\uD83D\uDC2C' },
     15: { name: 'PostgreSQL', icon: '\uD83D\uDC18' },
     17: { name: 'SQL Server', icon: '\uD83D\uDD35' },
+    61: { name: 'Doris', icon: '\uD83D\uDC3F\uFE0F' },
+    62: { name: 'ClickHouse', icon: '\uD83D\uDFE1' },
+    63: { name: 'StarRocks', icon: '\u2B50' },
     60: { name: 'Aloudata', icon: '\u274E' },
   }
   return allSources[selectedDbId.value] || { name: 'MySQL', icon: '\uD83D\uDC17' }
@@ -482,7 +503,7 @@ const form = reactive({
   // Aloudata 产品层与语义层独立地址（独立进程服务）
   productHost: '',
   semanticHost: '',
-  port: '3306',
+  port: String(defaultPort(props.sourceId)),
   database: '',
   username: '',
   password: '',
@@ -520,6 +541,10 @@ const versionOptions = [
   { value: '5.6', label: '5.6' },
   { value: '5.5', label: '5.5' },
 ]
+
+function defaultPort(sourceId: number): number {
+  return ({ 15: 5432, 17: 1433, 61: 9030, 62: 8123, 63: 9030 } as Record<number, number>)[sourceId] || 3306
+}
 
 /** 白名单 IP */
 const whitelistIps = `47.101.100.24/0,191.0.0.0/47,10.137.30/0,192.92.0/0,234.204.106.15.160/0,24.106.15.160/0,23.106/15`
@@ -600,6 +625,9 @@ async function buildCreateRequest() {
     3: 'mysql',
     15: 'postgresql',
     17: 'sqlserver',
+    61: 'doris',
+    62: 'clickhouse',
+    63: 'starrocks',
     60: 'aloudata',
   }
   const isAloudata = selectedDbId.value === 60
@@ -721,7 +749,7 @@ async function handleSubmit(): Promise<void> {
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
 }
 
 /* 页面头部 */
@@ -729,7 +757,9 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   align-items: center;
   padding: 12px 24px;
-  background: #fff;
+  background: var(--theme-surface);
+  background-color: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 32px;
   position: relative;
@@ -764,7 +794,7 @@ async function handleSubmit(): Promise<void> {
 .form-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   white-space: nowrap;
 }
@@ -782,15 +812,15 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 6px;
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .step-item.done {
-  color: #00b42a;
+  color: var(--el-color-success);
 }
 
 .step-item.active {
-  color: #165dff;
+  color: var(--main-orange);
   font-weight: 500;
 }
 
@@ -803,24 +833,24 @@ async function handleSubmit(): Promise<void> {
   justify-content: center;
   font-size: 11px;
   font-weight: 600;
-  background: #f2f3f5;
-  color: #86909c;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
 }
 
 .step-item.done .step-num {
-  background: #e8ffea;
-  color: #00b42a;
+  background: color-mix(in srgb, var(--el-color-success) 16%, var(--theme-surface));
+  color: var(--el-color-success);
 }
 
 .step-item.active .step-num {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
 }
 
 .step-line {
   width: 40px;
   height: 1px;
-  background: #e5e6eb;
+  background: var(--theme-border);
 }
 
 .step-label {
@@ -842,13 +872,13 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   transition: all 0.2s;
 }
 
 .close-btn:hover {
-  background: #f2f3f5;
-  color: #4e5969;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-secondary);
 }
 
 /* 主体区域 */
@@ -872,21 +902,21 @@ async function handleSubmit(): Promise<void> {
   justify-content: center;
   align-items: center;
   padding: 80px 0;
-  color: #86909c;
+  color: var(--theme-text-muted);
   font-size: 14px;
 }
 
 .form-card {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
   padding: 24px 28px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 4px var(--theme-border);
 }
 
 .card-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 4px 0;
   display: flex;
   align-items: center;
@@ -895,7 +925,7 @@ async function handleSubmit(): Promise<void> {
 
 .version-hint {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 0 0 20px 0;
 }
 
@@ -923,13 +953,13 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 4px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   font-weight: 500;
 }
 
 .form-label.required::before {
   content: '*';
-  color: #f53f3f;
+  color: var(--el-color-danger);
   font-weight: 600;
   margin-right: 2px;
 }
@@ -941,8 +971,8 @@ async function handleSubmit(): Promise<void> {
   width: 14px;
   height: 14px;
   border-radius: 50%;
-  background: #e5e6eb;
-  color: #86909c;
+  background: var(--theme-surface-hover);
+  color: var(--theme-text-muted);
   font-size: 10px;
   font-weight: bold;
   cursor: help;
@@ -950,29 +980,48 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-tip:hover {
-  background: #165dff;
-  color: #fff;
+  background: var(--main-orange);
+  color: var(--theme-surface);
 }
 
 .form-input,
 .form-select {
+  appearance: none;
+  -webkit-appearance: none;
   height: 36px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 0 12px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: all 0.15s;
   font-family: inherit;
-  background: #fff;
+  background: var(--theme-surface);
+  background-color: var(--theme-surface) !important;
   box-sizing: border-box;
   width: 100%;
 }
 
+/* 原生 input 在部分浏览器 color-scheme 下会保留 field 白底，显式覆盖以确保主题背景生效。 */
+.datasource-form-page input.form-input,
+.datasource-form-page select.form-select {
+  background-color: var(--theme-surface) !important;
+}
+
+/* Chrome autofill 会用内部阴影覆盖 background-color，必须同时覆盖填充色和文字色。 */
+.datasource-form-page input.form-input:-webkit-autofill,
+.datasource-form-page input.form-input:-webkit-autofill:hover,
+.datasource-form-page input.form-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--theme-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--theme-surface) inset;
+  box-shadow: 0 0 0 1000px var(--theme-surface) inset;
+  caret-color: var(--theme-text);
+}
+
 .form-input:hover:not(:disabled),
 .form-select:hover:not(:disabled) {
-  border-color: #c9cdd4;
+  border-color: var(--theme-border-strong);
 }
 
 /* 多行文本域：继承输入框视觉风格，高度自适应且可纵向拉伸 */
@@ -1008,8 +1057,8 @@ async function handleSubmit(): Promise<void> {
 
 .form-input:focus,
 .form-select:focus {
-  border-color: #165dff;
-  box-shadow: 0 0 0 3px rgba(22, 93, 255, 0.08);
+  border-color: var(--main-orange);
+  box-shadow: 0 0 0 3px var(--theme-surface-hover);
 }
 
 .form-input:disabled {
@@ -1020,7 +1069,7 @@ async function handleSubmit(): Promise<void> {
 }
 
 .form-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .form-select {
@@ -1060,14 +1109,14 @@ async function handleSubmit(): Promise<void> {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   border-radius: 4px;
   transition: all 0.15s;
 }
 
 .eye-btn:hover {
-  color: #165dff;
-  background: #f2f3f5;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 /* 开关切换新样式 */
@@ -1076,31 +1125,38 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   user-select: none;
 }
 
-.checkbox-label input[type='checkbox'] {
-  display: none;
+.checkbox-label > input[type='checkbox'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .switch-text {
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
 }
 
 .field-desc {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   line-height: 1.5;
+}
+
+.field-desc-indented {
+  margin: 4px 0 0 40px;
 }
 
 /* 白名单新样式 */
 .whitelist-box-new {
   position: relative;
-  background: #fafbfc;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   padding: 12px 80px 12px 16px;
   min-height: 60px;
@@ -1109,7 +1165,7 @@ async function handleSubmit(): Promise<void> {
 .whitelist-text-new {
   font-family: 'Courier New', monospace;
   font-size: 11.5px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1121,26 +1177,26 @@ async function handleSubmit(): Promise<void> {
   bottom: 12px;
   right: 12px;
   padding: 4px 12px;
-  border: 1px solid #c9cdd4;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 4px;
-  background: #fff;
+  background: var(--theme-surface);
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
 }
 
 .copy-btn-new:hover {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 /* 复选框新样式 */
 .checkmark-new {
   width: 16px;
   height: 16px;
-  border: 1.5px solid #c9cdd4;
+  border: 1.5px solid var(--theme-border-strong);
   border-radius: 3px;
   display: inline-flex;
   align-items: center;
@@ -1151,16 +1207,22 @@ async function handleSubmit(): Promise<void> {
 }
 
 .checkbox-label input:checked + .checkmark-new {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
 }
 
 .checkbox-label input:checked + .checkmark-new::after {
   content: '✓';
-  color: #fff;
+  color: var(--theme-surface);
   font-size: 11px;
   font-weight: bold;
   position: absolute;
+}
+
+.checkbox-label > input[type='checkbox']:focus-visible + .checkmark-new,
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--main-orange);
+  outline-offset: 2px;
 }
 
 .switch {
@@ -1181,7 +1243,7 @@ async function handleSubmit(): Promise<void> {
   position: absolute;
   cursor: pointer;
   inset: 0;
-  background: #c9cdd4;
+  background: var(--theme-border-strong);
   border-radius: 10px;
   transition: background 0.25s;
 }
@@ -1193,13 +1255,13 @@ async function handleSubmit(): Promise<void> {
   width: 16px;
   left: 2px;
   bottom: 2px;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 50%;
   transition: transform 0.25s;
 }
 
 .switch input:checked + .slider {
-  background: #165dff;
+  background: var(--main-orange);
 }
 
 .switch input:checked + .slider::before {
@@ -1208,7 +1270,7 @@ async function handleSubmit(): Promise<void> {
 
 .toggle-desc {
   font-size: 11.5px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   margin: 2px 0 0 48px;
   line-height: 1.4;
 }
@@ -1223,7 +1285,7 @@ async function handleSubmit(): Promise<void> {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   user-select: none;
 }
@@ -1235,7 +1297,7 @@ async function handleSubmit(): Promise<void> {
 .checkmark {
   width: 16px;
   height: 16px;
-  border: 1.5px solid #c9cdd4;
+  border: 1.5px solid var(--theme-border-strong);
   border-radius: 3px;
   display: inline-flex;
   align-items: center;
@@ -1246,13 +1308,13 @@ async function handleSubmit(): Promise<void> {
 }
 
 .checkbox-wrap input:checked + .checkmark {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
 }
 
 .checkbox-wrap input:checked + .checkmark::after {
   content: '\u2713';
-  color: #fff;
+  color: var(--theme-surface);
   font-size: 11px;
   font-weight: bold;
   position: absolute;
@@ -1265,8 +1327,8 @@ async function handleSubmit(): Promise<void> {
 
 .whitelist-box {
   position: relative;
-  background: #fafbfc;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
   padding: 12px 80px 12px 16px;
   min-height: 60px;
@@ -1275,7 +1337,7 @@ async function handleSubmit(): Promise<void> {
 .whitelist-text {
   font-family: 'Courier New', monospace;
   font-size: 11.5px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
@@ -1287,19 +1349,19 @@ async function handleSubmit(): Promise<void> {
   bottom: 12px;
   right: 12px;
   padding: 4px 12px;
-  border: 1px solid #c9cdd4;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 4px;
-  background: #fff;
+  background: var(--theme-surface);
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   transition: all 0.2s;
   font-family: inherit;
 }
 
 .copy-btn:hover {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 /* 底部按钮 */
@@ -1309,16 +1371,16 @@ async function handleSubmit(): Promise<void> {
   gap: 12px;
   margin-top: 24px;
   padding-top: 16px;
-  border-top: 1px solid #f2f3f5;
+  border-top: 1px solid var(--theme-border);
 }
 
 .btn-cancel {
   height: 34px;
   padding: 0 20px;
   border-radius: 4px;
-  border: 1px solid #e5e6eb;
-  background: #fff;
-  color: #4e5969;
+  border: 1px solid var(--theme-border);
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1326,8 +1388,8 @@ async function handleSubmit(): Promise<void> {
 }
 
 .btn-cancel:hover {
-  border-color: #c9cdd4;
-  color: #1d2129;
+  border-color: var(--theme-border-strong);
+  color: var(--theme-text);
 }
 
 .btn-test {
@@ -1335,8 +1397,8 @@ async function handleSubmit(): Promise<void> {
   padding: 0 20px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
-  color: #fff;
+  background: var(--main-orange);
+  color: var(--theme-surface);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1348,13 +1410,13 @@ async function handleSubmit(): Promise<void> {
 }
 
 .btn-test:hover {
-  background: #0e42d2;
+  background: var(--main-orange);
 }
 
 .btn-test:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: #86909c;
+  background: var(--theme-border-strong);
 }
 
 .btn-submit {
@@ -1362,8 +1424,8 @@ async function handleSubmit(): Promise<void> {
   padding: 0 24px;
   border-radius: 4px;
   border: none;
-  background: #165dff;
-  color: #fff;
+  background: var(--main-orange);
+  color: var(--theme-surface);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1372,13 +1434,13 @@ async function handleSubmit(): Promise<void> {
 }
 
 .btn-submit:hover:not(:disabled) {
-  background: #0e42d2;
+  background: var(--main-orange);
 }
 
 .btn-submit:disabled {
   opacity: 0.6;
   cursor: not-allowed;
-  background: #86909c;
+  background: var(--theme-border-strong);
 }
 
 .btn-icon {

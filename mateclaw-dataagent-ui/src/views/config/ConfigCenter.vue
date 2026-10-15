@@ -48,7 +48,12 @@
               type="button"
               class="nav-item"
               :class="{ active: activeTab === tab.key }"
+              role="tab"
+              :data-tab-key="tab.key"
+              :aria-selected="String(activeTab === tab.key)"
+              :tabindex="activeTab === tab.key ? 0 : -1"
               @click="activeTab = tab.key"
+              @keydown="handleTabKeydown($event, tab.key)"
             >
               <span class="nav-item-icon" v-html="tab.icon"></span>
               <span class="nav-item-label">{{ t(tab.labelKey) }}</span>
@@ -188,6 +193,22 @@ const visibleTabs = computed<TabConfig[]>(() => {
   return tabs.filter((tab) => !tab.permission || hasPermission(tab.permission))
 })
 
+function handleTabKeydown(event: KeyboardEvent, key: TabKey): void {
+  if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft' && event.key !== 'Home' && event.key !== 'End') return
+  event.preventDefault()
+  const keys = visibleTabs.value.map((tab) => tab.key)
+  const index = keys.indexOf(key)
+  if (index < 0 || keys.length === 0) return
+  const nextIndex = event.key === 'Home'
+    ? 0
+    : event.key === 'End'
+      ? keys.length - 1
+      : (index + (event.key === 'ArrowRight' ? 1 : -1) + keys.length) % keys.length
+  activeTab.value = keys[nextIndex]
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLButtonElement>(`.config-nav [role="tab"][data-tab-key="${keys[nextIndex]}"]`)?.focus()
+  })
+}
 /** 一级分组定义（顺序即侧栏展示顺序） */
 const NAV_GROUPS: { key: GroupKey; labelKey: string }[] = [
   { key: 'capability', labelKey: 'configCenter.groupCapability' },

@@ -1,9 +1,9 @@
 <template>
   <div class="ai-analysis-widget">
-    <div class="analysis-header">
-      <span v-if="showTitle" class="analysis-title">{{ component.title }}</span>
+    <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
       <el-button
-        v-if="!generating"
+        v-if="!autoGenerate && !generating"
         type="primary"
         size="small"
         :icon="MagicStick"
@@ -12,7 +12,7 @@
       >
         {{ t('insight.aiAnalysis.generate') }}
       </el-button>
-      <div v-else class="generating-indicator">
+      <div v-else-if="generating" class="generating-indicator">
         <el-icon class="is-loading"><Loading /></el-icon>
         <span>{{ t('insight.aiAnalysis.generating') }}</span>
       </div>
@@ -24,14 +24,19 @@
         <div class="section-content markdown-body" v-html="renderedDataSection"></div>
       </div>
 
+      <div v-if="generating" class="analysis-loading-state" role="status" aria-live="polite">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ t('insight.aiAnalysis.generating') }}</span>
+      </div>
+
       <!-- AI 生成部分 -->
-      <div v-if="analysisSection" class="analysis-section ai-section" :data-label="t('insight.aiAnalysis.aiSectionLabel')">
+      <div v-else-if="analysisSection" class="analysis-section ai-section" :data-label="t('insight.aiAnalysis.aiSectionLabel')">
         <div class="section-content markdown-body" v-html="renderedAnalysisSection"></div>
       </div>
 
       <!-- 空状态 -->
       <div v-if="!dataSection && !analysisSection && !generating" class="analysis-placeholder">
-        <div class="placeholder-icon">🤖</div>
+        <div class="placeholder-icon"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :size="28" /></div>
         <div class="placeholder-text">{{ t('insight.aiAnalysis.placeholder') }}</div>
       </div>
     </div>
@@ -47,7 +52,8 @@ import { useI18n } from 'vue-i18n'
 import { MagicStick, Loading } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { InsightComponent, InsightComponentData } from '@/types'
+import type { InsightComponent, InsightComponentData, AIAnalysisComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
 
 defineOptions({
   name: 'AiAnalysisWidget',
@@ -58,8 +64,12 @@ const { t } = useI18n()
 const props = defineProps<{
   component: InsightComponent
   componentData?: InsightComponentData
-  showTitle?: boolean
   generating?: boolean
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
+  dashboardTheme?: ResolvedDashboardTheme
 }>()
 
 const emit = defineEmits<{
@@ -68,6 +78,7 @@ const emit = defineEmits<{
 
 const dataSection = computed(() => props.componentData?.aiAnalysis?.dataSection)
 const analysisSection = computed(() => props.componentData?.aiAnalysis?.analysisSection)
+const autoGenerate = computed(() => (props.component.config as AIAnalysisComponentConfig | undefined)?.autoGenerate === true)
 
 /** 将 Markdown 渲染为安全 HTML */
 function renderMarkdown(md: string): string {
@@ -93,8 +104,8 @@ function handleGenerate(): void {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background: var(--db-card);
-  border-radius: var(--radius-lg);
+  background: var(--component-surface, var(--db-card));
+  border-radius: var(--component-radius, var(--radius-lg));
   overflow: hidden;
 }
 
@@ -104,7 +115,7 @@ function handleGenerate(): void {
   justify-content: space-between;
   padding: var(--space-md) var(--space-lg);
   min-height: 48px;
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   gap: var(--space-sm);
 }
@@ -154,13 +165,29 @@ function handleGenerate(): void {
   gap: var(--space-lg);
 }
 
+.analysis-loading-state {
+  flex: 1;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  color: var(--db-text-muted);
+  font-size: 13px;
+}
+
+.analysis-loading-state :deep(.el-icon) {
+  color: var(--db-accent);
+  font-size: 16px;
+}
+
 .analysis-section {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-md);
-  background: var(--db-hover);
-  border: 1px solid var(--db-border);
+  background: var(--db-surface-card, var(--db-card));
+  border: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   border-radius: var(--radius-lg);
   animation: fadeIn var(--transition-base) both;
 }
@@ -332,7 +359,7 @@ function handleGenerate(): void {
 }
 
 .section-content :deep(th) {
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   font-weight: 600;
   color: var(--db-text-secondary);
 }
@@ -367,7 +394,7 @@ function handleGenerate(): void {
   text-align: center;
   padding: var(--space-sm) var(--space-md);
   border-top: 1px solid var(--db-border);
-  background: var(--db-hover);
+  background: var(--db-surface-card, var(--db-card));
   flex-shrink: 0;
 }
 

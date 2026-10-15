@@ -1,24 +1,42 @@
 <template>
   <div
+    ref="canvasRef"
     class="dashboard-canvas"
+    :class="{ 'is-resizing': isCustomResizing }"
+    data-canvas-workspace="expanded"
+    :style="dashboardThemeVariables"
+    tabindex="0"
     @dragover.prevent="handleDragOver"
     @drop.prevent="handleDrop"
+    @keydown="handleCanvasKeydown"
+    @contextmenu.prevent="handleCanvasContextMenu"
   >
     <!-- 全局联动栏（仅预览态且有全局筛选器时显示） -->
     <div v-if="!editable && globalFilterComponents.length > 0" class="global-filter-bar">
       <div class="global-filter-items">
-        <template v-for="comp in globalFilterComponents" :key="comp.id">
+        <template v-for="(comp, index) in globalFilterComponents" :key="comp.id">
           <div class="global-filter-item">
-            <span class="global-filter-label">{{ comp.title }}</span>
+            <span class="global-filter-label">
+              <DashboardComponentIcon
+                :type="comp.type"
+                :title="comp.title"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style="comp.titleIconStyle"
+                :variant="index"
+              />{{ comp.title }}
+            </span>
             <FilterSelectWidget
               v-if="comp.type === 'filter'"
-              :component="comp"
+              :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :model-value="runtimeFilterState?.[comp.id] ? (runtimeFilterState[comp.id].value ?? null) : undefined"
               :show-title="false"
               @change="(payload) => handleFilterChange(comp.id, payload)"
             />
             <TimeFilterWidget
               v-else-if="comp.type === 'timeFilter'"
-              :component="comp"
+              :component="{ ...comp, titleBarStyle: 'hidden' }"
+              :model-value="runtimeFilterState?.[comp.id]?.value"
+              :time-granularity="runtimeFilterState?.[comp.id]?.timeGranularity"
               :show-title="false"
               @change="(payload) => handleTimeFilterChange(comp.id, payload)"
             />
@@ -27,151 +45,560 @@
       </div>
     </div>
 
-    <GridLayout
-      v-if="gridLayout.length > 0"
-      :layout="gridLayout"
-      :col-num="24"
-      :row-height="30"
-      :is-draggable="editable && !isCustomResizing"
-      :is-resizable="editable && !isCustomResizing"
-      :vertical-compact="false"
-      :margin="[12, 12]"
-      @layout-updated="handleLayoutUpdated"
-    >
-      <GridItem
-        v-for="(item, index) in gridLayout"
-        :key="item.i"
-        :i="item.i"
-        :x="item.x"
-        :y="item.y"
-        :w="item.w"
-        :h="item.h"
-        :static="!editable"
-        @click.stop="handleSelectComponent(item.i)"
+    <div v-if="editable && gridLayout.length > 0" class="canvas-zoom-toolbar" role="toolbar" aria-label="画布缩放">
+      <button type="button" aria-label="缩小画布" title="缩小" :disabled="canvasZoom <= MIN_CANVAS_ZOOM" @click="zoomCanvas(-ZOOM_STEP)">−</button>
+      <input
+        class="canvas-zoom-input"
+        type="number"
+        min="40"
+        max="120"
+        step="1"
+        inputmode="numeric"
+        aria-label="画布缩放百分比"
+        aria-description="输入40到120之间的百分比，按回车或离开输入框应用"
+        title="输入40到120之间的百分比，按回车或离开输入框应用"
+        :value="canvasZoomInput"
+        @input="updateCanvasZoomInput"
+        @keydown.enter.prevent="applyCanvasZoomInput"
+        @blur="applyCanvasZoomInput"
+      />
+      <span class="canvas-zoom-suffix" aria-hidden="true">%</span>
+      <span class="canvas-zoom-live" aria-live="polite">{{ Math.round(canvasZoom * 100) }}%</span>
+      <button type="button" aria-label="放大画布" title="放大" :disabled="canvasZoom >= MAX_CANVAS_ZOOM" @click="zoomCanvas(ZOOM_STEP)">+</button>
+      <button type="button" class="canvas-fit-button" @click="fitCanvas">适配</button>
+      <button type="button" class="canvas-fit-button" @click="setCanvasZoom(1)">100%</button>
+    </div>
+
+    <!-- 预览态「自适应宽度」开关由父级工具栏控制（previewFillWidth prop），画布内不再放置按钮 -->
+    <div class="canvas-grid-stage" :style="canvasZoomStyle">
+      <!-- GridItem 恒为 static：库只负责栅格渲染与定位，拖动/缩放全部走自研 pointer 通道。
+           这样可绕过库内部 compact 的强制碰撞下推（vertical-compact=false 也会把重叠 item 推开），
+           使组件可以放到画布任意位置（包括与组合卡片重叠）。 -->
+      <GridLayout
+        v-if="gridLayout.length > 0"
+        :layout="gridLayout"
+        :col-num="editable ? GRID_COLUMN_COUNT : previewColumnCount"
+        :row-height="30"
+        :transform-scale="canvasZoom"
+        :is-resizable="false"
+        :vertical-compact="false"
+        :margin="[12, 12]"
+        @layout-updated="handleLayoutUpdated"
       >
-        <div
-          class="grid-item-content mc-card grid-item-animated"
-          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable }"
-          :style="{ animationDelay: `${index * 40}ms` }"
+        <GridItem
+          v-for="(item, index) in gridLayout"
+          :key="item.i"
+          :i="item.i"
+          :x="item.x"
+          :y="item.y"
+          :w="item.w"
+          :h="item.h"
+          :static="true"
+          :class="{ 'is-selected-top': editable && selectedId === item.i, 'is-pointer-dragging': pointerDraggingId === item.i }"
+          @click.stop="handleSelectComponent(item.i)"
         >
-          <!-- 四边拖动热区（仅编辑态） -->
+          <div
+            class="grid-item-content mc-card grid-item-animated"
+          :data-component-id="item.i"
+          tabindex="0"
+          @pointerdown="handleItemPointerDown($event, item.i)"
+          :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)), 'custom-resizing': resizingItem?.id === item.i }"
+          :style="componentStyle(item, index)"
+          @keydown="handleComponentKeydown($event, item.i)"
+          @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
+        >
+          <!-- 四边拖动热区（仅编辑态）：mousedown 一并拦截，防止冒泡到 GridItem 触发库的拖动/缩放与像素预览打架 -->
           <template v-if="editable">
-            <div class="resize-handle resize-handle-top" @mousedown.stop="startResize($event, item.i, 'top')" />
-            <div class="resize-handle resize-handle-right" @mousedown.stop="startResize($event, item.i, 'right')" />
-            <div class="resize-handle resize-handle-bottom" @mousedown.stop="startResize($event, item.i, 'bottom')" />
-            <div class="resize-handle resize-handle-left" @mousedown.stop="startResize($event, item.i, 'left')" />
+            <div class="resize-handle resize-handle-top" @pointerdown.stop.prevent="startResize($event, item.i, 'top')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-right" @pointerdown.stop.prevent="startResize($event, item.i, 'right')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-bottom" @pointerdown.stop.prevent="startResize($event, item.i, 'bottom')" @mousedown.stop.prevent />
+            <div class="resize-handle resize-handle-left" @pointerdown.stop.prevent="startResize($event, item.i, 'left')" @mousedown.stop.prevent />
           </template>
-          <div v-if="editable" class="grid-item-toolbar">
-            <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
-            <button class="grid-item-delete" @click.stop="handleDeleteComponent(item.i)">✕</button>
+          <div
+            v-if="editable"
+            class="grid-item-toolbar"
+            :class="`title-bar-${getComponent(item.i)?.titleBarStyle ?? 'standard'}`"
+            draggable="true"
+            @dragstart.stop="handleComponentDragStart($event, item.i)"
+          >
+            <template v-if="isToolbarTitleVisible(item.i)">
+              <input
+                v-if="editingTitleId === item.i"
+                ref="titleInput"
+                class="grid-item-title-input"
+                aria-label="组件标题"
+                v-model="editingTitleValue"
+                @click.stop
+                @blur="commitTitleEdit(item.i)"
+                @keydown.esc.prevent="cancelTitleEdit"
+                @keyup.enter="commitTitleEdit(item.i)"
+              />
+              <template v-else>
+                <span class="grid-item-title-group">
+                  <DashboardComponentIcon
+                    :type="getComponent(item.i)?.type ?? 'kpi'"
+                    :chart-type="getComponent(item.i)?.chartType"
+                    :title="getComponentTitle(item.i)"
+                    :dashboard-theme="dashboardTheme"
+                    :title-icon-style="toolbarTitleIconStyle(item.i)"
+                    :theme-accent-group="getComponent(item.i)?.themeAccentGroup"
+                    :variant="sameRowIconVariant(item)"
+                  />
+                  <button
+                    type="button"
+                    class="grid-item-icon-style-trigger"
+                    :aria-label="`编辑标题图标 ${getComponentTitle(item.i)}`"
+                    title="修改标题图标样式"
+                    @click.stop="openTitleIconStyle(item.i, $event.currentTarget as HTMLElement)"
+                  >
+                    <el-icon :size="12"><EditPen /></el-icon>
+                  </button>
+                  <button
+                    type="button"
+                    class="grid-item-title-trigger"
+                    :aria-label="`编辑组件标题 ${getComponentTitle(item.i)}`"
+                    @click.stop="startTitleEdit(item.i)"
+                  >
+                    <span class="grid-item-title">{{ getComponentTitle(item.i) }}</span>
+                    <el-icon class="grid-item-title-edit" :size="11"><EditPen /></el-icon>
+                  </button>
+                </span>
+              </template>
+            </template>
+            <button
+              class="grid-item-delete"
+              :aria-label="`删除组件 ${getComponentTitle(item.i)}`"
+              @click.stop="handleDeleteComponent(item.i)"
+            >✕</button>
+            <div v-if="isSampleData(item.i)" class="sample-data-watermark sample-data-watermark--titlebar" data-testid="sample-data-watermark" aria-label="当前展示的是样例数据" title="未绑定数据源，当前为示例内容">示例数据</div>
           </div>
           <div class="grid-item-body">
-            <div v-if="getComponentData(item.i)?.error" class="grid-item-error">
-              <div class="error-icon">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/>
-                  <line x1="12" y1="9" x2="12" y2="13"/>
-                  <line x1="12" y1="17" x2="12.01" y2="17"/>
-                </svg>
-              </div>
-              <div class="error-msg" :title="getComponentData(item.i)?.error">{{ getComponentData(item.i)?.error }}</div>
-            </div>
+            <ComponentQueryState
+              v-if="queryDisplayStatus(getComponentData(item.i))"
+              :status="queryDisplayStatus(getComponentData(item.i))!"
+              :title="queryStateTitle(getComponentData(item.i))"
+              :message="getComponentData(item.i)?.error"
+              :retry-label="t('insight.componentQueryRetry')"
+              @retry="emit('retry-component-query', item.i)"
+            />
             <template v-else>
               <KpiCardWidget
                 v-if="getComponent(item.i)?.type === 'kpi'"
-                :component="getComponent(item.i)!"
+                :component="getWidgetComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :editable="editable"
+                :preview-auto-layout="!editable && previewFillWidth"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
+                @open-metric-style="(payload) => emit('open-metric-style', payload)"
+                @metric-layout-change="(payload) => emit('metric-layout-change', payload)"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
               <ChartWidget
                 v-else-if="getComponent(item.i)?.type === 'chart'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
+                :editable="editable"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
               />
               <DataTableWidget
                 v-else-if="getComponent(item.i)?.type === 'table'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :show-title="!editable"
+                :sample-mode="isSampleData(item.i)"
+                :editable="editable"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
                 @component-time-range-change="(payload) => emit('component-time-range-change', payload)"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
+                @table-view-change="(payload) => emit('table-view-change', payload)"
               />
               <FilterSelectWidget
                 v-else-if="getComponent(item.i)?.type === 'filter'"
-                :component="getComponent(item.i)!"
-                :show-title="!editable"
+                :component="getWidgetComponent(item.i)!"
+                :model-value="runtimeFilterState?.[item.i] ? (runtimeFilterState[item.i].value ?? null) : undefined"
+                :show-title="getComponent(item.i)?.titleBarStyle !== 'hidden'"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleFilterChange(item.i, payload)"
               />
               <TimeFilterWidget
                 v-else-if="getComponent(item.i)?.type === 'timeFilter'"
-                :component="getComponent(item.i)!"
-                :show-title="!editable"
+                :component="getWidgetComponent(item.i)!"
+                :model-value="runtimeFilterState?.[item.i]?.value"
+                :time-granularity="runtimeFilterState?.[item.i]?.timeGranularity"
+                :show-title="getComponent(item.i)?.titleBarStyle !== 'hidden'"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @change="(payload) => handleTimeFilterChange(item.i, payload)"
               />
               <AiAnalysisWidget
                 v-else-if="getComponent(item.i)?.type === 'aiAnalysis'"
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
-                :show-title="!editable"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
+                :dashboard-theme="dashboardTheme"
+                :title-icon-style-preview="componentTitleIconStylePreview"
                 @generate="(id) => emit('ai-analysis-generate', id)"
+              />
+              <CombinationCardWidget
+                v-else-if="getComponent(item.i)?.type === 'combination'"
+                :component="getComponent(item.i)!"
+                :component-data-map="componentDataMapWithFieldLabels"
+                :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
+                :runtime-filter-state="runtimeFilterState"
+                :editable="editable"
+                :container-resizing="resizingItem?.id === item.i"
+                :preview-fill-width="!editable && previewFillWidth"
+                :preview-width-scale="previewWidthScaleFor(item.i)"
+                :sample-mode="isSampleData(item.i)"
+                :selected="selectedId === item.i"
+                :drop-hint="editable && ((draggingComponentId !== null && draggingComponentId !== item.i) || gridDragHoverComboId === item.i)"
+                :dashboard-theme="dashboardTheme"
+                :component-title-icon-style-preview="componentTitleIconStylePreview"
+                :title-icon-style-preview="childTitleIconStylePreview"
+                :tab-title-icon-style-preview="tabTitleIconStylePreview"
+                @select-child="handleSelectChild"
+                @add-tab="(p) => emit('combination-add-tab', p)"
+                @remove-tab="(p) => emit('combination-remove-tab', p)"
+                @move-tab="(p) => emit('combination-move-tab', p)"
+                @copy-tab="(p) => emit('combination-copy-tab', p)"
+                @tab-context-menu="(p) => emit('combination-tab-context-menu', p)"
+                @delete-child="(p) => emit('combination-delete-child', p)"
+                @move-component-into="(p) => emit('move-component-into', p)"
+                @add-component-into="(p) => emit('add-component-into', p)"
+                @move-child-out="handleChildDragOut"
+                @copy-child="(p) => emit('copy-child', p)"
+                @paste-child="(p) => emit('paste-child', p)"
+                @retry-component-query="(id) => emit('retry-component-query', id)"
+                @context-menu="(p) => emit('context-menu', { ...p, componentId: null })"
+                @edit-child-title-icon-style="openChildTitleIconStyle"
+                @edit-tab-title-icon-style="openTabTitleIconStyle"
+                @open-metric-style="(p) => emit('open-metric-style', p)"
+                @metric-layout-change="(p) => emit('metric-layout-change', p)"
+                @filter-change="(payload) => emit('filter-change', payload)"
+                @time-filter-change="(payload) => emit('time-filter-change', payload)"
+                @table-view-change="(payload) => emit('table-view-change', payload)"
+                @ai-analysis-generate="(id) => emit('ai-analysis-generate', id)"
               />
             </template>
           </div>
-        </div>
-      </GridItem>
-    </GridLayout>
-    <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
-      <div class="empty-icon">🎨</div>
+          </div>
+        </GridItem>
+      </GridLayout>
+      <DashboardTitleIconStyleDialog
+        v-if="editingTitleIconTarget"
+        :model-value="titleIconDialogVisible"
+        :title="editingTitleIconTitle"
+        :title-icon-style="editingTitleIconStyle"
+        :default-color="editingTitleIconDefaultColor"
+        :top="titleIconDialogTop"
+        :left="titleIconDialogLeft"
+        :draggable="true"
+        @save="saveTitleIconStyle"
+        @preview="previewTitleIconStyle"
+        @update:model-value="setTitleIconDialogVisible"
+      />
+
+      <div v-if="gridLayout.length === 0 && globalFilterComponents.length === 0" class="canvas-empty">
+      <div class="empty-icon" aria-hidden="true">—</div>
       <div class="empty-text">{{ t('insight.canvasEmpty') }}</div>
+      <button v-if="editable" type="button" class="canvas-empty-action" aria-label="从组件库添加组件" @click="emit('add-component', { type: 'kpi' })">从组件库添加组件</button>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { GridLayout, GridItem } from 'grid-layout-plus'
-import type { InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, FilterComponentConfig, TimeFilterComponentConfig } from '@/types'
+import { EditPen } from '@element-plus/icons-vue'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import type { ComponentTitleIconStyle, DashboardDatasetInput, DashboardRuntimeFilterState, InsightCombinationChild, InsightComponent, InsightComponentType, ChartType, InsightComponentData, TimeRangeValue, TimeGranularity, FilterComponentConfig, TimeFilterComponentConfig, ResolvedDashboardTheme } from '@/types'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
 import FilterSelectWidget from './FilterSelectWidget.vue'
 import TimeFilterWidget from './TimeFilterWidget.vue'
 import AiAnalysisWidget from './AiAnalysisWidget.vue'
+import CombinationCardWidget from './CombinationCardWidget.vue'
+import ComponentQueryState from './ComponentQueryState.vue'
+import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
+import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
+import { themeCssVariables, componentThemeStyle, componentIconStyle, componentThemeShapeOverrides } from '@/utils/dashboard-theme'
+import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
+import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
+import { projectPythonResultKpi } from '@/utils/kpi-result-projection'
+import { calculateGridResize, calculateResizePreview, type GridResizeEdge, type GridResizeMetrics } from './dashboardCanvasResize'
 
 defineOptions({
   name: 'DashboardCanvas',
 })
 
 const { t } = useI18n()
+const MIN_CANVAS_ZOOM = 0.4
+const MAX_CANVAS_ZOOM = 1.2
+const ZOOM_STEP = 0.1
 
 const props = withDefaults(defineProps<{
   /** 仪表盘组件列表 */
   components: InsightComponent[]
   /** 组件渲染数据映射（componentId -> data） */
   componentDataMap?: Record<string, InsightComponentData>
+  /** 预览会话中的筛选值，用于刷新/重渲染后维持控件状态。 */
+  runtimeFilterState?: DashboardRuntimeFilterState
+  /** 仪表盘级数据集输入；旧版组件管道可能只保存在此处 */
+  datasetInputs?: DashboardDatasetInput[]
   /** 是否可编辑 */
   editable?: boolean
+  /** 预览态「自适应宽度」开关（由父级工具栏按钮控制）：收拢栅格列数到内容实际占宽并铺满视口 */
+  previewFillWidth?: boolean
+  /** 预览态可显式与页面采用同一个背景表面；编辑态默认仍跟随页面主题底色。 */
+  canvasBackground?: string
   /** 当前选中的组件 ID */
   selectedId?: string
+  /** 当前仪表盘解析后的主题 */
+  dashboardTheme?: ResolvedDashboardTheme
   /** 正在生成 AI 分析的组件 ID 集合 */
   aiAnalysisGeneratingIds?: Set<string>
 }>(), {
   aiAnalysisGeneratingIds: () => new Set(),
 })
 
+/** 画布根元素（drop 落点换算用） */
+const canvasRef = ref<HTMLElement | null>(null)
+/** 栅格总列数（与 GridLayout 的 col-num 一致） */
+const GRID_COLUMN_COUNT = 24
+const canvasZoom = ref(1)
+const canvasZoomInput = ref('100')
+/** 预览态栅格列间距（与 GridLayout margin 一致）。 */
+const PREVIEW_GRID_GAP = 12
+/** 编辑态基准列宽：colWidth = (容器宽 - gap × (cols + 1)) / cols。 */
+const PREVIEW_EDIT_COL_WIDTH = (DASHBOARD_CANVAS_MIN_WIDTH - PREVIEW_GRID_GAP * (GRID_COLUMN_COUNT + 1)) / GRID_COLUMN_COUNT
+/** 预览态「自适应宽度」：收拢栅格列数到内容实际占宽并铺满视口——组件横向等比加宽，
+ *  纵向位置/高度保持不动（保证不重叠交错）；组合卡片内部 free 子卡片由组件自身按
+ *  内宽比例等比映射。视口窄于内容物理宽时等比缩小铺满（不挤压变形）。
+ *  未开启时为 100% 原始大小（1440 舞台）。开关由父级工具栏按钮通过 prop 控制。 */
+const previewFillWidth = computed(() => props.previewFillWidth ?? false)
+const previewAvailableWidth = ref(0)
+let previewResizeObserver: ResizeObserver | null = null
+
+/** 自适应时的栅格列数：收拢到内容实际占用的最大列数（上限 24）。 */
+const previewColumnCount = computed(() => {
+  if (!previewFillWidth.value) return GRID_COLUMN_COUNT
+  const spanned = gridLayout.value.map((item) => item.x + item.w)
+  return Math.min(GRID_COLUMN_COUNT, Math.max(1, ...spanned, 1))
+})
+
+/** 自适应舞台宽度：铺满视口；视口窄于内容物理宽（收拢列数下的自然宽度）时取内容物理宽，
+ *  配合 zoom 等比缩小铺满，避免列宽被挤压变形。 */
+const previewStageWidth = computed(() => {
+  if (!previewFillWidth.value || previewAvailableWidth.value <= 0) return 0
+  const contentWidth = previewColumnCount.value * PREVIEW_EDIT_COL_WIDTH + PREVIEW_GRID_GAP * (previewColumnCount.value + 1)
+  return Math.max(previewAvailableWidth.value, contentWidth)
+})
+
+/** 组合卡片内宽需按卡片跨列后的实际宽度缩放；固定列间距不能随列宽比例一起放大。 */
+function previewWidthScaleFor(componentId: string): number {
+  if (!previewFillWidth.value || previewStageWidth.value <= 0) return 1
+  const span = getComponent(componentId)?.position.w ?? 1
+  const currentColumnWidth = (previewStageWidth.value - PREVIEW_GRID_GAP * (previewColumnCount.value + 1)) / previewColumnCount.value
+  const currentItemWidth = currentColumnWidth * span + PREVIEW_GRID_GAP * (span - 1)
+  const baseItemWidth = PREVIEW_EDIT_COL_WIDTH * span + PREVIEW_GRID_GAP * (span - 1)
+  return Math.max(1, currentItemWidth / baseItemWidth)
+}
+
+function updatePreviewFit(): void {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  const styles = getComputedStyle(canvas)
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  previewAvailableWidth.value = Math.max(0, canvas.clientWidth - horizontalPadding)
+}
+
+/** 开关切回时重测可用宽度（舞台宽度变化可能引起滚动条出现/消失）。 */
+watch(previewFillWidth, () => updatePreviewFit())
+
+/** 舞台样式：空画布不锁宽度，铺满浏览器宽度；
+ *  编辑态有组件时用固定最小宽度画布（配合缩放工具栏）；
+ *  预览态所见即所得——与编辑器相同的 24 列 / 1440px 逻辑舞台，用 zoom 等比适配视口并居中，
+ *  保证列宽与编辑器一致（组合卡片内部的 px 绝对定位不会错位、图表不变形）。 */
+const canvasZoomStyle = computed(() => {
+  if (gridLayout.value.length === 0) {
+    return { minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px` }
+  }
+  if (!props.editable) {
+    if (previewFillWidth.value && previewStageWidth.value > 0) {
+      return {
+        zoom: Math.min(1, previewAvailableWidth.value / previewStageWidth.value),
+        width: `${previewStageWidth.value}px`,
+        minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+        marginInline: 'auto',
+      }
+    }
+    return {
+      zoom: 1,
+      width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+      minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+      marginInline: 'auto',
+    }
+  }
+  return {
+    zoom: canvasZoom.value,
+    width: `${DASHBOARD_CANVAS_MIN_WIDTH}px`,
+    minHeight: `${DASHBOARD_CANVAS_MIN_HEIGHT}px`,
+  }
+})
+
+function setCanvasZoom(value: number): void {
+  canvasZoom.value = Math.min(MAX_CANVAS_ZOOM, Math.max(MIN_CANVAS_ZOOM, Math.round(value * 100) / 100))
+  canvasZoomInput.value = String(Math.round(canvasZoom.value * 100))
+}
+
+function zoomCanvas(delta: number): void {
+  setCanvasZoom(canvasZoom.value + delta)
+}
+
+function updateCanvasZoomInput(event: Event): void {
+  canvasZoomInput.value = (event.target as HTMLInputElement).value
+}
+
+function applyCanvasZoomInput(): void {
+  const percent = Number(canvasZoomInput.value)
+  if (!canvasZoomInput.value.trim() || !Number.isFinite(percent)) {
+    canvasZoomInput.value = String(Math.round(canvasZoom.value * 100))
+    return
+  }
+  setCanvasZoom(percent / 100)
+}
+
+function fitCanvas(): void {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  const styles = getComputedStyle(canvas)
+  const horizontalPadding = (Number.parseFloat(styles.paddingLeft) || 0) + (Number.parseFloat(styles.paddingRight) || 0)
+  const availableWidth = canvas.clientWidth - horizontalPadding
+  setCanvasZoom(Math.min(1, availableWidth / DASHBOARD_CANVAS_MIN_WIDTH))
+}
+
+const editingTitleId = ref<string | null>(null)
+const editingTitleValue = ref('')
+const titleInput = ref<HTMLInputElement | null>(null)
+const titleIconDialogVisible = ref(false)
+const editingTitleIconTarget = ref<{
+  componentId: string
+  containerId?: string
+  childId?: string
+  tabId?: string
+  tabKind?: 'component' | 'combination'
+} | null>(null)
+const titleIconDialogTop = ref('16px')
+const titleIconDialogLeft = ref('16px')
+const previewTitleIconStyleValue = ref<ComponentTitleIconStyle | null>(null)
+
+const componentTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target && !target.tabId && !target.childId && previewTitleIconStyleValue.value
+    ? previewTitleIconStyleValue.value
+    : undefined
+})
+
+const tabTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target?.tabId && target.tabKind && previewTitleIconStyleValue.value
+    ? { componentId: target.componentId, tabId: target.tabId, titleIconStyle: previewTitleIconStyleValue.value }
+    : undefined
+})
+
+const editingTitleIconComponent = computed(() => {
+  const target = editingTitleIconTarget.value
+  if (!target) return undefined
+  if (!target.childId) return findCanvasComponent(target.componentId)
+  return findChildComponent(target.containerId ?? '', target.childId)
+})
+const editingTitleIconStyle = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  if (!target?.tabId || !owner) return owner?.titleIconStyle
+  if (target.tabKind === 'component') return owner.tabs?.find((tab) => tab.id === target.tabId)?.titleIconStyle
+  return owner.containerConfig?.tabs.find((tab) => tab.id === target.tabId)?.titleIconStyle
+})
+const editingTitleIconTitle = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  if (target?.tabId && owner) {
+    if (target.tabKind === 'component') return owner.tabs?.find((tab) => tab.id === target.tabId)?.title ?? ''
+    return owner.containerConfig?.tabs.find((tab) => tab.id === target.tabId)?.title ?? ''
+  }
+  return owner?.title ?? ''
+})
+const editingTitleIconDefaultColor = computed(() => {
+  const target = editingTitleIconTarget.value
+  const owner = editingTitleIconComponent.value
+  const type = target?.tabId ? 'tab' : owner?.type ?? 'kpi'
+  const iconStyle = componentIconStyle(
+    props.dashboardTheme,
+    type,
+    editingTitleIconTitle.value,
+    0,
+    owner?.themeAccentGroup,
+  )
+  return iconStyle['--dashboard-icon-color'] ?? props.dashboardTheme?.textSecondary ?? '#8c4a2f'
+})
+const childTitleIconStylePreview = computed(() => {
+  const target = editingTitleIconTarget.value
+  return target?.childId && previewTitleIconStyleValue.value
+    ? { childId: target.childId, style: previewTitleIconStyleValue.value }
+    : undefined
+})
+
+const dashboardThemeVariables = computed(() => ({
+  ...(props.dashboardTheme ? themeCssVariables(props.dashboardTheme) : {}),
+  ...(props.canvasBackground ? { '--dashboard-canvas-background': props.canvasBackground } : {}),
+}))
+
 const emit = defineEmits<{
-  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
+  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType; position?: { x: number; y: number } }): void
   (e: 'update-layout', payload: Array<{ id: string; x: number; y: number; w: number; h: number }>): void
   (e: 'select-component', id: string): void
+  (e: 'rename-component', payload: { componentId: string; title: string }): void
+  (e: 'select-child', payload: { containerId: string; childId: string | null }): void
+  (e: 'combination-add-tab', payload: { containerId: string }): void
+  (e: 'combination-remove-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'combination-move-tab', payload: { containerId: string; tabId: string; toIndex: number }): void
+  (e: 'combination-copy-tab', payload: { containerId: string; tabId: string }): void
+  (e: 'combination-tab-context-menu', payload: { containerId: string; tabId: string; x: number; y: number }): void
+  (e: 'combination-delete-child', payload: { containerId: string; childId: string }): void
+  (e: 'move-component-into', payload: { containerId: string; componentId: string; x: number; y: number }): void
+  (e: 'add-component-into', payload: { containerId: string; type: InsightComponentType; chartType?: ChartType; x: number; y: number }): void
+  (e: 'move-child-out', payload: { containerId: string; childId: string; position: { x: number; y: number } }): void
+  (e: 'copy-child', payload: { containerId: string; childId: string }): void
+  (e: 'paste-child', payload: { containerId: string; childId: string | null }): void
   (e: 'delete-component', id: string): void
-  (e: 'filter-change', payload: { componentId: string; field: string; value: string }): void
-  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue }): void
+  (e: 'copy-component', id: string): void
+  (e: 'paste-component'): void
+  (e: 'context-menu', payload: { componentId: string | null; containerId?: string; childId?: string; x: number; y: number }): void
+  (e: 'filter-change', payload: { componentId: string; field: string; value: string | string[] | undefined }): void
+  (e: 'time-filter-change', payload: { componentId: string; field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'retry-component-query', componentId: string): void
   (e: 'ai-analysis-generate', componentId: string): void
+  (e: 'table-view-change', payload: { componentId: string; currentPage: number; pageSize: number; total: number; columns: string[]; rows: string[][]; sort: { field: string; order: 'ascending' | 'descending' } | null }): void
+  (e: 'open-metric-style', payload: { componentId?: string; containerId?: string; childId?: string; fieldKey: string; field: string }): void
+  (e: 'metric-layout-change', payload: { componentId: string; fieldKey: string; x: number; y: number; w: number; h: number }): void
+  (e: 'update-title-icon-style', payload: { componentId: string; titleIconStyle: ComponentTitleIconStyle }): void
+  (e: 'update-child-title-icon-style', payload: { containerId: string; childId: string; titleIconStyle: ComponentTitleIconStyle }): void
+  (e: 'update-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component' | 'combination'; titleIconStyle: ComponentTitleIconStyle }): void
 }>()
 
 /** grid-layout-plus 需要的布局格式 */
@@ -181,6 +608,8 @@ interface GridLayoutItem {
   y: number
   w: number
   h: number
+  /** 同时传给 grid-layout-plus 的布局数据，避免其 compact 阶段把重叠组件推到容器底部。 */
+  static?: boolean
 }
 
 /** 用 ref 管理布局，传给 grid-layout-plus 的 :layout prop */
@@ -222,7 +651,7 @@ const effectiveComponents = computed<InsightComponent[]>(() => {
   return props.components.filter((c) => !globalFilterComponentIds.value.has(c.id))
 })
 
-/** 构建 grid-layout-plus 所需的布局（预览态去除全局筛选器后整体向上补齐，避免顶部留白） */
+/** 构建 grid-layout-plus 所需的布局（预览态去除全局筛选器后整体向左上补齐，避免顶部/左侧留白导致内容偏右偏下） */
 function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
   if (components.length === 0) {
     return []
@@ -234,15 +663,20 @@ function buildGridLayout(components: InsightComponent[]): GridLayoutItem[] {
       y: c.position.y,
       w: c.position.w,
       h: c.position.h,
+      // GridItem 的 static prop 只约束交互；布局对象也必须标记 static，
+      // 否则 grid-layout-plus 的 compact 仍会把重叠项（例如组合卡片子项拖出）下推。
+      static: true,
     }))
   }
   const minY = Math.min(...components.map((c) => c.position.y))
+  const minX = Math.min(...components.map((c) => c.position.x))
   return components.map((c) => ({
     i: c.id,
-    x: c.position.x,
+    x: c.position.x - minX,
     y: c.position.y - minY,
     w: c.position.w,
     h: c.position.h,
+    static: true,
   }))
 }
 
@@ -262,8 +696,29 @@ watch(
   { immediate: true }
 )
 
-/** 布局更新回调（拖拽/缩放/compact 后触发） */
+/** 自定义缩放期间 GridLayout 内部碰撞整理的最新布局；松手时统一采纳，避免拖拽中回写导致跳动。 */
+let pendingCollisionLayout: GridLayoutItem[] | null = null
+
+/** 计算布局中与组件 schema position 不同的真实变化项（用户主动操作的结果）。 */
+function collectRealLayoutChanges(layout: GridLayoutItem[]): GridLayoutItem[] {
+  return layout.filter((item) => {
+    const comp = props.components.find((c) => c.id === item.i)
+    if (!comp) return true
+    return comp.position.x !== item.x
+      || comp.position.y !== item.y
+      || comp.position.w !== item.w
+      || comp.position.h !== item.h
+  })
+}
+
 function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
+  // 自定义缩放中：GridLayout 因碰撞对相邻组件让位会产生 layout-updated，
+  // 此时不能把整理结果回写 gridLayout——回写会反向移动正在拖拽的卡片，造成拖拽跳动。
+  if (isCustomResizing.value) {
+    pendingCollisionLayout = newLayout
+    return
+  }
+
   // 始终更新本地 gridLayout，让 :layout prop 与 GridLayout 内部 currentLayout 保持一致
   // 避免重渲染时 :layout 传旧值导致位置被重置
   gridLayout.value = newLayout
@@ -275,14 +730,7 @@ function handleLayoutUpdated(newLayout: GridLayoutItem[]): void {
 
   // 过滤掉非用户操作导致的位置变更（如 grid-layout-plus 内部碰撞下推产生的副作用）
   // 只保留用户主动拖拽/缩放产生的真实变化
-  const realChanges = newLayout.filter((item) => {
-    const comp = props.components.find((c) => c.id === item.i)
-    if (!comp) return true
-    return comp.position.x !== item.x
-      || comp.position.y !== item.y
-      || comp.position.w !== item.w
-      || comp.position.h !== item.h
-  })
+  const realChanges = collectRealLayoutChanges(newLayout)
   if (realChanges.length === 0) return
 
   // 向上 emit 让 Editor 更新 schema.components 的 position
@@ -302,9 +750,304 @@ function getComponentTitle(id: string): string {
   return getComponent(id)?.title ?? ''
 }
 
+function componentStyle(item: GridLayoutItem, index: number): Record<string, string> {
+  const component = getComponent(item.i)
+  const type = component?.type ?? 'kpi'
+  const themeStyle = componentThemeStyle(props.dashboardTheme, type, 0, component?.themeAccentGroup, sameRowIconVariant(item))
+  const visualStyle = resolveComponentVisualStyle(component?.visualStyle, type)
+  return {
+    ...themeStyle,
+    ...visualStyle,
+    ...componentThemeShapeOverrides(themeStyle, component?.visualStyle),
+    animationDelay: `${index * 40}ms`,
+    ...(resizingItem.value?.id === item.i && resizePreviewStyle.value ? resizePreviewStyle.value : {}),
+  }
+}
+
+/** 同一行组件按从左到右轮换同主题深色阶，避免并列组件视觉黏连。 */
+function sameRowIconVariant(item: GridLayoutItem): number {
+  return gridLayout.value
+    .filter(candidate => candidate.y === item.y)
+    .sort((left, right) => left.x - right.x)
+    .findIndex(candidate => candidate.i === item.i)
+}
+
+function startTitleEdit(id: string): void {
+  if (!props.editable) return
+  editingTitleId.value = id
+  editingTitleValue.value = getComponentTitle(id)
+  void nextTick(() => {
+    const input = titleInput.value as unknown as { focus?: () => void; select?: () => void } | null
+    input?.focus?.()
+    input?.select?.()
+  })
+}
+
+function findChildComponent(containerId: string, childId: string): InsightCombinationChild | undefined {
+  const visit = (children: InsightCombinationChild[] | undefined): InsightCombinationChild | undefined => {
+    for (const child of children ?? []) {
+      if (child.id === childId) return child
+      const nested = visit([
+        ...(child.children ?? []),
+        ...((child.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+      ])
+      if (nested) return nested
+    }
+    return undefined
+  }
+  const container = props.components.find((component) => component.id === containerId)
+  if (!container) return undefined
+  return visit([
+    ...(container.children ?? []),
+    ...((container.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+  ])
+}
+
+function findCanvasComponent(componentId: string): InsightComponent | InsightCombinationChild | undefined {
+  for (const component of props.components) {
+    if (component.id === componentId) return component
+    const visit = (children: InsightCombinationChild[] | undefined): InsightCombinationChild | undefined => {
+      for (const child of children ?? []) {
+        if (child.id === componentId) return child
+        const nested = visit([
+          ...(child.children ?? []),
+          ...((child.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+        ])
+        if (nested) return nested
+      }
+      return undefined
+    }
+    const child = visit([
+      ...(component.children ?? []),
+      ...((component.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+    ])
+    if (child) return child
+  }
+  return undefined
+}
+
+function openTitleIconStyle(componentId: string, anchor?: HTMLElement | null): void {
+  if (!props.editable) return
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = { componentId }
+  setTitleIconDialogPosition(anchor)
+  titleIconDialogVisible.value = true
+}
+
+function openChildTitleIconStyle(payload: { containerId: string; childId: string; anchor?: HTMLElement }): void {
+  if (!props.editable) return
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = { ...payload, componentId: payload.containerId }
+  setTitleIconDialogPosition(payload.anchor)
+  titleIconDialogVisible.value = true
+}
+
+function openTabTitleIconStyle(payload: {
+  componentId: string
+  tabId: string
+  tabKind: 'component' | 'combination'
+  anchor?: HTMLElement
+}): void {
+  if (!props.editable) return
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = payload
+  setTitleIconDialogPosition(payload.anchor)
+  titleIconDialogVisible.value = true
+}
+
+function setTitleIconDialogPosition(anchor?: HTMLElement | null): void {
+  if (!anchor) {
+    titleIconDialogTop.value = '16px'
+    titleIconDialogLeft.value = '16px'
+    return
+  }
+  const rect = anchor.getBoundingClientRect()
+  const viewportHeight = window.innerHeight || 768
+  const viewportWidth = window.innerWidth || 1024
+  const dialogWidth = Math.min(520, viewportWidth - 32)
+  const maxTop = Math.max(16, viewportHeight - 520)
+  let top = rect.bottom + 12
+  if (top > maxTop) top = Math.max(16, rect.top - 520 - 12)
+  const left = Math.min(Math.max(16, rect.left), Math.max(16, viewportWidth - dialogWidth - 16))
+  titleIconDialogTop.value = `${Math.round(top)}px`
+  titleIconDialogLeft.value = `${Math.round(left)}px`
+}
+
+function toolbarTitleIconStyle(componentId: string): ComponentTitleIconStyle | undefined {
+  const target = editingTitleIconTarget.value
+  if (!target?.childId && target?.componentId === componentId && previewTitleIconStyleValue.value) {
+    return previewTitleIconStyleValue.value
+  }
+  return getComponent(componentId)?.titleIconStyle
+}
+
+function previewTitleIconStyle(style: ComponentTitleIconStyle): void {
+  previewTitleIconStyleValue.value = style
+}
+
+function clearTitleIconDialog(): void {
+  previewTitleIconStyleValue.value = null
+  editingTitleIconTarget.value = null
+  titleIconDialogVisible.value = false
+}
+
+function setTitleIconDialogVisible(visible: boolean): void {
+  if (visible) {
+    titleIconDialogVisible.value = true
+    return
+  }
+  clearTitleIconDialog()
+}
+
+function saveTitleIconStyle(style: ComponentTitleIconStyle): void {
+  const target = editingTitleIconTarget.value
+  if (!target) return
+  if (target.tabId && target.tabKind) {
+    emit('update-tab-title-icon-style', {
+      componentId: target.componentId,
+      tabId: target.tabId,
+      tabKind: target.tabKind,
+      titleIconStyle: style,
+    })
+  } else if (target.childId && target.containerId) {
+    emit('update-child-title-icon-style', {
+      containerId: target.containerId,
+      childId: target.childId,
+      titleIconStyle: style,
+    })
+  } else {
+    emit('update-title-icon-style', { componentId: target.componentId, titleIconStyle: style })
+  }
+}
+
+function commitTitleEdit(id: string): void {
+  if (editingTitleId.value !== id) return
+  const title = editingTitleValue.value.trim()
+  if (title) emit('rename-component', { componentId: id, title })
+  editingTitleId.value = null
+  editingTitleValue.value = ''
+}
+
+function cancelTitleEdit(): void {
+  editingTitleId.value = null
+  editingTitleValue.value = ''
+}
+
+/** 编辑态工具栏标题是否展示（组合卡片「显示标题」关闭时隐藏，让开关在编辑态可见生效） */
+function isToolbarTitleVisible(id: string): boolean {
+  const comp = getComponent(id)
+  if (!comp) return true
+  return isComponentTitleVisible(comp) && !isInlineFilterComponent(comp)
+}
+
+function isInlineFilterComponent(comp: InsightComponent | undefined): boolean {
+  return comp?.type === 'filter' || comp?.type === 'timeFilter'
+}
+
+function isComponentTitleVisible(comp: InsightComponent | undefined): boolean {
+  return Boolean(comp) && comp?.titleBarStyle !== 'hidden'
+}
+
 /** 根据 ID 获取组件渲染数据 */
 function getComponentData(id: string): InsightComponentData | undefined {
-  return props.componentDataMap?.[id]
+  const configured = props.componentDataMap?.[id]
+  const component = getComponent(id)
+  const fieldLabels = component ? fieldLabelsForComponent(component) : fieldLabelsFromInputs(props.datasetInputs ?? [])
+  if (configured) {
+    return withFieldLabels(configured, fieldLabels)
+  }
+  if (!component || hasConfiguredDataset(component)) return undefined
+  const sample = resolveComponentSample(component).renderData
+  return sample ? withFieldLabels(sample, fieldLabels) : sample
+}
+
+function queryDisplayStatus(data: InsightComponentData | undefined): 'loading' | 'empty' | 'timeout' | 'error' | undefined {
+  if (data?.queryStatus && data.queryStatus !== 'success') return data.queryStatus
+  return data?.error ? 'error' : undefined
+}
+
+function queryStateTitle(data: InsightComponentData | undefined): string {
+  switch (queryDisplayStatus(data)) {
+    case 'loading': return t('insight.componentQueryLoading')
+    case 'empty': return t('insight.componentQueryEmpty')
+    case 'timeout': return t('insight.componentQueryTimeout')
+    default: return t('insight.componentQueryFailed')
+  }
+}
+
+function fieldLabelsForComponent(component: InsightComponent | InsightCombinationChild): Record<string, string> {
+  const pipeline = readComponentDatasetPipeline(component as unknown as InsightComponent)
+  const componentLabels = fieldLabelsFromInputs(pipeline?.datasetInputs ?? [])
+  const dashboardLabels = fieldLabelsFromInputs(props.datasetInputs ?? [])
+  return { ...dashboardLabels, ...componentLabels }
+}
+
+function withFieldLabels(data: InsightComponentData, labels: Record<string, string>): InsightComponentData {
+  // 数据集注册表标签优先；运行时标签仍可补充未登记的脚本派生字段。
+  return { ...data, fieldLabels: { ...data.fieldLabels, ...labels } }
+}
+
+/** 优先使用字段注册表；兼容较旧配置中仅保存在 queryConfig.displayFields 的展示名。 */
+function fieldLabelsFromInputs(inputs: DashboardDatasetInput[]): Record<string, string> {
+  const labels: Record<string, string> = {}
+  const ambiguous = new Set<string>()
+  for (const input of inputs) {
+    const inputLabels = new Map<string, string>()
+    for (const mapping of input.fieldMappings ?? []) {
+      const source = mapping.source?.trim()
+      const target = mapping.target?.trim()
+      if (source) inputLabels.set(source, target && target !== source ? target : source)
+    }
+    for (const field of input.queryConfig?.displayFields ?? []) {
+      const source = field.field?.trim()
+      const title = field.title?.trim()
+      if (source && title && (!inputLabels.has(source) || inputLabels.get(source) === source)) inputLabels.set(source, title)
+    }
+    for (const [source, label] of inputLabels) {
+      if (ambiguous.has(source)) continue
+      const existing = labels[source]
+      if (existing !== undefined && existing !== label) {
+        delete labels[source]
+        ambiguous.add(source)
+      } else {
+        labels[source] = label
+      }
+    }
+  }
+  return labels
+}
+
+const componentDataMapWithFieldLabels = computed(() => {
+  const dataMap = { ...(props.componentDataMap ?? {}) }
+  const visit = (component: InsightComponent | InsightCombinationChild): void => {
+    const data = props.componentDataMap?.[component.id]
+    if (data) dataMap[component.id] = withFieldLabels(data, fieldLabelsForComponent(component))
+
+    const children = [
+      ...(component.children ?? []),
+      ...((component.containerConfig?.tabs ?? []).flatMap((tab) => tab.children)),
+    ]
+    children.forEach(visit)
+  }
+  props.components.forEach(visit)
+  return dataMap
+})
+
+function isSampleData(id: string): boolean {
+  const component = getComponent(id)
+  return Boolean(component && !['filter', 'timeFilter', 'combination'].includes(component.type) && !props.componentDataMap?.[id] && !hasConfiguredDataset(component))
+}
+
+function getWidgetComponent(id: string): InsightComponent | undefined {
+  const component = getComponent(id)
+  if (!component) return component
+  const projected = projectPythonResultKpi(component, props.componentDataMap?.[id])
+  if (!isSampleData(id) || projected.type !== 'filter') return projected
+  const sample = JSON.parse(resolveComponentSample(component).json) as { data?: { options?: Array<{ label: string; value: string }> } }
+  return {
+    ...projected,
+    config: { ...(projected.config ?? {}), optionSource: 'static', staticOptions: sample.data?.options ?? [] },
+  }
 }
 
 /** 拖拽悬停（允许 drop） */
@@ -314,7 +1057,233 @@ function handleDragOver(event: DragEvent): void {
   }
 }
 
-/** 从物料面板拖入新组件 */
+/** 拖拽中状态：正在以 HTML5 拖拽移动的顶层组件 ID（用于组合卡片放置提示） */
+const draggingComponentId = ref<string | null>(null)
+
+/** 组件标题栏是进入组合容器的专用拖拽把手，避免和画布栅格移动冲突。 */
+function handleComponentDragStart(event: DragEvent, componentId: string): void {
+  if (!props.editable || !event.dataTransfer) return
+  event.dataTransfer.effectAllowed = 'move'
+  event.dataTransfer.setData('application/json', JSON.stringify({
+    kind: 'canvas-component',
+    componentId,
+    componentType: getComponent(componentId)?.type,
+  }))
+  draggingComponentId.value = componentId
+  window.addEventListener('dragend', clearDraggingComponent, { once: true })
+}
+function clearDraggingComponent(): void {
+  draggingComponentId.value = null
+}
+
+/** 自研指针拖动中的顶层组件 ID（用于渲染 pointer-events:none 与置顶，null 表示未拖动） */
+const pointerDraggingId = ref<string | null>(null)
+
+/** 拖动悬停中的目标组合卡片 ID：null 表示未悬停在任何组合上方（用于放置提示） */
+const gridDragHoverComboId = ref<string | null>(null)
+
+/** 确认进入拖动的位移阈值（px） */
+const POINTER_DRAG_THRESHOLD = 4
+
+interface PointerDragState {
+  componentId: string
+  pointerId: number
+  startX: number
+  startY: number
+  originX: number
+  originY: number
+  originW: number
+  originH: number
+  active: boolean
+}
+
+let pointerDrag: PointerDragState | null = null
+
+/** pointerdown 候选：与库拖动的 drag-ignore-from 语义保持一致，命中交互元素时不进入拖动 */
+function isPointerDragIgnoreTarget(target: EventTarget | null): boolean {
+  return !!(target instanceof Element && target.closest(
+    'a, button, input, select, textarea, .grid-item-toolbar, .cc-child, .resize-handle, .component-resize-hotzone'
+  ))
+}
+
+/** 自研拖动入口（GridItem 全部 static 后库拖动已禁用）：先记录候选，位移超阈值才确认为拖动 */
+function handleItemPointerDown(event: PointerEvent, componentId: string): void {
+  if (!props.editable || event.button !== 0 || isPointerDragIgnoreTarget(event.target)) return
+  const item = gridLayout.value.find((g) => g.i === componentId)
+  if (!item) return
+  pointerDrag = {
+    componentId,
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: item.x,
+    originY: item.y,
+    originW: item.w,
+    originH: item.h,
+    active: false,
+  }
+  window.addEventListener('pointermove', onPointerDragMove)
+  window.addEventListener('pointerup', onPointerDragUp)
+  window.addEventListener('pointercancel', onPointerDragUp)
+}
+
+/** 解绑 window 上的拖动监听 */
+function unbindPointerDragListeners(): void {
+  window.removeEventListener('pointermove', onPointerDragMove)
+  window.removeEventListener('pointerup', onPointerDragUp)
+  window.removeEventListener('pointercancel', onPointerDragUp)
+}
+
+/** 拖动位移（视口 px）→ 栅格增量（列/行），按画布缩放归一 */
+function pointerDragGridDelta(dxPx: number, dyPx: number): { dx: number; dy: number } {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const stage = canvasRef.value?.querySelector<HTMLElement>('.canvas-grid-stage')
+  const rect = (grid ?? stage)?.getBoundingClientRect()
+  const scale = props.editable ? canvasZoom.value : 1
+  const logicalWidth = rect ? rect.width / scale : 0
+  const colWidth = logicalWidth > GRID_GAP * (GRID_COLS + 1)
+    ? (logicalWidth - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
+    : 0
+  return {
+    dx: colWidth > 0 ? Math.round(dxPx / scale / (colWidth + GRID_GAP)) : 0,
+    dy: Math.round(dyPx / scale / (GRID_ROW_HEIGHT + GRID_GAP)),
+  }
+}
+
+/**
+ * 悬停命中测试：同步内联禁用被拖卡片的 pointer-events 后再取 elementFromPoint。
+ * 不能只依赖 .is-pointer-dragging 的 CSS——它在 Vue 渲染周期中异步生效，首次
+ * pointermove 时被拖卡片仍会拦截命中，导致悬停检测在拖动第一步失效。
+ * 拖动中的组件 pointer-events:none 后，elementFromPoint 直接命中其下方元素，
+ * 嵌套组合天然取到最上层的最内层卡片。
+ */
+function hitTestExcludingDragged(x: number, y: number, componentId: string): Element | null {
+  const draggedEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${componentId}"]`)
+  if (draggedEl) draggedEl.style.pointerEvents = 'none'
+  const hit = document.elementFromPoint(x, y)
+  if (draggedEl) draggedEl.style.pointerEvents = ''
+  return hit
+}
+
+function onPointerDragMove(event: PointerEvent): void {
+  if (!pointerDrag || event.pointerId !== pointerDrag.pointerId) return
+  const drag = pointerDrag
+  if (!drag.active) {
+    if (Math.abs(event.clientX - drag.startX) < POINTER_DRAG_THRESHOLD && Math.abs(event.clientY - drag.startY) < POINTER_DRAG_THRESHOLD) return
+    drag.active = true
+    pointerDraggingId.value = drag.componentId
+    // 拖动即置顶：复用选中置顶，避免拖动中的卡片被其他卡片遮挡
+    handleSelectComponent(drag.componentId)
+  }
+  event.preventDefault()
+  const { dx, dy } = pointerDragGridDelta(event.clientX - drag.startX, event.clientY - drag.startY)
+  const item = gridLayout.value.find((g) => g.i === drag.componentId)
+  if (!item) return
+  item.x = Math.max(0, Math.min(drag.originX + dx, GRID_COLS - drag.originW))
+  item.y = Math.max(0, drag.originY + dy)
+
+  const hitCard = hitTestExcludingDragged(event.clientX, event.clientY, drag.componentId)?.closest('.combination-card')
+  const hostItem = hitCard?.closest('.vgl-item')
+  const hostId = hostItem?.querySelector<HTMLElement>('[data-component-id]')?.getAttribute('data-component-id') ?? null
+  gridDragHoverComboId.value = !hostId || hostId === drag.componentId ? null : hostId
+}
+
+/** 拖动结束：悬停在组合卡片上则移入，否则提交最终位置；未达阈值的视为普通点击（交给 @click） */
+function onPointerDragUp(event: PointerEvent): void {
+  const drag = pointerDrag
+  pointerDrag = null
+  unbindPointerDragListeners()
+  if (!drag || event.pointerId !== drag.pointerId) return
+  if (!drag.active) return
+  pointerDraggingId.value = null
+  const targetId = gridDragHoverComboId.value
+  gridDragHoverComboId.value = null
+
+  const item = gridLayout.value.find((g) => g.i === drag.componentId)
+  if (!item) return
+
+  if (targetId) {
+    const itemEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${drag.componentId}"]`)?.closest('.vgl-item')
+    const bodyEl = document.querySelector<HTMLElement>(`.grid-item-content[data-component-id="${targetId}"] .combination-card > .cc-body`)
+    const ir = itemEl?.getBoundingClientRect()
+    const br = bodyEl?.getBoundingClientRect()
+    if (ir && br && ir.width > 0 && br.width > 0) {
+      const scale = props.editable ? canvasZoom.value : 1
+      emit('move-component-into', {
+        containerId: targetId,
+        componentId: drag.componentId,
+        x: Math.max(0, (ir.left - br.left) / scale),
+        y: Math.max(0, (ir.top - br.top) / scale),
+      })
+    }
+    return
+  }
+
+  if (item.x !== drag.originX || item.y !== drag.originY) {
+    emit('update-layout', [{ id: drag.componentId, x: item.x, y: item.y, w: drag.originW, h: drag.originH }])
+  }
+}
+
+onBeforeUnmount(() => {
+  unbindPointerDragListeners()
+  previewResizeObserver?.disconnect()
+  previewResizeObserver = null
+})
+
+/** 预览态：观察画布根元素尺寸变化（窗口缩放、侧栏收起等），实时重算等比缩放。 */
+onMounted(() => {
+  if (!props.editable) {
+    updatePreviewFit()
+    if (canvasRef.value && typeof ResizeObserver !== 'undefined') {
+      previewResizeObserver = new ResizeObserver(updatePreviewFit)
+      previewResizeObserver.observe(canvasRef.value)
+    }
+    return
+  }
+})
+
+/** 栅格参数（与 GridLayout 的 col-num / row-height / margin 保持一致） */
+const GRID_COLS = 24
+const GRID_ROW_HEIGHT = 30
+const GRID_GAP = 12
+
+/**
+ * 鼠标 drop 位置 → 栅格坐标。
+ * 换算公式与 grid-layout-plus 的排布一致：
+ *   colWidth = (容器宽 - margin × (cols + 1)) / cols；left = margin + col × (colWidth + margin)
+ * 优先用 .vgl-layout 网格容器的边界换算（列宽随画布宽度自适应），
+ * 空画布没有网格容器时退化为画布根元素边界。列坐标钳制到 [0, COLS-1]，
+ * 行坐标只钳下界（画布可向下无限增长）。
+ */
+function dropToGrid(clientX: number, clientY: number): { x: number; y: number } {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const stage = canvasRef.value?.querySelector<HTMLElement>('.canvas-grid-stage')
+  const rect = (grid ?? stage ?? canvasRef.value)?.getBoundingClientRect()
+  if (!rect) return { x: 0, y: 0 }
+  const scale = props.editable ? canvasZoom.value : 1
+  const logicalWidth = rect.width / scale
+  const offsetX = (clientX - rect.left) / scale
+  const offsetY = (clientY - rect.top) / scale
+  const colWidth = (logicalWidth - GRID_GAP * (GRID_COLS + 1)) / GRID_COLS
+  if (colWidth <= 0) return { x: 0, y: 0 }
+  const col = Math.floor((offsetX - GRID_GAP) / (colWidth + GRID_GAP))
+  const row = Math.floor((offsetY - GRID_GAP) / (GRID_ROW_HEIGHT + GRID_GAP))
+  return {
+    x: Math.max(0, Math.min(col, GRID_COLS - 1)),
+    y: Math.max(0, row),
+  }
+}
+
+/** 子卡片拖出组合卡片：把释放点的视口坐标换算为画布栅格落点后交给编辑器 */
+function handleChildDragOut(payload: { containerId: string; childId: string; clientX: number; clientY: number }): void {
+  emit('move-child-out', {
+    containerId: payload.containerId,
+    childId: payload.childId,
+    position: dropToGrid(payload.clientX, payload.clientY),
+  })
+}
+
+/** 从物料面板拖入新组件（携带鼠标落点的栅格坐标，由编辑器按此放置） */
 function handleDrop(event: DragEvent): void {
   if (!event.dataTransfer) {
     return
@@ -325,7 +1294,8 @@ function handleDrop(event: DragEvent): void {
   }
   try {
     const payload = JSON.parse(raw) as { type: InsightComponentType; chartType?: ChartType }
-    emit('add-component', payload)
+    if ((payload as { kind?: string }).kind === 'canvas-component') return
+    emit('add-component', { ...payload, position: dropToGrid(event.clientX, event.clientY) })
   } catch (e) {
     console.error('[DashboardCanvas] drop parse error:', e)
   }
@@ -336,135 +1306,342 @@ function handleSelectComponent(id: string): void {
   emit('select-component', id)
 }
 
+function handleComponentKeydown(event: KeyboardEvent, id: string): void {
+  if (!props.editable) return
+  if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+    if (event.key.toLowerCase() === 'c') {
+      event.preventDefault()
+      event.stopPropagation()
+      emit('copy-component', id)
+      return
+    }
+    if (event.key.toLowerCase() === 'v') {
+      event.preventDefault()
+      event.stopPropagation()
+      emit('paste-component')
+      return
+    }
+  }
+  const item = gridLayout.value.find((entry) => entry.i === id)
+  if (!item) return
+  const direction = event.key
+  if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(direction)) return
+  event.preventDefault()
+  const next = { ...item }
+  if (event.shiftKey) {
+    if (direction === 'ArrowRight') next.w += 1
+    if (direction === 'ArrowLeft') next.w = Math.max(1, next.w - 1)
+    if (direction === 'ArrowDown') next.h += 1
+    if (direction === 'ArrowUp') next.h = Math.max(1, next.h - 1)
+  } else {
+    if (direction === 'ArrowRight') next.x += 1
+    if (direction === 'ArrowLeft') next.x = Math.max(0, next.x - 1)
+    if (direction === 'ArrowDown') next.y += 1
+    if (direction === 'ArrowUp') next.y = Math.max(0, next.y - 1)
+  }
+  gridLayout.value = gridLayout.value.map((entry) => entry.i === id ? next : entry)
+  emit('update-layout', gridLayout.value.map((entry) => ({ id: entry.i, x: entry.x, y: entry.y, w: entry.w, h: entry.h })))
+}
+
+function handleComponentContextMenu(event: MouseEvent, id: string): void {
+  if (!props.editable) return
+  emit('context-menu', { componentId: id, x: event.clientX, y: event.clientY })
+}
+
+function handleCanvasKeydown(event: KeyboardEvent): void {
+  if (!props.editable || event.target !== canvasRef.value) return
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'v') {
+    event.preventDefault()
+    event.stopPropagation()
+    emit('paste-component')
+  }
+}
+
+function handleCanvasContextMenu(event: MouseEvent): void {
+  if (!props.editable) return
+  emit('context-menu', { componentId: null, x: event.clientX, y: event.clientY })
+}
+
+/** 组合卡片子组件选中/取消（透传给编辑器，联动属性面板） */
+function handleSelectChild(payload: { containerId: string; childId: string | null }): void {
+  emit('select-child', payload)
+}
+
 /** 删除组件 */
 function handleDeleteComponent(id: string): void {
   emit('delete-component', id)
 }
 
 /** 自定义边缘拖动状态 */
-const resizingItem = ref<{ id: string; edge: string; startX: number; startY: number; startW: number; startH: number; startXPos: number; startYPos: number } | null>(null)
+const resizingItem = ref<{
+  id: string
+  edge: GridResizeEdge
+  startX: number
+  startY: number
+  startW: number
+  startH: number
+  startXPos: number
+  startYPos: number
+  pointerId: number
+  metrics: GridResizeMetrics
+} | null>(null)
 
 /** 是否正在自定义拉伸（期间禁用 grid-layout-plus 内置拖拽/缩放，避免碰撞检测推走位置） */
 const isCustomResizing = ref(false)
+let resizeRaf = 0
+let resizeLastPoint: { x: number; y: number } | null = null
+/** 拖拽中的连续尺寸预览：布局栅格坐标保留小数，预览与持久化使用相同几何。 */
+const resizePreviewStyle = ref<Record<string, string> | null>(null)
+
+function readGridResizeMetrics(): GridResizeMetrics {
+  const grid = canvasRef.value?.querySelector<HTMLElement>('.vgl-layout')
+  const gridWidth = (grid?.getBoundingClientRect().width ?? canvasRef.value?.getBoundingClientRect().width ?? 0) / canvasZoom.value
+  return { gridWidth, columns: GRID_COLS, marginX: GRID_GAP, rowHeight: GRID_ROW_HEIGHT, marginY: GRID_GAP }
+}
 
 /** 开始自定义边缘拖动 */
-function startResize(event: MouseEvent, id: string, edge: string): void {
-  const comp = getComponent(id)
-  if (!comp) return
+function startResize(event: PointerEvent, id: string, edge: GridResizeEdge): void {
+  const item = gridLayout.value.find((entry) => entry.i === id)
+  if (!item) return
+  event.preventDefault()
+  event.stopPropagation()
   isCustomResizing.value = true
+  pendingCollisionLayout = null
   resizingItem.value = {
     id,
     edge,
     startX: event.clientX,
     startY: event.clientY,
-    startW: comp.position.w,
-    startH: comp.position.h,
-    startXPos: comp.position.x,
-    startYPos: comp.position.y,
+    startW: item.w,
+    startH: item.h,
+    startXPos: item.x,
+    startYPos: item.y,
+    pointerId: event.pointerId,
+    metrics: readGridResizeMetrics(),
   }
-  document.addEventListener('mousemove', handleResizeMove)
-  document.addEventListener('mouseup', handleResizeEnd)
+  document.addEventListener('pointermove', handleResizeMove)
+  document.addEventListener('pointerup', handleResizeEnd)
 }
 
-/** 计算拉伸后的新尺寸 */
-function calcResizeResult(dx: number, dy: number): { newX: number; newY: number; newW: number; newH: number } | null {
-  if (!resizingItem.value) return null
-  const colWidth = 30
-  const rowHeight = 30
-
-  let newW = resizingItem.value.startW
-  let newH = resizingItem.value.startH
-  let newX = resizingItem.value.startXPos
-  let newY = resizingItem.value.startYPos
-
-  if (resizingItem.value.edge === 'left') {
-    const colDelta = Math.round(dx / colWidth)
-    newW = Math.max(1, resizingItem.value.startW - colDelta)
-  } else if (resizingItem.value.edge === 'right') {
-    const colDelta = Math.round(dx / colWidth)
-    newW = Math.max(1, resizingItem.value.startW + colDelta)
-  } else if (resizingItem.value.edge === 'top') {
-    const rowDelta = Math.round(dy / rowHeight)
-    newH = Math.max(1, resizingItem.value.startH - rowDelta)
-  } else if (resizingItem.value.edge === 'bottom') {
-    const rowDelta = Math.round(dy / rowHeight)
-    newH = Math.max(1, resizingItem.value.startH + rowDelta)
-  }
-
-  // 边界保护
-  if (newX < 0) {
-    newX = 0
-  }
-  if (newY < 0) {
-    newY = 0
-  }
-  if (newX + newW > 24) {
-    newW = 24 - newX
-  }
-
-  return { newX, newY, newW, newH }
+function applyResizePoint(point: { x: number; y: number }): void {
+  const start = resizingItem.value
+  if (!start) return
+  const result = calculateGridResize({
+    edge: start.edge,
+    startX: start.startX,
+    startY: start.startY,
+    startW: start.startW,
+    startH: start.startH,
+    startXPos: start.startXPos,
+    startYPos: start.startYPos,
+    dx: (point.x - start.startX) / canvasZoom.value,
+    dy: (point.y - start.startY) / canvasZoom.value,
+  }, start.metrics)
+  const item = gridLayout.value.find((g) => g.i === start.id)
+  if (item) Object.assign(item, { x: result.newX, y: result.newY, w: result.newW, h: result.newH })
 }
 
-/** 拖动中：直接更新 gridLayout 本地数据，避免 props 往返 */
-function handleResizeMove(event: MouseEvent): void {
-  if (!resizingItem.value) return
-
-  const dx = event.clientX - resizingItem.value.startX
-  const dy = event.clientY - resizingItem.value.startY
-  const result = calcResizeResult(dx, dy)
-  if (!result) return
-
-  // 直接修改本地 gridLayout，让 grid-layout-plus 即时响应
-  const item = gridLayout.value.find((g) => g.i === resizingItem.value!.id)
-  if (item) {
-    item.x = result.newX
-    item.y = result.newY
-    item.w = result.newW
-    item.h = result.newH
+/** 拖动中：按指针连续更新宽度；仅垂直方向仍按行吸附，松手提交与预览同一几何。 */
+function handleResizeMove(event: PointerEvent): void {
+  if (!resizingItem.value || event.pointerId !== resizingItem.value.pointerId) return
+  event.preventDefault()
+  resizeLastPoint = { x: event.clientX, y: event.clientY }
+  if (!resizeRaf) {
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0
+      const start = resizingItem.value
+      if (!start || !resizeLastPoint) return
+      resizePreviewStyle.value = calculateResizePreview({
+        edge: start.edge,
+        startW: start.startW,
+        startH: start.startH,
+        startXPos: start.startXPos,
+        startYPos: start.startYPos,
+        dx: (resizeLastPoint.x - start.startX) / canvasZoom.value,
+        dy: (resizeLastPoint.y - start.startY) / canvasZoom.value,
+      }, start.metrics)
+    })
   }
 }
 
 /** 拖动结束：将最终结果 emit 给父组件持久化 */
-function handleResizeEnd(): void {
+function handleResizeEnd(event?: PointerEvent): void {
+  if (event && resizingItem.value && event.pointerId !== resizingItem.value.pointerId) return
+  if (resizeRaf) {
+    cancelAnimationFrame(resizeRaf)
+    resizeRaf = 0
+  }
+  // 清除预览前按最终鼠标位置写入布局；横向小数列宽保证预览与最终盒子一致
+  resizePreviewStyle.value = null
+  if (resizeLastPoint) applyResizePoint(resizeLastPoint)
   if (resizingItem.value) {
-    const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
-    if (item) {
-      emit('update-layout', [{
-        id: resizingItem.value.id,
-        x: item.x,
-        y: item.y,
-        w: item.w,
-        h: item.h,
-      }])
+    // 缩放期间 GridLayout 因碰撞让位产生的整理布局，在松手时统一采纳：
+    // 拖拽中的让位结果只渲染在库内部，这里同步回 gridLayout 并连同被推挤组件一起持久化，
+    // 避免保存后重新打开时邻居位置弹回。
+    if (pendingCollisionLayout) {
+      // 库内整理布局可能不含最后一次 pointermove 的最终尺寸，先把当前卡片的最终值合并进去
+      const current = gridLayout.value.find((g) => g.i === resizingItem.value.id)
+      const finalItem = pendingCollisionLayout.find((g) => g.i === resizingItem.value.id)
+      if (current && finalItem) {
+        Object.assign(finalItem, { x: current.x, y: current.y, w: current.w, h: current.h })
+      }
+      gridLayout.value = pendingCollisionLayout
+      pendingCollisionLayout = null
+      const realChanges = collectRealLayoutChanges(gridLayout.value)
+      if (realChanges.length > 0) {
+        emit(
+          'update-layout',
+          realChanges.map((item) => ({ id: item.i, x: item.x, y: item.y, w: item.w, h: item.h }))
+        )
+      }
+    } else {
+      const item = gridLayout.value.find((g) => g.i === resizingItem.value.id)
+      if (item) {
+        emit('update-layout', [{
+          id: resizingItem.value.id,
+          x: item.x,
+          y: item.y,
+          w: item.w,
+          h: item.h,
+        }])
+      }
     }
   }
+  resizeLastPoint = null
   resizingItem.value = null
   isCustomResizing.value = false
-  document.removeEventListener('mousemove', handleResizeMove)
-  document.removeEventListener('mouseup', handleResizeEnd)
+  document.removeEventListener('pointermove', handleResizeMove)
+  document.removeEventListener('pointerup', handleResizeEnd)
 }
 
 /** 筛选组件值变化 */
-function handleFilterChange(componentId: string, payload: { field: string; value: string }): void {
+function handleFilterChange(componentId: string, payload: { field: string; value: string | string[] | undefined }): void {
   emit('filter-change', { componentId, field: payload.field, value: payload.value })
 }
 
 /** 时间筛选组件值变化 */
-function handleTimeFilterChange(componentId: string, payload: { field: string; timeRange: TimeRangeValue }): void {
-  emit('time-filter-change', { componentId, field: payload.field, timeRange: payload.timeRange })
+function handleTimeFilterChange(componentId: string, payload: { field: string; timeRange: TimeRangeValue | undefined; timeGranularity: TimeGranularity }): void {
+  emit('time-filter-change', { componentId, ...payload })
 }
 </script>
 
 <style scoped>
+/* 覆盖 grid-layout-plus 默认拖拽占位色（库内联 --vgl-placeholder-bg: red / opacity 20%）
+   → 改为品牌强调色低透明：既无粉红残影，又保留「松手会落在哪里」的落点反馈 */
+.dashboard-canvas :deep(.vgl-layout) {
+  --vgl-placeholder-bg: var(--db-accent);
+  --vgl-placeholder-opacity: 0.08;
+  --vgl-placeholder-radius: 8px;
+}
+
+/* 选中的组件置顶：压过相邻/重叠的卡片（含组合卡片内溢出的绝对定位子卡片） */
+.dashboard-canvas :deep(.vgl-item.is-selected-top) {
+  z-index: 30;
+}
+
+/* 自研指针拖动中的组件不拦截指针：悬停检测（elementFromPoint）需要命中其下方的组合卡片 */
+.dashboard-canvas :deep(.is-pointer-dragging) {
+  pointer-events: none;
+}
+
 .dashboard-canvas {
   width: 100%;
   height: 100%;
   overflow: auto;
   padding: var(--space-xl);
   box-sizing: border-box;
-  background: var(--db-bg);
+  background: var(--dashboard-canvas-background, var(--db-bg, #F7F8FA));
   display: flex;
   flex-direction: column;
+}
+
+.canvas-zoom-toolbar {
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+  align-self: flex-end;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  padding: 4px;
+  border: 1px solid var(--db-border);
+  border-radius: 8px;
+  background: var(--db-card);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Element Plus 对话框可能挂在属性面板内，抽屉则可能挂在 body 下；任意可见遮罩期间隐藏工具条并保留占位。 */
+:global(body:has(.el-overlay:not([style*="display: none"])) .canvas-zoom-toolbar) {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.canvas-zoom-toolbar button {
+  min-width: 28px;
+  height: 28px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--db-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas-zoom-toolbar button:hover:not(:disabled) {
+  background: var(--db-bg);
+  color: var(--db-accent);
+}
+
+.canvas-zoom-toolbar button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.canvas-zoom-toolbar .canvas-zoom-input {
+  width: 46px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  outline-offset: 1px;
+  background: transparent;
+  color: var(--db-text-secondary);
+  font: inherit;
+  font-size: 12px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.canvas-zoom-toolbar .canvas-zoom-input:focus-visible {
+  outline: 2px solid var(--db-accent);
+}
+
+.canvas-zoom-toolbar .canvas-zoom-suffix {
+  margin-left: -4px;
+  color: var(--db-text-secondary);
+  font-size: 12px;
+}
+
+.canvas-zoom-live {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.canvas-zoom-toolbar .canvas-fit-button {
+  border-left: 1px solid var(--db-border);
+  border-radius: 0 5px 5px 0;
+}
+
+.canvas-grid-stage {
+  width: 100%;
 }
 
 .global-filter-bar {
@@ -524,17 +1701,43 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-content {
+  position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   box-sizing: border-box;
-  background: var(--db-card);
-  border: 1px solid var(--db-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-card);
+  background: var(--component-surface, var(--component-group-surface, var(--db-surface-card, var(--db-card))));
+  border: var(--component-border, 1px solid var(--component-group-border, var(--db-border)));
+  border-radius: var(--component-radius, var(--radius-lg));
+  box-shadow: var(--component-shadow, var(--shadow-card));
+  padding: var(--component-padding, 0px);
   transition: box-shadow var(--transition-base), border-color var(--transition-fast);
+}
+.grid-item-content::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  /* 顶线以整卡渐变叠加绘制：叠加层全高继承圆角不会被压缩，顶线转角与卡片圆角逐像素吻合 */
+  background: linear-gradient(to bottom, var(--component-group-accent, transparent) 0 6px, transparent 6px);
+  pointer-events: none;
+}
+/* 自定义拉伸预览：卡片以像素级盒模型临时生长/收缩，需溢出 GridItem 且压过相邻卡片 */
+.grid-item-content.custom-resizing {
+  overflow: visible;
+  z-index: 30;
+}
+
+.dashboard-canvas.is-resizing,
+.dashboard-canvas.is-resizing * {
+  user-select: none;
+}
+
+.dashboard-canvas.is-resizing .grid-item-content {
+  transition: none;
 }
 
 /* 扩大 resizer 热区 */
@@ -649,22 +1852,24 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-content:hover {
-  border-color: var(--db-border-strong);
-  box-shadow: var(--shadow-card-hover);
+  /* 边框隐藏时回落 transparent，不再重绘灰边；否则回落 --db-border-strong */
+  border-color: var(--component-hover-border-color, var(--db-border-strong));
+  box-shadow: var(--component-hover-shadow, var(--shadow-card));
 }
 
 .grid-item-content.selected {
-  border-color: var(--db-accent);
-  box-shadow: 0 0 0 2px var(--db-accent-light), var(--shadow-card-hover);
+  /* 边框隐藏时回落 transparent，不再重绘蓝边；否则回落 --db-accent */
+  border-color: var(--component-selected-border-color, var(--db-accent));
+  box-shadow: var(--component-selected-shadow, 0 0 0 2px var(--db-accent-light), var(--shadow-card-hover));
 }
 
 .editable .grid-item-content {
-  border-style: dashed;
+  border-style: solid;
 }
 
 .editable .grid-item-content:hover {
   border-style: solid;
-  border-color: var(--db-accent);
+  border-color: var(--component-hover-border-color, var(--db-border-strong));
 }
 
 .editable .grid-item-content.selected {
@@ -672,13 +1877,46 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 }
 
 .grid-item-toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: var(--space-sm) var(--space-md);
-  background: var(--db-hover);
-  border-bottom: 1px solid var(--db-border);
+  background: transparent;
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 60%, transparent);
   flex-shrink: 0;
+  cursor: grab;
+}
+
+.grid-item-toolbar:active {
+  cursor: grabbing;
+}
+
+/* 隐藏标题栏（title-bar-hidden）：工具条整体收为零高不占位（与内联筛选组件同构），
+   仅删除按钮悬浮右上角；标题/图标/示例水印随标题栏整体隐藏。
+   拖动仍可从卡片空白处发起（handleItemPointerDown），删除与右键菜单保留。 */
+.grid-item-toolbar.title-bar-hidden {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.grid-item-toolbar.title-bar-hidden .grid-item-delete {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.grid-item-toolbar.title-bar-hidden .sample-data-watermark--titlebar {
+  display: none;
 }
 
 .grid-item-title {
@@ -688,6 +1926,76 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.grid-item-title-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  border: none;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  cursor: text;
+}
+
+.grid-item-title-group {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  gap: 2px;
+}
+
+.grid-item-title-group :deep(.dashboard-component-icon) {
+  margin-right: 0;
+}
+
+.grid-item-icon-style-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  margin: 0 -4px 0 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--db-text-muted);
+  cursor: pointer;
+}
+.grid-item-icon-style-trigger:hover {
+  background: var(--db-hover);
+  color: var(--db-accent);
+}
+.grid-item-icon-style-trigger:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: 1px;
+}
+
+.grid-item-title-edit {
+  color: var(--db-text-muted);
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.grid-item-title-trigger:hover .grid-item-title-edit {
+  opacity: 0.8;
+}
+
+.grid-item-title-input {
+  min-width: 120px;
+  max-width: 280px;
+  height: 24px;
+  border: 1px solid var(--db-accent);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  background: var(--db-surface-control, var(--db-card));
+  color: var(--db-text);
+  font-size: 13px;
+  outline: none;
 }
 
 .grid-item-delete {
@@ -710,6 +2018,59 @@ function handleTimeFilterChange(componentId: string, payload: { field: string; t
 .grid-item-body {
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+.sample-data-watermark {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border: 1px solid rgba(190, 45, 45, 0.18);
+  border-radius: 999px;
+  color: rgba(159, 37, 37, 0.68);
+  background: rgba(255, 239, 239, 0.58);
+  box-shadow: 0 1px 3px rgba(80, 20, 20, 0.04);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  user-select: none;
+}
+
+.sample-data-watermark--titlebar {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.72;
+  filter: blur(0.15px);
+}
+
+/* 筛选器自身提供横向标题与控件布局，编辑态工具栏只保留删除入口。 */
+.grid-item-content.inline-filter-component .grid-item-toolbar {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.grid-item-content.inline-filter-component .grid-item-delete {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 4;
+  pointer-events: auto;
+}
+
+.grid-item-content.inline-filter-component .grid-item-body {
+  height: 100%;
 }
 
 /* 组件数据加载失败：内嵌 danger 淡色提示面板（图标 chip + 截断消息），

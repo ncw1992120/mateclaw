@@ -53,6 +53,23 @@ public final class JdbcUtils {
                 url.append("jdbc:mysql://").append(host).append(":").append(port).append("/").append(databaseName);
                 if (extraParams != null && !extraParams.isEmpty()) {
                     url.append("?").append(extraParams);
+                } else {
+                    url.append("?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai");
+                }
+                break;
+            case "starrocks":
+                url.append("jdbc:starrocks://").append(host).append(":").append(port).append("/");
+                url.append(databaseName != null && databaseName.contains(".")
+                        ? databaseName : "default_catalog." + databaseName);
+                if (extraParams != null && !extraParams.isEmpty()) {
+                    url.append("?").append(extraParams);
+                }
+                break;
+            case "sqlserver":
+                url.append("jdbc:sqlserver://").append(host).append(":").append(port)
+                        .append(";databaseName=").append(databaseName);
+                if (extraParams != null && !extraParams.isEmpty()) {
+                    url.append(';').append(extraParams.replace('&', ';'));
                 }
                 break;
             default:
@@ -72,10 +89,11 @@ public final class JdbcUtils {
     public static String quoteIdentifier(DatasourceEntity entity, String identifier) {
         String sourceType = entity.getSourceType();
         return switch (sourceType) {
-            case "mysql", "doris" -> "`" + identifier + "`";
+            case "mysql", "doris", "starrocks" -> "`" + identifier + "`";
             case "postgresql" -> "\"" + identifier + "\"";
             case "oracle" -> "\"" + identifier + "\"";
             case "clickhouse" -> "`" + identifier + "`";
+            case "sqlserver" -> "[" + identifier.replace("]", "]]" ) + "]";
             default -> identifier;
         };
     }

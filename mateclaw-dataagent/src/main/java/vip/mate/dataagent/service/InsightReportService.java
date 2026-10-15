@@ -5,6 +5,7 @@ import vip.mate.dataagent.dto.AttributionAnalysisRequest;
 import vip.mate.dataagent.dto.AttributionAnalysisResponse;
 import vip.mate.dataagent.dto.InsightReportPublishRequest;
 import vip.mate.dataagent.dto.InsightReportVO;
+import vip.mate.dataagent.dto.InsightComponentAiAnalysisRequest;
 
 import java.util.List;
 
@@ -28,6 +29,9 @@ public interface InsightReportService {
      * @return 完整 HTML 报告内容
      */
     String generateReport(Long dashboardId);
+
+    /** 基于预览页已加载的数据快照生成单个 AI 分析组件的 Markdown 内容。 */
+    String generateComponentAnalysis(Long dashboardId, String componentId, InsightComponentAiAnalysisRequest request);
 
     /**
      * 获取已生成的报告内容

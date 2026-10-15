@@ -21,6 +21,7 @@ import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.support.AloudataSyncFilterSupport;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.llm.embedding.EmbeddingModelFactory;
 import vip.mate.llm.model.ModelConfigEntity;
 import vip.mate.llm.service.ModelConfigService;
@@ -59,9 +60,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     private EmbeddingModelFactory embeddingModelFactory;
 
     private static final String ENDPOINT_CATEGORY_LIST = "category_list";
+    private static final String ENDPOINT_METRIC_TREE = "metric_tree";
     private static final String ENDPOINT_METRIC_LIST = "metric_list";
     private static final String ENDPOINT_METRIC_BATCH_DETAIL = "metric_batch_detail";
     private static final String ENDPOINT_METRIC_ALL_DIMENSIONS = "metric_all_dimensions";
+    private static final String ENDPOINT_METRIC_DIMENSIONS = "metric_dimensions";
     private static final String ENDPOINT_DIMENSION_LIST = "dimension_list";
     private static final String ENDPOINT_DIMENSION_DETAIL = "dimension_detail";
 
@@ -218,9 +221,10 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         LambdaQueryWrapper<AloudataMetricDimensionEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataMetricDimensionEntity::getDatasourceId, datasourceId);
         wrapper.in(AloudataMetricDimensionEntity::getMetricName, metricNames);
-        if (keyword != null && !keyword.isBlank()) {
-            wrapper.and(w -> w.like(AloudataMetricDimensionEntity::getDimName, keyword)
-                    .or().like(AloudataMetricDimensionEntity::getDimDisplayName, keyword));
+        String kw = NameMatchSupport.trimSpaces(keyword);
+        if (kw != null && !kw.isBlank()) {
+            wrapper.and(w -> w.like(AloudataMetricDimensionEntity::getDimName, kw)
+                    .or().like(AloudataMetricDimensionEntity::getDimDisplayName, kw));
         }
         List<AloudataMetricDimensionEntity> relations = metricDimensionMapper.selectList(wrapper);
         // 按 dimName 去重
@@ -282,6 +286,36 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    public List<Map<String, Object>> listMetricDirectory(Long datasourceId) {
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            return Collections.emptyList();
+        }
+        try {
+            Map<String, Object> params = endpointService.buildHeaderParamsFromConfig(ENDPOINT_METRIC_TREE, config);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_TREE, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
+                String message = body == null ? "Aloudata 返回空响应" : asStr(body.get("errorMsg"));
+                throw new IllegalStateException("加载 Aloudata 指标目录失败：" + (message == null ? "接口请求失败" : message));
+            }
+            Object data = body.get("data");
+            if (data instanceof Map<?, ?> dataMap && dataMap.get("rootList") instanceof List<?> roots) {
+                return (List<Map<String, Object>>) roots;
+            }
+            if (data instanceof List<?> roots) {
+                return (List<Map<String, Object>>) roots;
+            }
+            return Collections.emptyList();
+        } catch (IllegalStateException e) {
+            throw e;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标目录] 加载失败 datasourceId={}: {}", datasourceId, e.getMessage());
+            throw new IllegalStateException("加载 Aloudata 指标目录失败", e);
+        }
+    }
+
+    @Override
     public List<AloudataCategoryEntity> listSyncedCategories(Long datasourceId, String categoryType) {
         LambdaQueryWrapper<AloudataCategoryEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(AloudataCategoryEntity::getDatasourceId, datasourceId);
@@ -293,38 +327,342 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    /**
+     * 实时分页查询指标（直接打 Aloudata metric_list，单次请求带分页/limit，不依赖本地同步表）。
+     */
     public IPage<AloudataMetricSemanticDTO> pageMetrics(Long datasourceId, AloudataMetricPageQuery query) {
-        Page<AloudataMetricEntity> page = new Page<>(query.getPageNumber(), query.getPageSize());
-        LambdaQueryWrapper<AloudataMetricEntity> wrapper = buildMetricQueryWrapper(datasourceId, query);
-        metricMapper.selectPage(page, wrapper);
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
+        }
+        String keyword = NameMatchSupport.trimSpaces(query.getKeyword());
+        Map<String, Object> input = new HashMap<>();
+        input.put("statusFilters", List.of("PUBLISHED"));
+        input.put("pageNumber", query.getPageNumber());
+        input.put("pageSize", query.getPageSize());
+        if (StringUtils.hasText(keyword)) {
+            input.put("keyword", keyword);
+        }
+        if (StringUtils.hasText(query.getCategoryId())) {
+            input.put("metricCategoryId", query.getCategoryId());
+        }
 
-        List<String> metricNames = page.getRecords().stream()
-                .map(AloudataMetricEntity::getMetricName)
-                .collect(Collectors.toList());
-        Map<String, List<String>> dimMap = batchLoadMetricDimensions(datasourceId, metricNames);
-
-        List<AloudataMetricSemanticDTO> records = page.getRecords().stream()
-                .map(e -> toMetricSemanticDTO(e, dimMap.get(e.getMetricName())))
-                .collect(Collectors.toList());
-
-        Page<AloudataMetricSemanticDTO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
-        result.setRecords(records);
-        return result;
+        try {
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_LIST, config, input);
+            // Existing persisted endpoint definitions may predate these live-picker filters.
+            // Forward the documented query fields explicitly so an old parameter whitelist
+            // cannot silently turn category/search requests into an unfiltered request.
+            if (StringUtils.hasText(keyword)) params.put("keyword", keyword);
+            if (StringUtils.hasText(query.getCategoryId())) params.put("metricCategoryId", query.getCategoryId());
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_LIST, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
+                String message = body != null ? Objects.toString(body.get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 指标接口返回失败: " + message);
+            }
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            long total = (data != null && data.get("total") != null) ? ((Number) data.get("total")).longValue() : 0;
+            List<Map<String, Object>> rows = data != null ? (List<Map<String, Object>>) data.get("data") : null;
+            List<AloudataMetricSemanticDTO> records = (rows == null) ? Collections.emptyList()
+                    : rows.stream().map(this::toMetricSemanticDTO).collect(Collectors.toList());
+            /* 平台检索对「输入与名称不完全一致」（多余末字符、内部空格、全半角差异等）较严，
+             * 常见表现为完整名搜不到、删掉末字符反而命中。平台空结果时用本地同步表的
+             * contains（LIKE %kw%）兜底，提高召回；本地数据来自全量同步，非空即用。 */
+            boolean localFallback = false;
+            if (records.isEmpty() && StringUtils.hasText(keyword)) {
+                records = searchLocalMetricsFallback(datasourceId, keyword, query.getPageNumber(), query.getPageSize());
+                localFallback = !records.isEmpty();
+                if (localFallback) {
+                    log.info("[Aloudata指标分页] 平台无结果，本地同步表兜底命中 {} 条 keyword={}", records.size(), keyword);
+                }
+            }
+            if (!records.isEmpty()) {
+                List<String> metricNames = records.stream().map(AloudataMetricSemanticDTO::getMetricName)
+                        .filter(Objects::nonNull).collect(Collectors.toList());
+                Map<String, List<String>> dimensionMap = fetchMetricDimensionNames(config, metricNames);
+                records.forEach(metric -> metric.setAvailableDimensions(
+                        dimensionMap != null ? dimensionMap.get(metric.getMetricName()) : null));
+            }
+            Page<AloudataMetricSemanticDTO> result = localFallback
+                    ? new Page<>(query.getPageNumber(), query.getPageSize(),
+                        (long) (query.getPageNumber() - 1) * query.getPageSize() + records.size())
+                    : new Page<>(query.getPageNumber(), query.getPageSize(), total);
+            result.setRecords(records);
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标分页] 调用失败: {}", e.getMessage());
+            throw new IllegalStateException("调用 Aloudata 指标接口失败: " + e.getMessage(), e);
+        }
     }
 
     @Override
+    /**
+     * 实时分页查询维度（直接打 Aloudata dimension_list，分页走 BODY 的 pager，不依赖本地同步表）。
+     */
     public IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query) {
-        Page<AloudataDimensionEntity> page = new Page<>(query.getPageNumber(), query.getPageSize());
-        LambdaQueryWrapper<AloudataDimensionEntity> wrapper = buildDimensionQueryWrapper(datasourceId, query);
-        dimensionMapper.selectPage(page, wrapper);
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
+        }
+        Map<String, Object> pager = new HashMap<>();
+        pager.put("pageNumber", query.getPageNumber());
+        pager.put("pageSize", query.getPageSize());
+        Map<String, Object> input = new HashMap<>();
+        input.put("statusFilters", List.of("PUBLISHED"));
+        input.put("pager", pager);
+        String keyword = NameMatchSupport.trimSpaces(query.getKeyword());
+        if (StringUtils.hasText(keyword)) {
+            input.put("keyword", keyword);
+        }
+        if (StringUtils.hasText(query.getCategoryId())) {
+            input.put("categoryId", query.getCategoryId());
+        }
 
-        List<AloudataDimensionSemanticDTO> records = page.getRecords().stream()
-                .map(this::toDimensionSemanticDTO)
-                .collect(Collectors.toList());
+        try {
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_DIMENSION_LIST, config, input);
+            // Older database endpoint definitions may not declare keyword although Aloudata's
+            // dimension/list contract accepts it; keep live directory search functional.
+            if (StringUtils.hasText(keyword)) {
+                params.put("keyword", keyword);
+            }
+            if (StringUtils.hasText(query.getCategoryId())) {
+                params.put("categoryId", query.getCategoryId());
+            }
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_DIMENSION_LIST, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body == null || !Boolean.TRUE.equals(body.get("success"))) {
+                String message = body != null ? Objects.toString(body.get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 维度接口返回失败: " + message);
+            }
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            long total = (data != null && data.get("total") != null) ? ((Number) data.get("total")).longValue() : 0;
+            List<Map<String, Object>> rows = data != null ? (List<Map<String, Object>>) data.get("data") : null;
+            List<AloudataDimensionSemanticDTO> records = (rows == null) ? Collections.emptyList()
+                    : rows.stream().map(this::toDimensionSemanticDTO).collect(Collectors.toList());
+            /* 平台无结果时用本地同步表 contains 检索兜底（同指标侧，见 pageMetrics 注释）。 */
+            boolean localFallback = false;
+            if (records.isEmpty() && StringUtils.hasText(keyword)) {
+                records = searchLocalDimensionsFallback(datasourceId, keyword, query.getPageNumber(), query.getPageSize());
+                localFallback = !records.isEmpty();
+                if (localFallback) {
+                    log.info("[Aloudata维度分页] 平台无结果，本地同步表兜底命中 {} 条 keyword={}", records.size(), keyword);
+                }
+            }
+            Page<AloudataDimensionSemanticDTO> result = localFallback
+                    ? new Page<>(query.getPageNumber(), query.getPageSize(),
+                        (long) (query.getPageNumber() - 1) * query.getPageSize() + records.size())
+                    : new Page<>(query.getPageNumber(), query.getPageSize(), total);
+            result.setRecords(records);
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata维度分页] 调用失败: {}", e.getMessage());
+            throw new IllegalStateException("调用 Aloudata 维度接口失败: " + e.getMessage(), e);
+        }
+    }
 
-        Page<AloudataDimensionSemanticDTO> result = new Page<>(page.getCurrent(), page.getSize(), page.getTotal());
-        result.setRecords(records);
-        return result;
+    /**
+     * 平台指标检索空结果时的本地同步表兜底：contains（LIKE %kw%）匹配名称/展示名/同义词，
+     * 对「输入与名称不完全一致」的场景比平台检索更宽容。返回空列表表示本地也无命中。
+     */
+    private List<AloudataMetricSemanticDTO> searchLocalMetricsFallback(Long datasourceId, String keyword,
+                                                                       int pageNumber, int pageSize) {
+        try {
+            int offset = (pageNumber - 1) * pageSize;
+            List<AloudataMetricEntity> entities = pageMetricEntities(datasourceId, keyword, offset, pageSize);
+            return entities.stream().map(e -> toMetricSemanticDTO(e, null)).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("[Aloudata指标分页] 本地兜底查询失败 keyword={}: {}", keyword, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /** 平台维度检索空结果时的本地同步表兜底（同 {@link #searchLocalMetricsFallback}）。 */
+    private List<AloudataDimensionSemanticDTO> searchLocalDimensionsFallback(Long datasourceId, String keyword,
+                                                                             int pageNumber, int pageSize) {
+        try {
+            int offset = (pageNumber - 1) * pageSize;
+            List<AloudataDimensionEntity> entities = pageDimensionEntities(datasourceId, keyword, offset, pageSize);
+            return entities.stream().map(this::toDimensionSemanticDTO).collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("[Aloudata维度分页] 本地兜底查询失败 keyword={}: {}", keyword, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * 实时获取单个指标详情：metric_batch_detail（同义词等）+ metric_dimensions（关联维度）。
+     * 供弹窗「懒加载详情」使用，不依赖本地同步表。
+     */
+    @Override
+    @SuppressWarnings("unchecked")
+    public AloudataMetricSemanticDTO getMetricDetail(Long datasourceId, String metricName) {
+        AloudataMetricSemanticDTO dto = new AloudataMetricSemanticDTO();
+        dto.setMetricName(metricName);
+        dto.setSynonyms(Collections.emptyList());
+        dto.setAvailableDimensions(null);
+        if (metricName == null || metricName.isBlank()) {
+            return dto;
+        }
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            return dto;
+        }
+
+        /* 1) 指标详情（同义词、业务口径、负责人等） */
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metricNames", List.of(metricName));
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_BATCH_DETAIL, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_BATCH_DETAIL, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body != null && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof List) {
+                List<Map<String, Object>> details = (List<Map<String, Object>>) body.get("data");
+                for (Map<String, Object> d : details) {
+                    if (!metricName.equals(asStr(d.get("metricName")))) {
+                        continue;
+                    }
+                    dto.setMetricDisplayName(asStr(d.get("metricDisplayName")));
+                    dto.setType(asStr(d.get("type")));
+                    dto.setBusinessCaliber(asStr(d.get("businessCaliber")));
+                    dto.setOwner(asStr(d.get("owner")));
+                    dto.setMetricCategoryId(d.get("metricCategoryId") != null ? d.get("metricCategoryId").toString() : null);
+                    dto.setMetricCategoryName(asStr(d.get("metricCategoryName")));
+                    dto.setUnit(asStr(d.get("unit")));
+                    dto.setStatus(asStr(d.get("status")));
+                    Object syn = d.get("synonyms");
+                    if (syn instanceof List) {
+                        dto.setSynonyms(((List<?>) syn).stream().filter(Objects::nonNull)
+                                .map(String::valueOf).collect(Collectors.toList()));
+                    } else if (syn instanceof String s && !s.isBlank()) {
+                        dto.setSynonyms(Arrays.asList(s.split(",")));
+                    }
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Aloudata指标详情] 获取详情失败 metricName={}: {}", metricName, e.getMessage());
+        }
+
+        /* 2) 关联维度 */
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metricNames", List.of(metricName));
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_METRIC_DIMENSIONS, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_DIMENSIONS, config, params);
+            Map<String, Object> body = response.getBody();
+            if (body != null && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof List) {
+                List<String> dims = new ArrayList<>();
+                for (Object o : (List<?>) body.get("data")) {
+                    if (o instanceof Map) {
+                        Map<String, Object> dm = (Map<String, Object>) o;
+                        String dn = asStr(dm.get("dimName"));
+                        if (dn != null) {
+                            // 可用维度用于字段关系匹配，必须只返回稳定的维度编码。
+                            dims.add(dn);
+                        }
+                    } else if (o != null) {
+                        dims.add(String.valueOf(o));
+                    }
+                }
+                dto.setAvailableDimensions(dims);
+            }
+        } catch (Exception e) {
+            log.warn("[Aloudata指标详情] 获取关联维度失败 metricName={}: {}", metricName, e.getMessage());
+        }
+
+        return dto;
+    }
+
+    /** 按需直连 Aloudata dimension_detail，供指标/维度选择器悬浮详情使用。 */
+    @Override
+    @SuppressWarnings("unchecked")
+    public AloudataDimensionSemanticDTO getDimensionDetail(Long datasourceId, String dimName) {
+        AloudataDimensionSemanticDTO dto = new AloudataDimensionSemanticDTO();
+        dto.setDimName(dimName);
+        if (dimName == null || dimName.isBlank()) {
+            return dto;
+        }
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            return dto;
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("dimName", dimName);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ENDPOINT_DIMENSION_DETAIL, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_DIMENSION_DETAIL, config, params);
+            Map<String, Object> body = response.getBody();
+            if (response.getStatusCode().is2xxSuccessful() && body != null
+                    && Boolean.TRUE.equals(body.get("success")) && body.get("data") instanceof Map) {
+                Map<String, Object> detail = (Map<String, Object>) body.get("data");
+                dto.setDimensionId(asStr(detail.get("dimensionId")));
+                dto.setDimName(asStr(detail.get("dimName")) != null ? asStr(detail.get("dimName")) : dimName);
+                dto.setDimDisplayName(asStr(detail.get("dimDisplayName")));
+                dto.setOriginDataType(asStr(detail.get("originDataType")));
+                dto.setDimDescription(asStr(detail.get("dimDescription")));
+                dto.setConfigType(asStr(detail.get("configType")));
+                dto.setConfigValue(asStr(detail.get("configValue")));
+                dto.setDatasetName(asStr(detail.get("datasetName")));
+                dto.setStatus(asStr(detail.get("displayStatus")));
+                dto.setCategoryId(detail.get("dimCategoryId") == null ? null : detail.get("dimCategoryId").toString());
+                dto.setCategoryName(asStr(detail.get("dimCategoryName")));
+                Object synonyms = detail.get("synonyms");
+                if (synonyms instanceof List<?> values) {
+                    dto.setSynonyms(values.stream().filter(Objects::nonNull).map(String::valueOf).toList());
+                } else if (synonyms instanceof String value && !value.isBlank()) {
+                    dto.setSynonyms(Arrays.asList(value.split(",")));
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[Aloudata维度详情] 获取详情失败 dimName={}: {}", dimName, e.getMessage());
+        }
+        return dto;
+    }
+
+    /**
+     * 批量查询指标可用维度编码。dimensionAll 响应按指标名分组，避免分页列表逐指标请求。
+     * 返回 null 表示关系接口调用失败；空列表表示成功但该指标没有可用维度。
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, List<String>> fetchMetricDimensionNames(AloudataConfigDTO config, List<String> metricNames) {
+        if (metricNames == null || metricNames.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        try {
+            Map<String, Object> input = new HashMap<>();
+            input.put("metricNames", metricNames);
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
+                    ENDPOINT_METRIC_ALL_DIMENSIONS, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_METRIC_ALL_DIMENSIONS, config, params);
+            Map<String, Object> body = response.getBody();
+            if (!response.getStatusCode().is2xxSuccessful() || body == null
+                    || !Boolean.TRUE.equals(body.get("success")) || !(body.get("data") instanceof Map)) {
+                return null;
+            }
+            Map<String, Object> data = (Map<String, Object>) body.get("data");
+            Map<String, List<String>> result = new HashMap<>();
+            for (String metricName : metricNames) {
+                Object rawDimensions = data.get(metricName);
+                if (!(rawDimensions instanceof List<?> dimensions)) {
+                    continue;
+                }
+                List<String> names = new ArrayList<>();
+                for (Object rawDimension : dimensions) {
+                    if (rawDimension instanceof Map<?, ?> dimension) {
+                        String dimName = asStr(dimension.get("dimName"));
+                        if (dimName != null && !dimName.isBlank()) names.add(dimName);
+                    } else if (rawDimension != null && !String.valueOf(rawDimension).isBlank()) {
+                        names.add(String.valueOf(rawDimension));
+                    }
+                }
+                result.put(metricName, names);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata指标分页] 批量获取可用维度失败: {}", e.getMessage());
+            return null;
+        }
     }
 
     @Override
@@ -337,7 +675,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             wrapper.eq(AloudataMetricEntity::getMetricCategoryId, categoryId);
         }
         if (StringUtils.hasText(keyword)) {
-            String pattern = "%" + keyword.trim() + "%";
+            String pattern = "%" + NameMatchSupport.trimSpaces(keyword) + "%";
             wrapper.and(w -> w.like(AloudataMetricEntity::getMetricName, pattern)
                     .or().like(AloudataMetricEntity::getMetricDisplayName, pattern)
                     .or().like(AloudataMetricEntity::getBusinessCaliber, pattern)
@@ -375,7 +713,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             wrapper.eq(AloudataDimensionEntity::getDimCategoryId, categoryId);
         }
         if (StringUtils.hasText(keyword)) {
-            String pattern = "%" + keyword.trim() + "%";
+            String pattern = "%" + NameMatchSupport.trimSpaces(keyword) + "%";
             wrapper.and(w -> w.like(AloudataDimensionEntity::getDimName, pattern)
                     .or().like(AloudataDimensionEntity::getDimDisplayName, pattern)
                     .or().like(AloudataDimensionEntity::getDimDescription, pattern)
@@ -403,62 +741,50 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
     }
 
     @Override
+    /**
+     * 实时获取指标/维度类目（直接打 Aloudata category_list，不依赖本地同步表）。
+     * 实时模式下不再统计每个类目下的数量（count 置 null，前端按有无值决定是否展示）。
+     */
     public List<AloudataCategoryCountDTO> listCategoryCounts(Long datasourceId, String categoryType) {
         if (!"CATEGORY_METRIC".equals(categoryType) && !"CATEGORY_DIMENSION".equals(categoryType)) {
             return Collections.emptyList();
         }
-
-        // 查询类目元数据
-        LambdaQueryWrapper<AloudataCategoryEntity> catWrapper = new LambdaQueryWrapper<>();
-        catWrapper.eq(AloudataCategoryEntity::getDatasourceId, datasourceId)
-                .eq(AloudataCategoryEntity::getCategoryType, categoryType)
-                .orderByAsc(AloudataCategoryEntity::getCategoryName);
-        List<AloudataCategoryEntity> categories = categoryMapper.selectList(catWrapper);
-
-        // 聚合数量
-        Map<String, Long> countMap;
-        if ("CATEGORY_METRIC".equals(categoryType)) {
-            countMap = metricMapper.selectList(
-                            new LambdaQueryWrapper<AloudataMetricEntity>()
-                                    .eq(AloudataMetricEntity::getDatasourceId, datasourceId)
-                                    .select(AloudataMetricEntity::getMetricCategoryId))
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.groupingBy(
-                            e -> StringUtils.hasText(e.getMetricCategoryId()) ? e.getMetricCategoryId() : "uncategorized",
-                            Collectors.counting()));
-        } else {
-            countMap = dimensionMapper.selectList(
-                            new LambdaQueryWrapper<AloudataDimensionEntity>()
-                                    .eq(AloudataDimensionEntity::getDatasourceId, datasourceId)
-                                    .select(AloudataDimensionEntity::getDimCategoryId))
-                    .stream()
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.groupingBy(
-                            e -> StringUtils.hasText(e.getDimCategoryId()) ? e.getDimCategoryId() : "uncategorized",
-                            Collectors.counting()));
+        AloudataConfigDTO config = resolveConfigSafely(datasourceId);
+        if (config == null) {
+            throw new IllegalStateException("Aloudata 数据源未配置或未绑定认证信息");
         }
-
-        List<AloudataCategoryCountDTO> result = new ArrayList<>();
-        for (AloudataCategoryEntity cat : categories) {
-            AloudataCategoryCountDTO dto = new AloudataCategoryCountDTO();
-            dto.setCategoryId(cat.getCategoryId());
-            dto.setCategoryName(cat.getCategoryName());
-            dto.setParentId(cat.getParentId());
-            dto.setCount(countMap.getOrDefault(cat.getCategoryId(), 0L));
-            result.add(dto);
+        Map<String, Object> input = new HashMap<>();
+        input.put("categoryType", categoryType);
+        try {
+            Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(ENDPOINT_CATEGORY_LIST, config, input);
+            ResponseEntity<Map> response = apiClient.callWithParams(ENDPOINT_CATEGORY_LIST, config, params);
+            if (response.getBody() == null || !Boolean.TRUE.equals(response.getBody().get("success"))) {
+                String message = response.getBody() != null
+                        ? Objects.toString(response.getBody().get("errorMsg"), "未知错误") : "空响应";
+                throw new IllegalStateException("Aloudata 类目接口返回失败: " + message);
+            }
+            List<Map<String, Object>> categories = (List<Map<String, Object>>) response.getBody().get("data");
+            if (categories == null) {
+                return Collections.emptyList();
+            }
+            List<AloudataCategoryCountDTO> result = new ArrayList<>();
+            for (Map<String, Object> cat : categories) {
+                String id = cat.get("id") != null ? cat.get("id").toString() : null;
+                if (id == null) {
+                    continue;
+                }
+                AloudataCategoryCountDTO dto = new AloudataCategoryCountDTO();
+                dto.setCategoryId(id);
+                dto.setCategoryName(asStr(cat.get("name")));
+                dto.setParentId(cat.get("parentId") != null ? cat.get("parentId").toString() : null);
+                dto.setCount(null);
+                result.add(dto);
+            }
+            return result;
+        } catch (Exception e) {
+            log.warn("[Aloudata类目] 实时获取类目失败: {}", e.getMessage());
+            throw new IllegalStateException("调用 Aloudata 类目接口失败: " + e.getMessage(), e);
         }
-
-        // 未分类
-        Long uncategorizedCount = countMap.getOrDefault("uncategorized", 0L);
-        if (uncategorizedCount > 0) {
-            AloudataCategoryCountDTO dto = new AloudataCategoryCountDTO();
-            dto.setCategoryId("uncategorized");
-            dto.setCategoryName("未分类");
-            dto.setCount(uncategorizedCount);
-            result.add(dto);
-        }
-        return result;
     }
 
     @Override
@@ -993,8 +1319,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             AloudataMetricEntity entity = new AloudataMetricEntity();
             entity.setDatasourceId(datasourceId);
             entity.setMetricName(metricName);
-            entity.setMetricCode((String) metricData.get("metricCode"));
-            entity.setMetricDisplayName((String) metricData.get("metricDisplayName"));
+            entity.setMetricCode(NameMatchSupport.trimSpaces((String) metricData.get("metricCode")));
+            // 展示名去首尾空格：平台侧数据常带空格，等长精确比对/前缀检索会失配
+            entity.setMetricDisplayName(NameMatchSupport.trimSpaces((String) metricData.get("metricDisplayName")));
             entity.setVersion((Integer) metricData.get("version"));
             entity.setType((String) metricData.get("type"));
             entity.setStatus((String) metricData.get("status"));
@@ -1017,8 +1344,8 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             entity.setCanUsage((Boolean) metricData.get("canUsage"));
             entity.setCanAuth((Boolean) metricData.get("canAuth"));
             entity.setCanTransfer((Boolean) metricData.get("canTransfer"));
-            entity.setGmtCreate((String) metricData.get("gmtCreate"));
-            entity.setGmtUpdate((String) metricData.get("gmtUpdate"));
+            entity.setGmtCreate(stringValue(metricData.get("gmtCreate")));
+            entity.setGmtUpdate(stringValue(metricData.get("gmtUpdate")));
             entity.setSyncVersion(syncVersion);
 
             // properties JSON 数组
@@ -1035,9 +1362,13 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             if (detail != null) {
                 Object synonymsObj = detail.get("synonyms");
                 if (synonymsObj instanceof List) {
-                    entity.setSynonyms(String.join(",", ((List<String>) synonymsObj)));
+                    entity.setSynonyms(((List<String>) synonymsObj).stream()
+                            .filter(Objects::nonNull)
+                            .map(NameMatchSupport::trimSpaces)
+                            .filter(s -> !s.isBlank())
+                            .collect(Collectors.joining(",")));
                 }
-                String catName = (String) detail.get("metricCategoryName");
+                String catName = NameMatchSupport.trimSpaces((String) detail.get("metricCategoryName"));
                 if (catName != null) {
                     entity.setMetricCategoryName(catName);
                 }
@@ -1047,6 +1378,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             entities.add(entity);
         }
         return entities;
+    }
+
+    /** Aloudata 的时间字段既可能是字符串，也可能是毫秒时间戳。 */
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
     }
 
     /**
@@ -1064,8 +1400,9 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             AloudataDimensionEntity entity = new AloudataDimensionEntity();
             entity.setDatasourceId(datasourceId);
             entity.setDimName(dimName);
-            entity.setDimCode((String) dimData.get("dimCode"));
-            entity.setDimDisplayName((String) dimData.get("dimDisplayName"));
+            entity.setDimCode(NameMatchSupport.trimSpaces((String) dimData.get("dimCode")));
+            // 展示名去首尾空格：平台侧数据常带空格，等长精确比对/前缀检索会失配
+            entity.setDimDisplayName(NameMatchSupport.trimSpaces((String) dimData.get("dimDisplayName")));
             entity.setOriginDataType((String) dimData.get("originDataType"));
             entity.setDimDescription((String) dimData.get("dimDescription"));
             entity.setDisplayStatus((String) dimData.get("displayStatus"));
@@ -1084,7 +1421,11 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
             if (detail != null) {
                 Object synonymsObj = detail.get("synonyms");
                 if (synonymsObj instanceof List) {
-                    entity.setSynonyms(String.join(",", ((List<String>) synonymsObj)));
+                    entity.setSynonyms(((List<String>) synonymsObj).stream()
+                            .filter(Objects::nonNull)
+                            .map(NameMatchSupport::trimSpaces)
+                            .filter(s -> !s.isBlank())
+                            .collect(Collectors.joining(",")));
                 }
                 Object configObj = detail.get("config");
                 if (configObj instanceof Map) {
@@ -1101,7 +1442,7 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
                 }
                 Object detailCategoryName = detail.get("dimCategoryName");
                 if (detailCategoryName != null) {
-                    entity.setDimCategoryName((String) detailCategoryName);
+                    entity.setDimCategoryName(NameMatchSupport.trimSpaces((String) detailCategoryName));
                 }
                 // 示例值（低基数维度增值数据）：兼容 List 或字符串，逗号分隔
                 Object exampleObj = detail.get("exampleValues");
@@ -1351,11 +1692,12 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         if (datasourceId != null) {
             wrapper.eq(AloudataMetricEntity::getDatasourceId, datasourceId);
         }
-        if (keyword != null && !keyword.isBlank()) {
+        String kw = NameMatchSupport.trimSpaces(keyword);
+        if (kw != null && !kw.isBlank()) {
             wrapper.and(w -> w
-                    .like(AloudataMetricEntity::getMetricName, keyword)
-                    .or().like(AloudataMetricEntity::getMetricDisplayName, keyword)
-                    .or().like(AloudataMetricEntity::getSynonyms, keyword)
+                    .like(AloudataMetricEntity::getMetricName, kw)
+                    .or().like(AloudataMetricEntity::getMetricDisplayName, kw)
+                    .or().like(AloudataMetricEntity::getSynonyms, kw)
             );
         }
         wrapper.orderByDesc(AloudataMetricEntity::getUpdateTime);
@@ -1379,11 +1721,12 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         if (datasourceId != null) {
             wrapper.eq(AloudataDimensionEntity::getDatasourceId, datasourceId);
         }
-        if (keyword != null && !keyword.isBlank()) {
+        String kw = NameMatchSupport.trimSpaces(keyword);
+        if (kw != null && !kw.isBlank()) {
             wrapper.and(w -> w
-                    .like(AloudataDimensionEntity::getDimName, keyword)
-                    .or().like(AloudataDimensionEntity::getDimDisplayName, keyword)
-                    .or().like(AloudataDimensionEntity::getSynonyms, keyword)
+                    .like(AloudataDimensionEntity::getDimName, kw)
+                    .or().like(AloudataDimensionEntity::getDimDisplayName, kw)
+                    .or().like(AloudataDimensionEntity::getSynonyms, kw)
             );
         }
         wrapper.orderByDesc(AloudataDimensionEntity::getUpdateTime);
@@ -1426,6 +1769,80 @@ public class AloudataSemanticSyncServiceImpl implements AloudataSemanticSyncServ
         if (entity.getSynonyms() != null && !entity.getSynonyms().isBlank()) {
             dto.setSynonyms(Arrays.asList(entity.getSynonyms().split(",")));
         }
+        return dto;
+    }
+
+    // ==================== 实时调用辅助（不依赖本地同步表） ====================
+
+    /**
+     * 解析 Aloudata 数据源配置；非 aloudata 类型或数据源不存在时返回 null（调用方兜底返回空结果）。
+     */
+    private AloudataConfigDTO resolveConfigSafely(Long datasourceId) {
+        try {
+            DatasourceEntity entity = datasourceMapper.selectById(datasourceId);
+            if (entity == null || !"aloudata".equalsIgnoreCase(entity.getSourceType())) {
+                return null;
+            }
+            return configHelper.parseConfig(entity);
+        } catch (Exception e) {
+            log.warn("[Aloudata] 解析数据源配置失败 datasourceId={}: {}", datasourceId, e.getMessage());
+            return null;
+        }
+    }
+
+    private IPage<AloudataMetricSemanticDTO> emptyMetricPage(AloudataMetricPageQuery query) {
+        Page<AloudataMetricSemanticDTO> page = new Page<>(query.getPageNumber(), query.getPageSize(), 0);
+        page.setRecords(Collections.emptyList());
+        return page;
+    }
+
+    private IPage<AloudataDimensionSemanticDTO> emptyDimensionPage(AloudataDimensionPageQuery query) {
+        Page<AloudataDimensionSemanticDTO> page = new Page<>(query.getPageNumber(), query.getPageSize(), 0);
+        page.setRecords(Collections.emptyList());
+        return page;
+    }
+
+    private static String asStr(Object value) {
+        if (value == null) return null;
+        String s = value.toString().trim();
+        return s.isEmpty() ? null : s;
+    }
+
+    /**
+     * 从 Aloudata 指标列表原始行直接映射为 DTO（实时调用场景，无本地实体/详情）。
+     */
+    private AloudataMetricSemanticDTO toMetricSemanticDTO(Map<String, Object> m) {
+        AloudataMetricSemanticDTO dto = new AloudataMetricSemanticDTO();
+        dto.setMetricName(asStr(m.get("metricName")));
+        dto.setMetricDisplayName(asStr(m.get("metricDisplayName")));
+        dto.setType(asStr(m.get("type")));
+        dto.setBusinessCaliber(asStr(m.get("businessCaliber")));
+        dto.setOwner(asStr(m.get("owner")));
+        dto.setMetricCategoryId(m.get("metricCategoryId") != null ? m.get("metricCategoryId").toString() : null);
+        dto.setMetricCategoryName(asStr(m.get("metricCategoryName")));
+        dto.setUnit(asStr(m.get("unit")));
+        dto.setStatus(asStr(m.get("status")));
+        dto.setAvailableDimensions(Collections.emptyList());
+        dto.setSynonyms(Collections.emptyList());
+        return dto;
+    }
+
+    /**
+     * 从 Aloudata 维度列表原始行直接映射为 DTO（实时调用场景，无本地实体/详情）。
+     */
+    private AloudataDimensionSemanticDTO toDimensionSemanticDTO(Map<String, Object> m) {
+        AloudataDimensionSemanticDTO dto = new AloudataDimensionSemanticDTO();
+        dto.setDimName(asStr(m.get("dimName")));
+        dto.setDimDisplayName(asStr(m.get("dimDisplayName")));
+        dto.setOriginDataType(asStr(m.get("originDataType")));
+        dto.setDimDescription(asStr(m.get("dimDescription")));
+        dto.setConfigType(asStr(m.get("configType")));
+        dto.setConfigValue(asStr(m.get("configValue")));
+        dto.setDatasetName(asStr(m.get("datasetName")));
+        dto.setStatus(asStr(m.get("displayStatus")));
+        dto.setCategoryId(m.get("dimCategoryId") != null ? m.get("dimCategoryId").toString() : null);
+        dto.setCategoryName(asStr(m.get("dimCategoryName")));
+        dto.setSynonyms(Collections.emptyList());
         return dto;
     }
 

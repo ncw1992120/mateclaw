@@ -1,6 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import MainLayout from '@/views/layout/MainLayout.vue'
 import LoginView from '@/views/LoginView.vue'
+import DatasetListView from '@/views/dataset/DatasetListView.vue'
+import DatasetEditRoute from '@/views/dataset/DatasetEditRoute.vue'
+const InsightDashboardEditorView = () => import('@/views/insight/InsightDashboardEditorView.vue')
+
+const developmentRoutes = import.meta.env.DEV
+  ? [
+      {
+        path: '/insight/card-container-prototype',
+        name: 'insight-card-container-prototype',
+        component: () => import('@/views/insight/CardContainerPrototype.vue'),
+        meta: { public: true, title: '组合卡片原型' },
+      },
+      {
+        path: '/insight/kpi-metric-group-card-prototype',
+        name: 'insight-kpi-metric-group-card-prototype',
+        component: () => import('@/views/insight/KpiMetricGroupCardPrototype.vue'),
+        meta: { public: true, title: 'KPI 指标分组卡片原型' },
+      },
+    ]
+  : []
 
 const router = createRouter({
   // 与 vite base（/）保持一致：路由路径在部署基座下解析
@@ -16,6 +36,40 @@ const router = createRouter({
       path: '/',
       component: MainLayout,
     },
+    {
+      path: '/datasets',
+      name: 'dataset-list',
+      component: DatasetListView,
+    },
+    {
+      path: '/datasets/new',
+      name: 'dataset-create',
+      component: DatasetEditRoute,
+      props: { mode: 'config' },
+    },
+    {
+      path: '/datasets/:id/edit',
+      name: 'dataset-edit',
+      component: DatasetEditRoute,
+      props: (route) => ({ datasetId: route.params.id, mode: 'preview' }),
+    },
+    {
+      // 洞察·仪表盘·卡片属性配置（正式入口）
+      path: '/insight/dashboard/editor',
+      name: 'insight-dashboard-editor',
+      component: InsightDashboardEditorView,
+      props: (route) => ({ dashboardId: String(route.query.dashboardId ?? '') }),
+      meta: { title: '洞察仪表盘' },
+    },
+    {
+      // 洞察·卡片属性配置 免登录预览（仅供交互体验验证，与正式入口同一组件）
+      path: '/insight/dashboard/editor-preview',
+      name: 'insight-dashboard-editor-preview',
+      component: InsightDashboardEditorView,
+      props: (route) => ({ dashboardId: String(route.query.dashboardId ?? '') }),
+      meta: { public: true, title: '洞察仪表盘预览' },
+    },
+    ...developmentRoutes,
   ],
 })
 

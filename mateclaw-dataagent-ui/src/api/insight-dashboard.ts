@@ -1,12 +1,24 @@
 import api from './index'
-import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext } from '@/types'
+import type { InsightDashboard, InsightDashboardCreateInput, InsightDashboardUpdateInput, InsightDashboardSaveAsTemplateInput, InsightDashboardAiChatInput, InsightComponentData, InsightComponent, DashboardFilterContext, QueryContext, InsightDashboardSummaryPage, InsightDashboardSummaryQuery } from '@/types'
 
 /** API 路径常量 */
 const BASE_URL = '/v1/insight/dashboards'
 
-/** 查询仪表盘列表 */
-export function list() {
-  return api.get<InsightDashboard[]>(BASE_URL)
+/**
+ * 查询仪表盘列表
+ * @param params 可选过滤条件；visibility 为逗号分隔取值，如 "template,official"
+ */
+export function list(params?: { visibility?: string }) {
+  return api.get<InsightDashboard[]>(BASE_URL, { params })
+}
+
+/**
+ * 查询仪表盘列表摘要（分页，不含 schemaJson）
+ *
+ * 列表首屏专用：搜索、状态筛选、排序和翻页都在服务端完成，避免把整页 Schema 拉到前端。
+ */
+export function listSummary(params?: InsightDashboardSummaryQuery) {
+  return api.get<InsightDashboardSummaryPage>(`${BASE_URL}/summary`, { params })
 }
 
 /** 查询仪表盘详情 */
@@ -34,14 +46,72 @@ export function copy(id: string) {
   return api.post<InsightDashboard>(`${BASE_URL}/${id}/copy`)
 }
 
+/**
+ * 存为样例模板：派生为团队共享样例模板（visibility=template），副本带示例数据可直接使用
+ */
+export function saveAsTemplate(id: string, data: InsightDashboardSaveAsTemplateInput) {
+  return api.post<InsightDashboard>(`${BASE_URL}/${id}/save-as-template`, data)
+}
+
 /** 预览仪表盘（获取所有组件渲染数据，支持运行时筛选条件） */
 export function preview(id: string, filterContext?: DashboardFilterContext) {
-  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {})
+  return api.post<InsightComponentData[]>(`${BASE_URL}/${id}/preview`, filterContext ?? {}, { timeout: 0 })
 }
 
 /** 预览单个组件数据（编辑器即时验证） */
 export function previewComponent(component: InsightComponent) {
-  return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component)
+  return api.post<InsightComponentData>(`${BASE_URL}/preview-component`, component, { timeout: 0 })
+}
+
+/** 创建已保存脚本的数据处理执行任务 */
+export function execute(id: string, parameters: Record<string, unknown> = {}) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/executions`, { parameters }, { timeout: 0 })
+}
+
+/** 按组件级 datasetPipeline 创建执行任务。 */
+export function executeComponent(id: string, componentId: string, parameters: Record<string, unknown> = {}, schemaJson?: string, queryContext?: QueryContext, requestOptions?: { timeout?: number }) {
+  return api.post<{ executionId: string; dashboardId: string; status: string }>(`${BASE_URL}/${id}/components/${encodeURIComponent(componentId)}/executions`, { parameters, schemaJson, queryContext }, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
+}
+
+/** 查询脚本执行状态 */
+export function getExecutionStatus(executionId: string, requestOptions?: { timeout?: number }) {
+  return api.get<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}`, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
+}
+
+/** 查询执行日志（标准输出与受限错误信息） */
+export function getExecutionLogs(executionId: string) {
+  return api.get<{ executionId: string; status: string; output?: string; error?: string }>(`${BASE_URL}/executions/${executionId}/logs`)
+}
+
+/** 读取执行结果预览（大结果由 DataAgent 受控读取 ObjectRef 后返回受限行集） */
+export function getExecutionResult(executionId: string, requestOptions?: { timeout?: number }) {
+  // 统一结构化结果：envelope 为 table/scalar/message 标准信封（内联与 ObjectRef 引用同构）
+  return api.get<{ executionId: string; status: string; envelope: unknown; inline: boolean; outputRef?: unknown }>(`${BASE_URL}/executions/${executionId}/result`, {
+    ...requestOptions,
+    timeout: requestOptions?.timeout ?? 0,
+  })
+}
+
+/** 对 Worker 的完整输出结果应用已确认的最终结果查询配置。 */
+export function previewExecutionResult(executionId: string, request: {
+  parameters?: Record<string, unknown>
+  requestId?: string
+  finalResultQueryConfig: Record<string, unknown>
+}) {
+  return api.post<Record<string, unknown>>(
+    `${BASE_URL}/executions/${encodeURIComponent(executionId)}/result/preview`, request, { timeout: 0 },
+  )
+}
+
+/** 取消脚本执行（幂等由 DataAgent 执行服务保证） */
+export function cancelExecution(executionId: string) {
+  return api.post<Record<string, unknown>>(`${BASE_URL}/executions/${executionId}/cancel`)
 }
 
 /** SSE流式事件回调 */

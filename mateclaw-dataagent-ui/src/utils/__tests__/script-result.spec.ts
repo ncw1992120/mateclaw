@@ -1,0 +1,244 @@
+import { describe, expect, it } from 'vitest'
+import {
+  extractResultSchema,
+  formatPythonExecutionError,
+  formatScriptResultError,
+  fingerprintResultSchema,
+  parseScriptResultEnvelope,
+  resultEnvelopeToComponentData,
+  tableEnvelopeFromRows,
+  type ScriptResultColumn,
+  type ScriptResultEnvelope,
+} from '../script-result'
+
+function column(name: string, dataType: ScriptResultColumn['dataType']): ScriptResultColumn {
+  return { name, title: name, dataType, nullable: false }
+}
+
+function tableEnvelope(columns: ScriptResultColumn[], rows: Record<string, unknown>[]): ScriptResultEnvelope {
+  return {
+    schemaVersion: '1.0', kind: 'table',
+    data: { columns, rows },
+    meta: { rowCount: rows.length, truncated: false, sourceInputs: [] },
+  }
+}
+
+function scalarEnvelope(value: number | string | boolean): ScriptResultEnvelope {
+  const dataType = typeof value === 'number' ? 'number' : typeof value === 'boolean' ? 'boolean' : 'string'
+  return { schemaVersion: '1.0', kind: 'scalar', data: { value, dataType }, meta: { rowCount: 0, truncated: false } }
+}
+
+function messageEnvelope(message: string): ScriptResultEnvelope {
+  return { schemaVersion: '1.0', kind: 'message', data: { level: 'info', message }, meta: { rowCount: 0, truncated: false } }
+}
+
+function chartComponent(config: { dimensionField: string; metricFields: string[] }) {
+  return { id: 'c1', type: 'chart', chartType: 'line', config }
+}
+function kpiComponent(config: { valueField?: string; aggregation?: 'sum' } = {}) {
+  return { id: 'k1', type: 'kpi', config }
+}
+function tableComponent() {
+  return { id: 't1', type: 'table' }
+}
+
+describe('parseScriptResultEnvelope', () => {
+  it('长 traceback 截断或语法错误没有 Traceback 标题时仍保留详情', () => {
+    for (const traceback of ['x'.repeat(10_000), '  File "user_script.py", line 2\nSyntaxError: invalid syntax']) {
+      const error = { code: 'PYTHON_EXECUTION_ERROR', exceptionType: 'ValueError', message: '失败', traceback }
+      expect(formatPythonExecutionError(formatScriptResultError(error)))
+        .toEqual(formatPythonExecutionError(JSON.stringify(error)))
+    }
+  })
+  it('旧版多行 traceback 摘要保留主异常，不只显示容量溢出补充说明', () => {
+    const traceback = 'Traceback (most recent call last):\n  File "user_script.py", line 19\n  File "frame.py", line 100\n    create_frame(rows)\npolars.exceptions.ComputeError: could not append value to the builder\n\nit might also be that a value overflows the data-type capacity'
+    const display = formatPythonExecutionError(traceback)
+    expect(display.summary).toContain('第 19 行')
+    expect(display.summary).toContain('polars.exceptions.ComputeError: could not append value')
+    expect(display.details).toEqual(traceback)
+  })
+
+  it('新执行错误显示输入别名、失败代码和执行行号', () => {
+    const error = {
+      code: 'PYTHON_EXECUTION_ERROR', exceptionType: 'polars.exceptions.ComputeError',
+      message: 'could not append value to the builder\n\nit might also be that a value overflows capacity',
+      errorContext: { scriptLine: 19, region: 'system', inputName: 'table_zb', conversion: 'Polars',
+        sourceLines: [{ line: 19, code: ').to_polars()' }] },
+      traceback: 'Traceback (most recent call last):\n  File "user_script.py", line 19\npolars.exceptions.ComputeError: could not append value',
+    }
+    const display = formatPythonExecutionError(JSON.stringify(error))
+    expect(display.summary).toContain('table_zb')
+    expect(display.summary).toContain('系统数据读取')
+    expect(display.summary).toContain('19: ).to_polars()')
+    expect(display.summary).toContain('ComputeError')
+    expect(formatPythonExecutionError(formatScriptResultError(error))).toEqual(display)
+  })
+
+  it('多字段诊断逐项标明字段，缺少字段时不虚构记录行号', () => {
+    const formatted = formatPythonExecutionError(JSON.stringify({
+      code: 'DATA_VALIDATION_ERROR',
+      errorDetails: { dataset: 'input', field: 'amount, users, date', scriptLine: 8, errorCount: 3, issues: [
+        { field: 'amount', rowNumber: 1, rowKeys: { id: 'A' }, valuePreview: "'bad'", reason: '无法转换为数字' },
+        { field: 'users', rowNumber: 2, rowKeys: { id: 'B' }, valuePreview: "'1.5'", reason: '无法转换为整数' },
+        { field: 'date', rowNumber: null, rowKeys: {}, valuePreview: '（缺少字段）', reason: '字段不存在' },
+      ] },
+    }))
+    expect(formatted.summary).toContain('字段 amount，第 1 行')
+    expect(formatted.summary).toContain('字段 users，第 2 行')
+    expect(formatted.summary).toContain('字段 date，字段配置')
+    expect(formatted.summary).not.toContain('第 null 行')
+  })
+
+  it('结构化数据诊断显示字段、问题值和记录定位，并保留 traceback', () => {
+    const error = {
+      code: 'DATA_VALIDATION_ERROR', message: '2 条数据校验失败',
+      errorDetails: { dataset: 'table_zb', field: 'amount', scriptLine: 3, errorCount: 2,
+        issues: [{ rowNumber: 2, rowKeys: { id: 'SUB-001' }, valuePreview: "'abc'", reason: '无法转换为数字' }] },
+      traceback: 'Traceback (most recent call last):\n  File "user_script.py", line 3\nDataValidationError: 2 条数据校验失败',
+    }
+    const formatted = formatPythonExecutionError(JSON.stringify(error))
+    expect(formatted.summary).toContain('第 3 行')
+    expect(formatted.summary).toContain('table_zb')
+    expect(formatted.summary).toContain('amount')
+    expect(formatted.summary).toContain("'abc'")
+    expect(formatted.summary).toContain('id=SUB-001')
+    expect(formatted.summary).toContain('第 2 行')
+    expect(formatted.details).toContain('user_script.py')
+    const transferred = formatScriptResultError(error)
+    expect(formatPythonExecutionError(transferred)).toEqual(formatted)
+  })
+
+  it('从 Python traceback 提取脚本行号和异常摘要，同时保留完整详情', () => {
+    const traceback = [
+      'Traceback (most recent call last):',
+      '  File "user_script.py", line 27, in <module>',
+      '    result = missing_value + 1',
+      "NameError: name 'missing_value' is not defined",
+    ].join('\n')
+
+    expect(formatPythonExecutionError(traceback)).toEqual({
+      summary: "Python 脚本第 27 行执行失败：NameError: name 'missing_value' is not defined",
+      details: traceback,
+    })
+  })
+
+  it('没有 traceback 时保留原始错误信息', () => {
+    expect(formatPythonExecutionError('Python Worker 不可用')).toEqual({
+      summary: 'Python Worker 不可用',
+      details: '',
+    })
+  })
+
+  it('接受合法 table/scalar/message', () => {
+    expect(parseScriptResultEnvelope(tableEnvelope([column('id', 'number')], [{ id: 1 }])).kind).toBe('table')
+    expect(parseScriptResultEnvelope(scalarEnvelope(42)).kind).toBe('scalar')
+    expect(parseScriptResultEnvelope(messageEnvelope('ok')).kind).toBe('message')
+  })
+
+  it('拒绝未知版本/kind 与非法列类型', () => {
+    expect(() => parseScriptResultEnvelope({ schemaVersion: '2.0', kind: 'table', data: {}, meta: { rowCount: 0 } })).toThrow(/schemaVersion/)
+    expect(() => parseScriptResultEnvelope({ schemaVersion: '1.0', kind: 'chart', data: {}, meta: { rowCount: 0 } })).toThrow(/result\.kind/)
+    expect(() => parseScriptResultEnvelope(tableEnvelope([{ name: 'x', title: 'x', dataType: 'object' as never, nullable: false }], []))).toThrow(/dataType/)
+  })
+})
+
+describe('tableEnvelopeFromRows', () => {
+  it('infers a typed output envelope for direct dataset preview rows', () => {
+    const envelope = tableEnvelopeFromRows([{ region: '华东', amount: 12, active: true }])
+    expect(envelope.data.columns.map(({ name, dataType }) => [name, dataType])).toEqual([
+      ['region', 'string'], ['amount', 'number'], ['active', 'boolean'],
+    ])
+    expect(envelope.meta.rowCount).toBe(1)
+  })
+})
+
+describe('result schema', () => {
+  it('从 table 结果提取字段、类型、可空性和行数', () => {
+    const envelope = tableEnvelope(
+      [
+        { name: 'region', title: 'region', dataType: 'string', nullable: false },
+        { name: 'amount', title: 'amount', dataType: 'number', nullable: false },
+      ],
+      [{ region: '华东', amount: 10 }, { region: null, amount: 20 }],
+    )
+    const schema = extractResultSchema(envelope)
+    expect(schema.kind).toBe('table')
+    expect(schema.rowCount).toBe(2)
+    expect(schema.columns).toEqual([
+      { name: 'region', title: 'region', dataType: 'string', nullable: true },
+      { name: 'amount', title: 'amount', dataType: 'number', nullable: false },
+    ])
+    expect(schema.fingerprint).toMatch(/^[0-9a-f]{8}$/)
+  })
+
+  it('空 table 仍保留声明的列并生成稳定指纹', () => {
+    const a = extractResultSchema(tableEnvelope([{ name: 'amount', title: 'amount', dataType: 'number', nullable: false }], []))
+    const b = extractResultSchema(tableEnvelope([{ name: 'amount', title: 'amount', dataType: 'number', nullable: false }], []))
+    expect(a.rowCount).toBe(0)
+    expect(a.columns).toEqual([{ name: 'amount', title: 'amount', dataType: 'number', nullable: true }])
+    expect(fingerprintResultSchema(a)).toBe(fingerprintResultSchema(b))
+  })
+})
+
+describe('resultEnvelopeToComponentData', () => {
+  it('chart 从 table columns/rows 和组件配置生成 option', () => {
+    const envelope = tableEnvelope(
+      [column('day', 'date'), column('amount', 'number')],
+      [{ day: '2026-09-20', amount: 12 }, { day: '2026-09-21', amount: 18 }],
+    )
+    const result = resultEnvelopeToComponentData(
+      chartComponent({ dimensionField: 'day', metricFields: ['amount'] }),
+      envelope,
+    )
+    expect(result.state).toBe('data')
+    expect((result.option as Record<string, unknown>).xAxis).toEqual({ type: 'category', data: ['2026-09-20', '2026-09-21'] })
+    expect((result.option as { series: unknown[] }).series[0]).toEqual({ name: 'amount', type: 'line', data: [12, 18] })
+  })
+
+  it('kpi 接受 scalar 或按配置从 table 聚合', () => {
+    expect(resultEnvelopeToComponentData(kpiComponent(), scalarEnvelope(42)).value).toBe(42)
+    expect(resultEnvelopeToComponentData(
+      kpiComponent({ valueField: 'amount', aggregation: 'sum' }),
+      tableEnvelope([column('amount', 'number')], [{ amount: 12 }, { amount: 18 }]),
+    ).value).toBe(30)
+  })
+
+  it('message 显示说明，不伪造成表格行', () => {
+    const result = resultEnvelopeToComponentData(kpiComponent(), messageEnvelope('没有满足条件的数据'))
+    expect(result.state).toBe('message')
+    expect(result.message).toBe('没有满足条件的数据')
+  })
+
+  it('空 table 显示暂无数据', () => {
+    const result = resultEnvelopeToComponentData(tableComponent(), tableEnvelope([], []))
+    expect(result.state).toBe('empty')
+    expect(result.rows).toEqual([])
+  })
+
+  it('table 组件输出与 DataTableWidget 渲染契约一致的字符串表格', () => {
+    const result = resultEnvelopeToComponentData(
+      tableComponent(),
+      tableEnvelope([column('id', 'number')], [{ id: 1 }, { id: 2 }]),
+    )
+    expect(result.state).toBe('data')
+    expect(result.table).toEqual({ columns: ['id'], rows: [['1'], ['2']] })
+  })
+})
+
+describe('formatScriptResultError', () => {
+  it('OUTPUT_CONTRACT_ERROR 显示阶段、路径和建议', () => {
+    const output = formatScriptResultError({
+      status: 'OUTPUT_CONTRACT_ERROR', stage: 'output-validation',
+      path: 'result.data.rows[2].amount', expected: 'number', actual: 'string',
+      suggestion: '统一 amount 列类型',
+    })
+    expect(output).toContain('result.data.rows[2].amount')
+    expect(output).toContain('统一 amount 列类型')
+    expect(output).toContain('数据格式不匹配')
+  })
+
+  it('资源类错误映射为可读文案', () => {
+    expect(formatScriptResultError({ status: 'TIMEOUT' })).toContain('超时')
+    expect(formatScriptResultError({ status: 'RESULT_LIMIT' })).toContain('超过限制')
+  })
+})

@@ -246,24 +246,30 @@ export interface AloudataSyncStatus {
 export interface AloudataSyncedMetric {
   metricName: string
   metricDisplayName: string
+  metricCategoryId?: string
   type: string
   businessCaliber: string
   synonyms: string[]
   metricCategoryName: string
   unit: string
-  availableDimensions: string[]
+  owner?: string
+  status?: string
+  availableDimensions: string[] | null
 }
 
 /** Aloudata 已同步维度 */
 export interface AloudataSyncedDimension {
   dimName: string
   dimDisplayName: string
+  categoryId?: string
+  categoryName?: string
   originDataType: string
   dimDescription: string
   synonyms: string[]
   configType: string
   isTimeDimension: boolean
   exampleValues: string
+  datasetName?: string
 }
 
 /** Aloudata 指标分页结果 */
@@ -678,6 +684,8 @@ export interface Dataset {
   description: string
   datasourceId: string
   datasourceName: string
+  sourceType?: DatasetSourceType | string
+  sourceConfig?: string
   tableIds: string
   tableNames: string
   status: string
@@ -728,6 +736,78 @@ export interface DatasetData {
   columns: DatasetColumnDef[]
   rows: Record<string, unknown>[]
   total: number
+}
+
+/** 统一数据集来源类型（与 DataAgent DatasetSourceType 保持一致） */
+export type DatasetSourceType = 'JDBC_TABLE' | 'JDBC_SQL' | 'ALOUDATA_ANALYSIS_VIEW' | 'HTTP_API' | 'FILE'
+
+/** Python/预览可见的数据集字段描述 */
+export interface DatasetInputColumn {
+  name: string
+  title: string
+  dataType: string
+  nullable: boolean
+  semanticRole?: string | null
+}
+
+/** Python/预览使用的数据集输入描述；不包含连接凭据 */
+export interface DatasetInputDescriptor {
+  datasetId: string
+  inputName: string
+  sourceType: DatasetSourceType | string
+  schema: DatasetInputColumn[]
+  rowCount?: number | null
+  dataRef?: DatasetObjectRef | null
+}
+
+/** 大结果集的对象引用；小结果集由 rows 内联返回 */
+export interface DatasetObjectRef {
+  uri: string
+  contentType: string
+  sizeBytes: number
+  sha256: string
+  expiresAt: string
+}
+
+/** 统一数据集过滤条件，filters 会由服务端按来源能力下推 */
+export interface DatasetFilter {
+  field: string
+  role: 'dimension' | 'measure'
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte' | 'in' | 'not_in' | 'between' | 'is_null' | 'is_not_null'
+  value?: unknown
+}
+
+/** 统一数据集读取/预览请求 */
+export interface DatasetReadRequest {
+  datasetId: string
+  inputName: string
+  columns?: string[]
+  filters?: DatasetFilter[]
+  orders?: QuerySortSpec[]
+  limit?: number
+  offset?: number
+  parameters?: Record<string, unknown>
+  requestTotalCount?: boolean
+  timeGranularity?: TimeGranularity
+}
+
+/** 统一数据集读取结果 */
+export interface DatasetBatch {
+  rows?: Record<string, unknown>[] | null
+  /** 字段结构（列名列表）；后端草稿预览对 JDBC/Aloudata/接口/文件均会返回 */
+  schema?: string[] | null
+  objectRef?: DatasetObjectRef | null
+  rowCount: number
+  last: boolean
+  hasNext?: boolean
+  totalCount?: number
+  pushdownReport?: {
+    pushedFilters: DatasetFilter[]
+    residualFilters: DatasetFilter[]
+    projectionPushed: boolean
+    limitPushed: boolean
+    sourceQueryDigest?: string | null
+  } | null
 }
 
 /** 模型类型枚举 */
@@ -1129,7 +1209,7 @@ export interface HelpCategory {
 // ==================== 洞察仪表盘 ====================
 
 /** 洞察仪表盘组件类型 */
-export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'aiAnalysis'
+export type InsightComponentType = 'kpi' | 'chart' | 'table' | 'filter' | 'timeFilter' | 'aiAnalysis' | 'combination'
 
 /** 筛选器作用范围 */
 export type FilterScope = 'global' | 'scoped'
@@ -1142,7 +1222,7 @@ export type ChartType =
   | 'sunburst' | 'parallel' | 'gauge' | 'funnel'
   | 'sankey' | 'themeRiver' | 'pictorialBar'
 
-/** 栅格位置（grid-layout-plus 坐标系） */
+/** 栅格位置（grid-layout-plus 坐标系）；横向缩放可使用小数列，保存手动连续宽度。 */
 export interface ComponentPosition {
   x: number
   y: number
@@ -1164,6 +1244,48 @@ export interface ComponentDataSource {
   timeConstraint?: string
   /** 返回行数限制 */
   limit?: number
+  /** 新版统一数据集绑定；旧 metrics/dimensions 字段保留用于 Aloudata 兼容。 */
+  sourceType?: 'ALOUDATA' | 'JDBC' | 'HTTP_API' | 'FILE' | string
+  datasetId?: string
+  sql?: string
+  analysisViewId?: string
+  apiDefinitionId?: string
+  objectId?: string
+}
+
+/** 组件统一数据集输入绑定（多源 Python 预处理使用）。 */
+export interface DataInputBinding {
+  inputId: string
+  datasetId: string
+  alias: string
+  filters?: DatasetFilter[]
+}
+
+export interface PythonTransformConfig {
+  enabled: boolean
+  code: string
+  parameters?: DashboardScriptParameter[]
+}
+
+/** 组件标题栏的内置样式，避免组件通过任意 CSS 破坏仪表盘一致性。 */
+export type ComponentTitleBarStyle = 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
+
+/** 组件通用展示样式；编辑器选中框不属于该配置。 */
+export interface ComponentVisualStyle {
+  border?: {
+    mode: 'theme' | 'visible' | 'hidden'
+    colorMode?: 'theme' | 'custom' | 'hidden'
+    color?: string
+    width?: 1 | 2
+    style?: 'solid' | 'dashed'
+  }
+  background?: {
+    mode: 'theme' | 'transparent' | 'custom'
+    color?: string
+  }
+  radius?: number
+  shadow?: 'none' | 'subtle' | 'medium'
+  padding?: number
 }
 
 /** 仪表盘组件定义 */
@@ -1174,6 +1296,14 @@ export interface InsightComponent {
   type: InsightComponentType
   /** 组件标题 */
   title: string
+  /** 标题栏样式（默认 standard） */
+  titleBarStyle?: ComponentTitleBarStyle
+  /** 标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
+  titleIconStyle?: ComponentTitleIconStyle
+  /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
+  themeAccentGroup?: ComponentThemeAccentGroup
+  /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
+  visualStyle?: ComponentVisualStyle
   /** 栅格位置 */
   position: ComponentPosition
   /** 数据绑定配置 */
@@ -1196,6 +1326,363 @@ export interface InsightComponent {
   perspectiveIds?: string[]
   /** 是否启用多指标模式（仅 kpi 类型，开启后卡片同时展示多个指标） */
   multiKpi?: boolean
+  /** 组合卡片：子卡片列表（默认 Tab / 无页签时生效） */
+  children?: InsightCombinationChild[]
+  /** 组合卡片：容器配置（标题、背景、圆角、内边距、布局模式、页签等） */
+  containerConfig?: InsightCombinationConfig
+  /** KPI 指标分组：指标列表（由「最终结果集」字段逐列投影生成，不可手动新增/删除） */
+  kpiMetrics?: KpiMetricConfig[]
+}
+
+/** KPI 指标 · 单字段样式（展示名 / 指标值 / 单位 / 辅助说明 各自独立） */
+export interface KpiMetricFieldStyle {
+  /** 字号 px */
+  size: number
+  /** 字体键（映射见 utils/kpi-metrics.ts 的 KPI_FONT_FAMILY） */
+  family: string
+  /** 颜色（HEX，如 #1f2329） */
+  color: string
+  /** theme = 跟随仪表盘指标色；缺省且有 HEX 时按旧配置自定义处理 */
+  colorMode?: 'theme' | 'custom'
+  /** 字重 */
+  bold: 'bold' | 'normal'
+}
+
+/** KPI 指标图标与强调色；只保存注册表 key，不保存任意组件或 SVG。 */
+export interface KpiMetricVisualConfig {
+  iconKey?: string | null
+  colorMode?: 'theme' | 'custom'
+  accentColor?: string
+}
+
+/** KPI 指标 · 四个字段的样式集合 */
+export interface KpiMetricStyles {
+  /** 展示名样式 */
+  name: KpiMetricFieldStyle
+  /** 指标值样式 */
+  value: KpiMetricFieldStyle
+  /** 单位样式 */
+  unit: KpiMetricFieldStyle
+  /** 辅助说明样式 */
+  helper: KpiMetricFieldStyle
+}
+
+/** KPI 指标（由结果集字段逐列投影；字段映射不可编辑，仅展示配置可编辑） */
+export interface KpiMetricConfig {
+  /** 结果集字段名（技术主键、只读标识，作为指标稳定 key；**不存展示名**） */
+  fieldKey: string
+  /**
+   * 展示列名。
+   * @deprecated 展示名唯一登记在**数据集字段注册表**（`DatasetConfig.fields[].displayName`）一份；
+   * 本字段是序列化 / 画布渲染用的**具化镜像**，读写请走注册表（useInsight 的 `setFieldDisplayName`），
+   * 持久化时由 `materializedKpiMetrics()` 统一具化。见 docs/策略解读/字段名与展示名契约-实施计划.md。
+   */
+  displayName: string
+  /**
+   * 单位（字段级展示配置，留空不显示）。
+   * @deprecated 同 displayName：唯一登记在字段注册表（`DatasetConfig.fields[].unit`），本字段为其镜像。
+   */
+  unit: string
+  /** 辅助说明（固定文本，用户可编辑） */
+  helperText: string
+  /** 指标卡片数值单位缩放；未配置时默认自动缩放。 */
+  valueUnitMode?: 'auto' | 'none'
+  /** 是否在卡片中展示 */
+  visible: boolean
+  /** 自由布局：距卡片内容区左侧 px */
+  x: number
+  /** 自由布局：距卡片内容区顶部 px */
+  y: number
+  /** 自由布局：宽 px */
+  w: number
+  /** 自由布局：高 px */
+  h: number
+  /** 各字段样式 */
+  styles: KpiMetricStyles
+  visual?: KpiMetricVisualConfig
+}
+
+/** 组合卡片子卡片自由布局坐标（相对容器内容区左上角，单位 px） */
+export interface CombinationChildLayout {
+  /** 距内容区左边 px */
+  x: number
+  /** 距内容区顶部 px */
+  y: number
+  /** 宽度列数（1~12）；未固定宽度时按百分比渲染。 */
+  col: number
+  /** 外层组合卡片缩放后固定子卡片宽度（px）；缺省时按 col 百分比渲染。 */
+  widthPx?: number
+  /** 高度 px（可选，缺省由内容自适应） */
+  h?: number
+}
+
+/** 组合卡片子卡片（本质是精简版仪表盘组件，定位用 layout 而非栅格 position） */
+export interface InsightCombinationChild {
+  /** 子卡片唯一 ID */
+  id: string
+  /** 子卡片类型（复用顶层组件类型） */
+  type: InsightComponentType
+  /** 子卡片标题 */
+  title: string
+  /** AI 分析内容（仅 aiAnalysis 类型，生成后持久化到 Schema）。 */
+  aiAnalysisContent?: string
+  /** 子卡片标题栏样式（默认 standard） */
+  titleBarStyle?: ComponentTitleBarStyle
+  /** 子卡片标题图标样式；未配置图标时仍按组件类型和标题自动匹配 */
+  titleIconStyle?: ComponentTitleIconStyle
+  /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
+  themeAccentGroup?: ComponentThemeAccentGroup
+  /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
+  visualStyle?: ComponentVisualStyle
+  /** 图表子类型（仅 chart） */
+  chartType?: ChartType
+  /** 组件扩展配置 */
+  config?: Record<string, unknown>
+  /** 多 Tab 配置（子组件与顶层组件保持同一能力） */
+  tabs?: ComponentTab[]
+  /** 数据绑定配置（v1 暂未接入取数，结构预留） */
+  dataSource?: ComponentDataSource
+  /** 嵌套组合卡片的子卡片 */
+  children?: InsightCombinationChild[]
+  /** 嵌套组合卡片的容器配置 */
+  containerConfig?: InsightCombinationConfig
+  /** 自由布局坐标 */
+  layout: CombinationChildLayout
+  /**
+   * 以下三个字段与 `InsightComponent` 同名语义一致：容器内的子卡片同样是可配置组件，
+   * 需要承载「绑定的筛选器 / 组件级时间筛选 / 多指标模式」。
+   * 此前类型未声明而代码已在赋值（`handleComponentChange` 写回 child 时），
+   * 导致 vue-tsc 报 TS2339，实际运行正常。
+   */
+  /** 绑定的筛选器 ID 列表（绑定后仅响应专属筛选器） */
+  boundFilterIds?: string[]
+  /** 是否启用组件级时间筛选（右上角时间选择器） */
+  enableTimeFilter?: boolean
+  /** 是否启用多指标模式（仅 kpi 子卡片） */
+  multiKpi?: boolean
+  /** KPI 子卡片各指标的布局与样式配置。 */
+  kpiMetrics?: KpiMetricConfig[]
+}
+
+/** 组件标题前置图标的显示配置。 */
+export interface ComponentTitleIconStyle {
+  /** 本地图标注册表 key；未设置时使用组件类型/标题的自动图标 */
+  iconKey?: string
+  /** SVG 线条粗细 */
+  strokeWidth?: 1.5 | 2 | 2.5 | 3
+  /** 图标大小（px）；未设置时按组件类型使用默认（页签 16 / 其他 18） */
+  fontSize?: number
+  /** 图标颜色模式 */
+  colorMode?: 'theme' | 'custom'
+  /** 自定义 HEX 颜色，仅 colorMode=custom 时使用 */
+  color?: string
+}
+
+/** 组合卡片页签（每个页签拥有独立的子卡片集合） */
+export interface CombinationTab {
+  /** 页签唯一 ID */
+  id: string
+  /** 页签标题 */
+  title: string
+  /** 页签标题图标样式；未配置时沿用主题自动图标 */
+  titleIconStyle?: ComponentTitleIconStyle
+  /** 该页签下的子卡片 */
+  children: InsightCombinationChild[]
+}
+
+/** 组合卡片容器配置 */
+export interface InsightCombinationConfig {
+  /** 内部布局模式：自由布局 / 栅格 / 垂直流 */
+  layoutMode: 'free' | 'grid' | 'vertical'
+  /** 页签列表（非空时启用多页签） */
+  tabs: CombinationTab[]
+  /** 当前激活页签 ID（tabs 非空时生效） */
+  activeTab?: string
+}
+
+/**
+ * 结果集：一次成功产出的、可直接驱动卡片渲染的数据集合。
+ * <p>
+ * 设计契约见 docs/策略解读/卡片数据链路与结果集交互方案-讨论稿.md：
+ * - 卡片只能从结果集取数；数据集 / 筛选条件 / Python 脚本都只是「怎么产出结果集」的手段；
+ * - 无脚本时结果集 = 单个数据集的查询结果（source=dataset）；
+ * - 有脚本时结果集 = 脚本输出（source=script，行数据由 executionId 向后端回读）；
+ * - 输入配置变更后旧结果集标记为过期（stale），卡片沿用旧渲染并提示刷新。
+ */
+export interface ComponentResultSet {
+  /** 结果集来源：数据集直通 / 脚本输出 */
+  source: 'dataset' | 'script'
+  /** 结果集状态（持久化只保留 ready / failed，stale 与 running 属运行期状态） */
+  status: 'ready' | 'failed'
+  /** 结果集字段结构（「指标配置」的候选字段唯一来源） */
+  columns: { name: string; type: string }[]
+  /** 结果集行数 */
+  rowCount: number
+  /** 生成时间（ISO 字符串） */
+  generatedAt: string
+  /** 生成耗时（毫秒） */
+  elapsedMs?: number
+  /** 脚本结果的执行 ID（source=script 时用于回读行数据） */
+  executionId?: string
+  /** 失败原因（status=failed 时） */
+  error?: string
+}
+
+/** 当前组件的数据集编排配置；输入归属于组件，不再使用仪表盘根级脚本输入。 */
+export interface ComponentDatasetPipeline {
+  datasetInputs: DashboardDatasetInput[]
+  scriptFilterBindings?: DashboardScriptFilterBinding[]
+  script?: string
+  /** 系统生成区和用户处理区的持久化状态；缺失时保持旧脚本整体语义。 */
+  systemScript?: DashboardSystemScriptState
+  parameters?: DashboardScriptParameter[]
+  executionPolicy?: DashboardExecutionPolicy
+  /** 组件绑定的筛选器组件 ID 列表；Planner 据此校验绑定归属（被删除的筛选器在 Planner 阶段失败）。 */
+  boundFilterComponentIds?: string[]
+  /** 最近一次产出的结果集（元数据持久化，行数据由后端 executionId 或前端重算获得） */
+  resultSet?: ComponentResultSet
+  /** Python 输出通过组件契约校验后的、组件级最终结果集查询配置。 */
+  finalResultQueryConfig?: FinalResultQueryConfig
+}
+
+/** ===== 表格详情页查询链路（契约见 docs/策略解读/plans/2026-09-22-表格详情页查询链路实施计划.md）===== */
+
+/** 查询配置展示字段：field 是技术字段名（权威），title 是展示名（仅表现层）。 */
+export interface QueryDisplayField {
+  field: string
+  title: string
+  role: 'dimension' | 'measure'
+  dataType?: string
+}
+
+/** 数据集完整可查询字段注册表；包含未投影到展示结果的筛选字段。 */
+export interface QueryableDatasetField {
+  name: string
+  displayName?: string
+  role: 'dimension' | 'measure'
+  dataType?: string
+}
+
+/** 查询配置筛选器绑定：页面筛选器参数 → 本输入字段的下推规则。 */
+export interface QueryParameterBinding {
+  filterComponentId: string
+  parameterName: string
+  field: string
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+    | 'in' | 'not_in' | 'between' | 'contains'
+    | 'is_null' | 'is_not_null'
+}
+
+/** 允许排序策略：仅 allowedFields 内字段可下推排序。 */
+export interface QuerySortPolicy {
+  enabled: boolean
+  mode: 'single' | 'multi'
+  allowedFields: string[]
+  defaultSort?: QuerySortSpec | null
+}
+
+/** 分页策略：静态配置归此处，本次页码归运行时。 */
+export interface QueryPaginationPolicy {
+  enabled: boolean
+  defaultPageSize: number
+  maxPageSize: number
+  returnTotalCount: boolean
+}
+
+/** 单个数据集输入的静态查询配置（保存于 datasetInputs[].queryConfig）。 */
+export interface DatasetQueryConfig {
+  displayFields: QueryDisplayField[]
+  /** 完整字段注册表，筛选字段不要求同时出现在 displayFields。旧配置缺省时兼容展示字段集。 */
+  queryableFields?: QueryableDatasetField[]
+  parameterBindings: QueryParameterBinding[]
+  sortPolicy: QuerySortPolicy
+  paginationPolicy: QueryPaginationPolicy
+}
+
+/** Python 输出字段可参与的最终结果集筛选规则。 */
+export interface FinalResultFilterField {
+  field: string
+  title: string
+  dataType: string
+  parameterName: string
+  operators: QueryParameterBinding['operator'][]
+  /** 可选的页面筛选器组件 ID；用于与数据集查询配置保持一致的筛选器绑定展示。 */
+  filterComponentId?: string
+}
+
+/** 针对 Python 最终输出的静态查询配置，不影响输入数据源查询。 */
+export interface FinalResultQueryConfig {
+  schemaFingerprint: string
+  /** 是否经过用户在 Python 编辑器中确认保存；系统自动生成的草稿为 false。 */
+  confirmed?: boolean
+  displayFields: QueryDisplayField[]
+  filterFields: FinalResultFilterField[]
+  sortPolicy: QuerySortPolicy
+  paginationPolicy: QueryPaginationPolicy
+}
+
+/** 运行时排序；direction 仅 asc/desc。 */
+export interface QuerySortSpec {
+  field: string
+  direction: 'asc' | 'desc'
+}
+
+/** 运行时分页；page 从 1 开始。 */
+export interface QueryPaginationSpec {
+  page: number
+  pageSize: number
+}
+
+/**
+ * 页面运行时 QueryContext（设计文档第七节同形 + requestId）。
+ * 只描述本次用户所选筛选值、排序和页码，不持久化。
+ */
+export interface QueryContext {
+  dashboardId?: string
+  componentId?: string
+  datasetId?: string
+  /** 键必须来自已绑定筛选器的参数定义；空选/全部 = 无过滤，显式空集合 = 短路空结果。 */
+  parameters: Record<string, unknown>
+  /** Python 输入数据集的本次参数；同名页面筛选器可按 inputName 使用各自最近一次查询值。 */
+  datasetParameters?: Record<string, Record<string, unknown>>
+  sort?: QuerySortSpec | null
+  pagination?: QueryPaginationSpec | null
+  /** 链路关联标识，用于丢弃旧请求晚返回的响应。 */
+  requestId?: string
+}
+
+/** 一个页面筛选器在当前预览会话中的值及其绑定作用范围。 */
+export interface DashboardRuntimeFilterValue {
+  field: string
+  value: string | string[] | TimeRangeValue | undefined
+  /** 时间筛选器当前有效粒度；仅 timeFilter 设置。 */
+  timeGranularity?: TimeGranularity
+  scope: FilterScope
+  targetComponentIds: string[]
+}
+
+/** 按筛选器组件 ID 索引的运行态；与 Schema 中的 defaultValue 分离。 */
+export type DashboardRuntimeFilterState = Record<string, DashboardRuntimeFilterValue>
+
+/** Python 输出阶段的运行时查询值；不向输入 Query Planner 反向下推。 */
+export interface FinalResultQueryContext {
+  parameters: Record<string, unknown>
+  sort?: QuerySortSpec | null
+  pagination?: QueryPaginationSpec | null
+}
+
+/** 服务端查询计划摘要（pushdown 是服务端计算结果，前端不可伪造）。 */
+export interface DatasetQueryPlanSummary {
+  datasetId?: string
+  inputName?: string
+  columns?: string[]
+  filters?: Array<{ field: string; operator: string; value?: unknown }>
+  orders?: QuerySortSpec[]
+  pagination?: QueryPaginationSpec | null
+  pushdown?: { filters: boolean; sort: boolean; pagination: boolean }
+  residualOperations?: string[]
+  shortCircuitEmpty?: boolean
+  readLimit?: number | null
 }
 
 /** 组件 Tab 配置（每个 Tab 拥有独立的数据源配置） */
@@ -1204,8 +1691,17 @@ export interface ComponentTab {
   id: string
   /** Tab 标题 */
   title: string
+  /** 页签标题图标样式；未配置时沿用主题自动图标 */
+  titleIconStyle?: ComponentTitleIconStyle
   /** Tab 数据源配置 */
   dataSource: ComponentDataSource
+}
+
+/** 画布中正在编辑的单个页签图标样式预览。 */
+export interface DashboardTabTitleIconStylePreview {
+  componentId: string
+  tabId: string
+  titleIconStyle: ComponentTitleIconStyle
 }
 
 /** 仪表盘视角（顶层 Tab） */
@@ -1234,11 +1730,251 @@ export interface DashboardPage {
   components: InsightComponent[]
 }
 
+export type DashboardThemeMode = 'preset' | 'custom'
+export type DashboardThemePresetId =
+  | 'default'
+  | 'blue' | 'indigo' | 'teal' | 'amber' | 'dark-data'
+  | 'rose' | 'coral' | 'orange' | 'gold' | 'burgundy'
+export type DashboardDensity = 'compact' | 'standard' | 'large'
+
+/** 仪表盘级主题配置；缺失时保持旧版 --db-* 视觉。 */
+export interface DashboardThemeOverrides {
+  pageBackground?: string
+  cardBackground?: string
+  border?: string
+  text?: string
+  textSecondary?: string
+  textMuted?: string
+  primary?: string
+  /** 辅色：全页唯一的第二个色相，只用于「洞察区」组件。 */
+  accentAlt?: string
+  positive?: string
+  negative?: string
+  warning?: string
+  info?: string
+  metricPalette?: string[]
+  chartPalette?: string[]
+  radius?: 'small' | 'medium' | 'large'
+  shadow?: 'none' | 'subtle' | 'elevated'
+}
+
+export interface DashboardThemeConfig {
+  mode: DashboardThemeMode
+  presetId?: DashboardThemePresetId | string
+  overrides?: DashboardThemeOverrides
+  density?: DashboardDensity | string
+  /** 系统标准语义图标：默认展示，用户只能选择显示/隐藏。 */
+  iconMode?: DashboardThemeIconMode
+  /** 组件层级强度：控制同类组件边框、标题栏与背景的色阶。 */
+  hierarchy?: DashboardThemeHierarchy
+  /** 同类组件配色策略：自动分组色或统一主色。 */
+  componentColorMode?: DashboardThemeComponentColorMode
+}
+
+export type ComponentThemeAccentGroup = 'primary' | 'secondary' | 'highlight'
+
+export type DashboardThemeIconMode = 'show' | 'hide'
+export type DashboardThemeHierarchy = 'soft' | 'standard' | 'strong'
+export type DashboardThemeComponentColorMode = 'auto' | 'uniform'
+
+export interface ResolvedDashboardTheme {
+  source: 'legacy' | 'configured'
+  presetId?: DashboardThemePresetId
+  mode: 'light' | 'warm' | 'eye-care' | 'dark'
+  pageBackground: string
+  cardBackground: string
+  border: string
+  text: string
+  textSecondary: string
+  textMuted: string
+  primary: string
+  /** 辅色：蓝/绿/琥珀三类强调色之一；默认用于 AI 洞察或显式分组组件。 */
+  accentAlt: string
+  positive: string
+  negative: string
+  warning: string
+  info: string
+  metricPalette: string[]
+  chartPalette: string[]
+  iconPalette: string[]
+  radius: 'small' | 'medium' | 'large'
+  shadow: 'none' | 'subtle' | 'elevated'
+  iconMode: DashboardThemeIconMode
+  hierarchy: DashboardThemeHierarchy
+  componentColorMode: DashboardThemeComponentColorMode
+  overrides: DashboardThemeOverrides
+}
+
+export interface ThemeValidationError {
+  code: 'invalid_preset' | 'invalid_color' | 'contrast_too_low' | 'invalid_palette'
+  field: string
+  message: string
+}
+
+/** 查看数据弹窗最近一次使用的条件；结果行不随仪表盘持久化。 */
+export interface DatasetLastQueryState {
+  filters: Array<{
+    filterComponentId: string
+    field: string
+    parameterName: string
+    timeBoundary?: 'start' | 'end'
+    value: unknown
+    enabled: boolean
+  }>
+  parameters: Record<string, unknown>
+  sort: { field: string; direction: 'asc' | 'desc' } | null
+  page: number
+  pageSize: number
+  /** 未分页时的取数上限（限制条数）；缺省回退组件默认值 */
+  queryLimit?: number
+  timeGranularity?: TimeGranularity
+}
+
+/** 仪表盘脚本输入绑定；脚本只通过 inputName 读取，不直接使用连接信息。 */
+export interface DashboardDatasetInput {
+  datasetId: string
+  inputName: string
+  displayName?: string
+  /** 数据集来源模式；缺省按旧数据集表读取。 */
+  sourceType?: DatasetSourceType | string
+  /** 来源配置不包含连接凭据，仅保存查询/视图引用。 */
+  sourceConfig?: {
+    datasourceId?: string
+    sql?: string
+    analysisViewId?: string
+    apiDefinitionId?: string
+    objectId?: string
+    /** Aloudata「指标 & 维度」模式的指标列表（重开仪表盘时据此重建结果集） */
+    metrics?: string[]
+    /** Aloudata「指标 & 维度」模式的维度列表 */
+    dimensions?: string[]
+  }
+  /**
+   * 字段映射（契约定版，见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）：
+   *   - `source` = **字段名**（技术主键，组件生命周期内不可变），后端下推 SQL / 脚本取值**唯一依据**；
+   *   - `target` = **展示名**（表现层标签，数据集内唯一、可空回退 source），**仅**用于导出表头等展示场景，
+   *     后端**不得**用它下推。
+   */
+  fieldMappings?: Array<{ source: string; target: string }>
+  /** 当前输入数据集的源端筛选；`field` 自本版本起恒为**字段名**（老配置的展示名在读入时惰性归一）。 */
+  filters?: DatasetFilter[]
+  /**
+   * 新版静态查询配置（本输入的权威配置）：保存后旧 scriptFilterBindings 仅作读取兼容，
+   * 禁止两份规则同时生效。
+   */
+  queryConfig?: DatasetQueryConfig
+  /** 最近一次「查看数据」的运行条件值；刷新或重新登录后回显。 */
+  lastQueryState?: DatasetLastQueryState
+}
+
+/** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */
+export interface DashboardScriptParameter {
+  name: string
+  type: 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'enum' | 'date_range' | 'string[]' | 'number[]'
+  options?: string[]
+  defaultValue?: unknown
+  required?: boolean
+  scope: 'dashboard' | 'page' | 'component'
+}
+
+/** 脚本输入筛选器到数据集的声明式绑定。 */
+export interface DashboardScriptFilterBinding {
+  filterComponentId: string
+  /** 新版显式筛选模板；旧 Schema 缺失时由读取层归一化为空数组。 */
+  conditions?: DashboardScriptFilterCondition[]
+  inputNames: string[]
+  /** 别名 → 绑定的字段名（技术主键；不存展示名，改名不影响绑定关系）。 */
+  fieldMappings?: Record<string, string>
+}
+
+/** 绑定筛选器产生的、尚未携带运行时值的结构化条件模板。 */
+export interface DashboardScriptFilterCondition {
+  inputName: string
+  field: string
+  operator: 'eq' | 'neq' | 'gt' | 'gte' | 'lt' | 'lte'
+    | 'in' | 'not_in' | 'between' | 'contains'
+    | 'starts_with' | 'ends_with' | 'is_null' | 'is_not_null'
+  parameterNames: string[]
+  required?: boolean
+}
+
+/** 系统生成 Python 区域的接管状态。 */
+export interface DashboardSystemScriptState {
+  mode: 'generated' | 'managed'
+  generatedCode: string
+  managedCode?: string
+  generatedFingerprint: string
+  userCode: string
+}
+
+export type ScriptDataType = 'string' | 'number' | 'boolean' | 'date' | 'datetime'
+
+export interface ScriptResultColumn {
+  name: string
+  title: string
+  dataType: ScriptDataType
+  role?: 'dimension' | 'measure'
+  nullable: boolean
+}
+
+export interface ScriptResultMeta {
+  rowCount: number
+  truncated: boolean
+  sourceInputs: string[]
+  [key: string]: unknown
+}
+
+export type ScriptResultEnvelope =
+  | {
+    schemaVersion: '1.0'
+    kind: 'table'
+    data: { columns: ScriptResultColumn[]; rows: Record<string, unknown>[] }
+    meta: ScriptResultMeta
+  }
+  | {
+    schemaVersion: '1.0'
+    kind: 'scalar'
+    data: { value: string | number | boolean; label?: string; dataType: ScriptDataType; unit?: string }
+    meta: ScriptResultMeta
+  }
+  | {
+    schemaVersion: '1.0'
+    kind: 'message'
+    data: { level: 'info' | 'warning'; message: string }
+    meta: ScriptResultMeta
+  }
+
+/** DataAgent 管理的 Python Worker 执行限制（不包含依赖安装配置）。 */
+export interface DashboardExecutionPolicy {
+  timeoutSeconds?: number
+  maxRows?: number
+  maxOutputBytes?: number
+}
+
+/** 脚本结果到现有仪表盘组件的显式绑定。 */
+export interface DashboardScriptBinding {
+  componentId: string
+  renderType: 'table' | 'echarts'
+}
+
 /** 仪表盘 Schema */
 export interface InsightDashboardSchema {
   version: string
   /** 页面列表（多级菜单，每个页面拥有独立组件列表） */
   pages: DashboardPage[]
+  /** 可选的数据集脚本输入；旧 Schema 缺失时按空列表处理 */
+  datasetInputs?: DashboardDatasetInput[]
+  /** Python 处理脚本草稿；平台不自动生成或执行 AI 脚本 */
+  script?: string
+  /** 脚本参数定义，不包含字段绑定 */
+  parameters?: DashboardScriptParameter[]
+  scriptFilterBindings?: DashboardScriptFilterBinding[]
+  /** Python Worker 资源与超时策略 */
+  executionPolicy?: DashboardExecutionPolicy
+  /** 用户确认后的脚本结果组件绑定 */
+  scriptBindings?: DashboardScriptBinding[]
+  /** 仪表盘级主题；旧 Schema 缺失时不写回、不改变既有视觉。 */
+  theme?: DashboardThemeConfig
 }
 
 /** 洞察仪表盘实体 */
@@ -1257,6 +1993,101 @@ export interface InsightDashboard {
   modifier?: string
   createTime: string
   updateTime: string
+  /** 可见性：private（默认）/ workspace / template / official */
+  visibility?: string
+  /** 模板元信息 JSON 字符串；非模板为 null */
+  templateMeta?: string | null
+}
+
+/** 列表缩略图形态：由服务端从 Schema 轻量推导，列表无需读取完整 Schema */
+export type InsightDashboardChartKind =
+  | 'bar'
+  | 'line'
+  | 'area'
+  | 'bar-alert'
+  | 'donut'
+  | 'funnel'
+  | 'dual-line'
+  | 'kpi-grid'
+  | 'empty'
+
+/**
+ * 仪表盘列表摘要（GET /v1/insight/dashboards/summary）。
+ * 只携带卡片渲染所需的元信息，不含 schemaJson / reportContent；
+ * 详情仍使用 InsightDashboard。
+ */
+export interface InsightDashboardSummary {
+  id: string
+  name: string
+  description?: string | null
+  status: 'draft' | 'published'
+  agentId?: string
+  workspaceId?: string
+  ownerId?: string
+  ownerName?: string
+  visibility?: string
+  templateMeta?: string | null
+  modifier?: string
+  createTime?: string
+  updateTime?: string
+  /** 列表缩略图形态；空 Schema 或解析失败为 empty */
+  chartKind?: InsightDashboardChartKind
+}
+
+/** 列表状态计数（当前可见范围内，不随分页变化） */
+export interface InsightDashboardCounts {
+  all: number
+  draft: number
+  published: number
+}
+
+/** 列表摘要查询条件 */
+export interface InsightDashboardSummaryQuery {
+  /** 页码，从 1 开始 */
+  page?: number
+  /** 每页条数，默认 20，最大 100 */
+  size?: number
+  /** 可见性过滤，逗号分隔，如 "template,official" */
+  visibility?: string
+  /** 状态过滤 */
+  status?: 'draft' | 'published'
+  /** 关键词：匹配名称/描述/负责人 */
+  keyword?: string
+  /** 排序字段白名单 */
+  sortBy?: 'updateTime' | 'name'
+  /** 排序方向，默认 desc */
+  sortOrder?: 'asc' | 'desc'
+}
+
+/** 列表摘要分页响应 */
+export interface InsightDashboardSummaryPage {
+  records: InsightDashboardSummary[]
+  total: number
+  page: number
+  size: number
+  counts: InsightDashboardCounts
+}
+
+/** 模板元信息（templateMeta 解析后的结构） */
+export interface InsightDashboardTemplateMeta {
+  sourceDashboardId?: number
+  authorName?: string
+  tags?: string[]
+  category?: string
+  cover?: string
+  usageCount?: number
+  isOfficial?: boolean
+  /** 派生副本的来源模板（复制模板时写入，用于「替换示例数据」提示） */
+  sourceTemplateId?: number
+  sourceTemplateName?: string
+}
+
+/** 存为样例模板输入 */
+export interface InsightDashboardSaveAsTemplateInput {
+  name?: string
+  description?: string
+  tags?: string[]
+  category?: string
 }
 
 /** 创建仪表盘输入 */
@@ -1266,6 +2097,10 @@ export interface InsightDashboardCreateInput {
   schemaJson?: string
   agentId?: string
   ownerName?: string
+  /** 可见性（可选，默认 private） */
+  visibility?: string
+  /** 模板元信息 JSON 字符串（可选） */
+  templateMeta?: string | null
 }
 
 /** 更新仪表盘输入 */
@@ -1276,6 +2111,12 @@ export interface InsightDashboardUpdateInput {
   status?: string
   agentId?: string
   ownerName?: string
+  /** 可见性（可选） */
+  visibility?: string
+  /** 模板元信息 JSON 字符串（可选） */
+  templateMeta?: string | null
+  /** 乐观锁：更新前读取到的仪表盘更新时间。 */
+  expectedUpdateTime?: string
 }
 
 /** AI助手对话输入（统一AI生成和AI修改） */
@@ -1300,32 +2141,59 @@ export interface ChatHistoryMessage {
   content: string
 }
 
+/** KPI 单条指标渲染数据（后端取数结果） */
+export interface KpiItemData {
+  /** 指标名（后端返回；前端优先用 kpiMetrics.displayName 覆盖） */
+  name: string
+  /** 指标值（已格式化字符串） */
+  value: string
+  /** 环比/趋势百分比 */
+  chg?: string
+  /** 趋势方向 */
+  up?: boolean
+  /** 来源结果集字段名（KPI 指标分组按此与 kpiMetrics 对齐） */
+  fieldKey?: string
+  /** 单位（后端可选下发；缺省时用 kpiMetrics.unit） */
+  unit?: string
+  /** 辅助说明（后端可选下发；缺省时用 kpiMetrics.helperText） */
+  helperText?: string
+}
+
 /** 组件渲染数据（后端取数 + 图表构建后返回） */
 export interface InsightComponentData {
   /** 对应组件 ID */
   componentId: string
+  /** 当前预览查询状态；仅运行时使用，不属于仪表盘持久化配置。 */
+  queryStatus?: 'loading' | 'success' | 'empty' | 'timeout' | 'error'
   /** 渲染类型：echarts / kpi / table / aiAnalysis */
   renderType: 'echarts' | 'kpi' | 'table' | 'aiAnalysis'
+  /** 字段技术名到展示名的渲染元数据；不参与查询、排序或数据映射。 */
+  fieldLabels?: Record<string, string>
+  /** 标记 Python 结果显式应用；KPI 指标投影会同步持久化，供后续恢复。 */
+  pythonResultPreview?: boolean
+  /** 标记按本次查询结果显式应用；KPI 指标投影会同步持久化，供后续恢复。 */
+  resultFieldProjection?: boolean
+  /** Python 最终结果本次应用的筛选/排序；仅用于持久化恢复画布展示。 */
+  pythonAppliedResultView?: {
+    filters: Array<{ field: string; op: string; value: string }>
+    sort: QuerySortSpec | null
+  }
+  /** 本次显式应用的原始结果行，只在应用回调中使用，不写入运行态地图。 */
+  appliedResultRows?: Array<Record<string, unknown>>
+  /** 本次显式应用结果的来源，用于记录可恢复的结果集类型。 */
+  appliedResultSource?: 'dataset' | 'script'
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
-  kpi?: {
-    name: string
-    value: string
-    chg?: string
-    up?: boolean
-  }
+  kpi?: KpiItemData
   /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时，按指标逐列展示） */
-  kpiList?: Array<{
-    name: string
-    value: string
-    chg?: string
-    up?: boolean
-  }>
+  kpiList?: KpiItemData[]
   /** 表格数据（renderType=table 时） */
   table?: {
     columns: string[]
     rows: string[][]
+    /** 查询服务提供的匹配总数；缺失时按前端已取回行数计算。 */
+    totalCount?: number
   }
   /** AI 分析数据（renderType=aiAnalysis 时） */
   aiAnalysis?: {
@@ -1344,12 +2212,14 @@ export interface InsightComponentData {
 export interface ComponentTabData {
   /** Tab 标题 */
   title: string
+  /** 字段技术名到展示名的渲染元数据。 */
+  fieldLabels?: Record<string, string>
   /** ECharts option（renderType=echarts 时） */
   option?: Record<string, unknown>
   /** KPI 卡片数据（renderType=kpi 时，单指标模式） */
-  kpi?: { name: string; value: string; chg?: string; up?: boolean }
+  kpi?: KpiItemData
   /** KPI 多指标数据列表（renderType=kpi 且 multiKpi=true 时） */
-  kpiList?: Array<{ name: string; value: string; chg?: string; up?: boolean }>
+  kpiList?: KpiItemData[]
   /** 表格数据（renderType=table 时） */
   table?: { columns: string[]; rows: string[][] }
   /** 取数失败时的错误信息 */
@@ -1358,6 +2228,9 @@ export interface ComponentTabData {
 
 /** 时间范围预设类型 */
 export type TimeRangePreset = 'today' | '7d' | '30d' | '90d' | 'custom'
+
+/** 时间筛选器按当前日期动态解析的默认范围。 */
+export type TimeFilterDefaultPreset = 'dayBeforeYesterday' | 'yesterday' | 'today' | 'monthToDate' | 'yearToDate'
 
 /** 时间范围筛选值 */
 export interface TimeRangeValue {
@@ -1381,6 +2254,8 @@ export interface FilterValue {
 export interface DashboardFilterContext {
   /** 时间范围筛选 */
   timeRange?: TimeRangeValue
+  /** 时间范围使用的 Aloudata 日期粒度；缺省兼容 DAY。 */
+  timeGranularity?: TimeGranularity
   /** 维度筛选值列表 */
   dimensionFilters: FilterValue[]
   /** 触发此次筛选的筛选器组件 ID（用于区分全局/组件绑定筛选） */
@@ -1399,6 +2274,14 @@ export interface FilterComponentConfig {
   datasourceId?: string
   /** 动态选项维度名（optionSource=dynamic 时使用，已废弃，直接使用 field） */
   dimension?: string
+  /** 选择方式；缺省为单选，兼容旧仪表盘配置 */
+  selectionMode?: 'single' | 'multiple'
+  /** 是否展示“全部”选项；选中后不下发该字段筛选条件 */
+  allowSelectAll?: boolean
+  /** 是否允许清空为不筛选；缺省为允许，兼容旧仪表盘配置 */
+  allowNoFilter?: boolean
+  /** 初始选中值；null 表示初始不筛选 */
+  defaultValue?: string | string[] | null
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */
@@ -1406,11 +2289,21 @@ export interface FilterComponentConfig {
 }
 
 /** 时间筛选组件配置（InsightComponent.config 的约定结构） */
+export type TimeGranularity = 'DAY' | 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR'
+
 export interface TimeFilterComponentConfig {
   /** 时间维度字段名（默认 metric_time） */
   field: string
+  /** 每次进入预览时按当前日期重新解析的默认时间范围 */
+  defaultPreset?: TimeFilterDefaultPreset
   /** 允许的预设选项列表 */
   availablePresets?: TimeRangePreset[]
+  /** 最大可选时间跨度（天，闭区间）；不填表示不限制 */
+  maxRangeDays?: number
+  /** 是否在画布时间范围右侧显示粒度选择器；历史配置缺省为显示 */
+  showTimeGranularity?: boolean
+  /** 粒度选择器的默认值；历史配置缺省为 DAY */
+  defaultTimeGranularity?: TimeGranularity
   /** 作用范围：global（全局，影响所有未绑定专属筛选器的组件）/ scoped（仅影响绑定的组件） */
   scope?: FilterScope
   /** 影响的目标组件 ID 列表（scope=scoped 时使用，空表示全局） */

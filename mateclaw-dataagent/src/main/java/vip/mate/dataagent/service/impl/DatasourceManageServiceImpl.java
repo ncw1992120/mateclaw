@@ -2,6 +2,8 @@ package vip.mate.dataagent.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +29,7 @@ import vip.mate.dataagent.repository.DatasourceTableMapper;
 import vip.mate.dataagent.repository.ResourceGrantMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
+import vip.mate.dataagent.util.JdbcUtils;
 
 import java.sql.*;
 import java.time.LocalDateTime;
@@ -68,6 +71,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         if (ownerId == null) {
             LambdaQueryWrapper<DatasourceEntity> wrapper = new LambdaQueryWrapper<>();
             wrapper.eq(DatasourceEntity::getEnabled, true);
+            wrapper.eq(DatasourceEntity::getDeleted, 0);
             List<DatasourceEntity> entities = datasourceMapper.selectList(wrapper);
             return entities.stream().map(this::toVO).collect(Collectors.toList());
         }
@@ -76,7 +80,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         // 1. 自己创建的数据源
         LambdaQueryWrapper<DatasourceEntity> ownWrapper = new LambdaQueryWrapper<>();
-        ownWrapper.eq(DatasourceEntity::getOwnerId, ownerId);
+        ownWrapper.eq(DatasourceEntity::getOwnerId, ownerId)
+                .eq(DatasourceEntity::getDeleted, 0);
         List<DatasourceEntity> ownEntities = datasourceMapper.selectList(ownWrapper);
         visibleIds.addAll(ownEntities.stream().map(DatasourceEntity::getId).collect(Collectors.toSet()));
 
@@ -111,7 +116,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         // 3. 工作区内元数据共享的数据源（仅 view 权限，用于元数据查询场景）
         LambdaQueryWrapper<DatasourceEntity> sharedWrapper = new LambdaQueryWrapper<>();
         sharedWrapper.eq(DatasourceEntity::getWorkspaceId, workspaceId)
-                .eq(DatasourceEntity::getMetaShared, true);
+                .eq(DatasourceEntity::getMetaShared, true)
+                .eq(DatasourceEntity::getDeleted, 0);
         List<DatasourceEntity> sharedEntities = datasourceMapper.selectList(sharedWrapper);
         visibleIds.addAll(sharedEntities.stream()
                 .map(DatasourceEntity::getId).collect(Collectors.toSet()));
@@ -122,7 +128,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
 
         List<DatasourceEntity> entities = datasourceMapper.selectList(
                 new LambdaQueryWrapper<DatasourceEntity>()
-                        .in(DatasourceEntity::getId, visibleIds));
+                        .in(DatasourceEntity::getId, visibleIds)
+                        .eq(DatasourceEntity::getDeleted, 0));
         return entities.stream()
                 .map(e -> toVO(e, resolveDatasourcePermission(e)))
                 .collect(Collectors.toList());
@@ -675,8 +682,8 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
                 return aloudataService.testConnection(config);
             }
             return switch (sourceType) {
-                case "mysql", "postgresql", "oracle", "clickhouse", "doris" -> testJdbcConnection(entity);
-                default -> true;
+                case "mysql", "postgresql", "sqlserver", "oracle", "clickhouse", "doris", "starrocks" -> testJdbcConnection(entity);
+                default -> false;
             };
         } catch (Exception e) {
             return false;
@@ -702,47 +709,7 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
      * 构建 JDBC URL
      */
     private String buildJdbcUrl(DatasourceEntity entity) {
-        String sourceType = entity.getSourceType();
-        String host = entity.getHost();
-        Integer port = entity.getPort();
-        String databaseName = entity.getDatabaseName();
-        String extraParams = entity.getConnectionParams();
-        StringBuilder url = new StringBuilder();
-        switch (sourceType) {
-            case "mysql":
-                url.append("jdbc:mysql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                } else {
-                    url.append("?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=Asia/Shanghai");
-                }
-                break;
-            case "postgresql":
-                url.append("jdbc:postgresql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            case "oracle":
-                url.append("jdbc:oracle:thin:@").append(host).append(":").append(port).append(":").append(databaseName);
-                break;
-            case "clickhouse":
-                url.append("jdbc:clickhouse://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            case "doris":
-                url.append("jdbc:mysql://").append(host).append(":").append(port).append("/").append(databaseName);
-                if (extraParams != null && !extraParams.isEmpty()) {
-                    url.append("?").append(extraParams);
-                }
-                break;
-            default:
-                url.append("jdbc:").append(sourceType).append("://").append(host).append(":").append(port).append("/").append(databaseName);
-                break;
-        }
-        return url.toString();
+        return JdbcUtils.buildJdbcUrl(entity);
     }
 
     /**
@@ -756,9 +723,11 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         switch (sourceType) {
             case "mysql":
             case "postgresql":
+            case "sqlserver":
             case "oracle":
             case "clickhouse":
             case "doris":
+            case "starrocks":
                 discoverJdbcSchema(entity);
                 break;
             default:
@@ -777,7 +746,11 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         String catalog = databaseName;
         String schemaPattern = null;
         String sourceType = entity.getSourceType();
-        if ("postgresql".equals(sourceType)) {
+        if ("starrocks".equals(sourceType)) {
+            String[] catalogAndDatabase = databaseName.split("\\.", 2);
+            catalog = catalogAndDatabase.length == 2 ? catalogAndDatabase[0] : "default_catalog";
+            schemaPattern = catalogAndDatabase.length == 2 ? catalogAndDatabase[1] : databaseName;
+        } else if ("postgresql".equals(sourceType)) {
             String schema = entity.getSchemaName();
             if (schema == null || schema.isEmpty()) {
                 schema = "public";
@@ -1164,12 +1137,47 @@ public class DatasourceManageServiceImpl implements DatasourceManageService {
         } else {
             // edit 权限：密码不再回显给前端，编辑时留空表示不修改
             vo.setPassword(null);
+            vo.setConnectionParams(sanitizeConnectionParams(entity.getConnectionParams()));
         }
         LambdaQueryWrapper<DatasourceTableEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(DatasourceTableEntity::getDatasourceId, entity.getId());
         vo.setTableCount(datasourceTableMapper.selectCount(wrapper).intValue());
         vo.setPermission(permission);
         return vo;
+    }
+
+    /** 连接参数可能是历史自由 JSON；对管理界面也只返回非敏感字段。 */
+    private String sanitizeConnectionParams(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        try {
+            JsonNode root = objectMapper.readTree(raw);
+            redactJson(root);
+            return objectMapper.writeValueAsString(root);
+        } catch (Exception e) {
+            log.warn("数据源连接参数不是有效 JSON，响应中隐藏原始内容");
+            return null;
+        }
+    }
+
+    private void redactJson(JsonNode node) {
+        if (node instanceof ObjectNode object) {
+            List<String> remove = new ArrayList<>();
+            object.fieldNames().forEachRemaining(name -> {
+                if (isSensitiveKey(name)) remove.add(name);
+                else redactJson(object.get(name));
+            });
+            remove.forEach(object::remove);
+        } else if (node != null && node.isArray()) {
+            node.forEach(this::redactJson);
+        }
+    }
+
+    private boolean isSensitiveKey(String name) {
+        String normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        return normalized.contains("password") || normalized.contains("secret")
+                || normalized.contains("token") || normalized.contains("auth")
+                || normalized.contains("authorization") || normalized.contains("cookie")
+                || normalized.equals("uid") || normalized.contains("accesskey");
     }
 
     /**

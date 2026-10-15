@@ -9,7 +9,7 @@
           <div class="header-spacer"></div>
           <!-- 操作按钮行 -->
           <div class="history-actions">
-            <button v-if="!historyCollapsed" class="history-collapse-btn" :title="t('conversation.searchPlaceholder')" @click="searchOpen = !searchOpen">
+            <button v-if="!historyCollapsed" class="history-collapse-btn" :title="t('conversation.searchPlaceholder')" :aria-label="t('conversation.searchPlaceholder')" @click="searchOpen = !searchOpen">
               <span class="collapse-svg" aria-hidden="true">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <circle cx="11" cy="11" r="8"/>
@@ -17,7 +17,7 @@
                 </svg>
               </span>
             </button>
-            <button class="history-collapse-btn" :title="historyCollapsed ? t('conversation.expand') : t('conversation.collapse')" @click="historyCollapsed = !historyCollapsed">
+            <button class="history-collapse-btn" :title="historyCollapsed ? t('conversation.expand') : t('conversation.collapse')" :aria-label="historyCollapsed ? t('conversation.expand') : t('conversation.collapse')" @click="historyCollapsed = !historyCollapsed">
               <span class="collapse-svg" aria-hidden="true">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -30,7 +30,7 @@
         </div>
         <!-- 新对话按钮独占一行 -->
         <div v-if="!historyCollapsed" class="history-new-chat-row">
-          <button class="new-chat-btn" :title="t('conversation.newChat')" @click="handleNewChat">
+          <button class="new-chat-btn" :title="t('conversation.newChat')" :aria-label="t('conversation.newChat')" @click="handleNewChat">
             <span class="new-chat-icon" aria-hidden="true">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19"/>
@@ -41,6 +41,19 @@
           </button>
         </div>
         <template v-if="!historyCollapsed">
+          <!-- 搜索框（默认隐藏，点击搜索图标展开） -->
+          <div v-if="searchOpen" class="history-search">
+            <el-input
+              ref="searchInputRef"
+              v-model="conversationSearchKeyword"
+              :aria-label="t('conversation.searchPlaceholder')"
+              :placeholder="t('conversation.searchPlaceholder')"
+              clearable
+              class="history-search-input"
+              :prefix-icon="Search"
+              @keyup.enter="searchInputRef?.blur()"
+            />
+          </div>
           <!-- 历史对话列表 -->
           <div class="history-list">
               <el-collapse v-model="expandedGroupKeys" class="history-collapse">
@@ -55,7 +68,11 @@
                   :key="conv.conversationId"
                   class="history-item"
                   :class="{ active: chatStore.conversationId === conv.conversationId, 'menu-open': openMenuConvId === conv.conversationId, streaming: chatStore.isConversationStreaming(conv.conversationId) }"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`切换对话：${conv.title || t('conversation.untitled')}`"
                   @click="handleSwitchConversation(conv.conversationId)"
+                  @keydown="handleHistoryItemKeydown($event, conv.conversationId)"
                 >
                   <template v-if="editingConvId === conv.conversationId">
                     <input
@@ -64,6 +81,7 @@
                       :maxlength="100"
                       autofocus
                       @click.stop
+                      @keydown.stop
                       @keydown.enter="handleConfirmRename(conv.conversationId)"
                       @keydown.esc="handleCancelRename"
                       @blur="handleConfirmRename(conv.conversationId)"
@@ -90,8 +108,8 @@
                         <span class="history-item-time">{{ formatRelativeTime(conv.lastActiveTime) }}</span>
                       </span>
                     </div>
-                    <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }">
-                      <button class="history-item-action" :data-conv-id="conv.conversationId" :title="t('conversation.more')" @click.stop="handleToggleMenu(conv.conversationId)">
+                    <div class="history-item-actions" :class="{ visible: openMenuConvId === conv.conversationId }" @keydown.stop>
+                      <button class="history-item-action" :data-conv-id="conv.conversationId" :title="t('conversation.more')" :aria-label="t('conversation.more')" @click.stop="handleToggleMenu(conv.conversationId)">
                         <span class="dot-icon" aria-hidden="true">
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                             <circle cx="5" cy="12" r="2"/>
@@ -279,6 +297,12 @@ async function handleSwitchConversation(convId: string): Promise<void> {
   openMenuConvId.value = null
   if (chatStore.conversationId === convId && chatStore.messages.length > 0) return
   await chatStore.switchConversation(convId)
+}
+
+function handleHistoryItemKeydown(event: KeyboardEvent, convId: string): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  void handleSwitchConversation(convId)
 }
 
 /** 切换操作菜单的显示 */

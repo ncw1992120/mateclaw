@@ -78,6 +78,22 @@ public class InsightDashboardPatchOp implements Serializable {
     @Schema(description = "组件标题", example = "销售额")
     private String title;
 
+    /** 组件标题图标样式（add/update 可选） */
+    @Schema(description = "组件标题图标样式")
+    private java.util.Map<String, Object> titleIconStyle;
+
+    /** 仪表盘主题强调色分组（add/update 可选） */
+    @Schema(description = "仪表盘主题强调色分组", allowableValues = {"primary", "secondary", "highlight"})
+    private String themeAccentGroup;
+
+    /** 组合卡片默认子组件配置 */
+    @Schema(description = "组合卡片默认子组件配置")
+    private java.util.List<java.util.Map<String, Object>> children;
+
+    /** 组合卡片布局及页签配置 */
+    @Schema(description = "组合卡片布局及页签配置")
+    private java.util.Map<String, Object> containerConfig;
+
     /** 图表子类型（add 且 type=chart 时必填）：line / bar / pie / area / scatter / radar */
     @Schema(description = "图表子类型（type=chart时）", example = "bar",
             allowableValues = {"line", "bar", "pie", "area", "scatter", "radar"})
@@ -110,6 +126,10 @@ public class InsightDashboardPatchOp implements Serializable {
     /** 绑定的筛选器 ID 列表（add/update 可选） */
     @Schema(description = "绑定的筛选器ID列表")
     private List<String> boundFilterIds;
+
+    /** KPI 指标分组配置（add/update 可选，仅 kpi 类型；由结果集字段逐列投影） */
+    @Schema(description = "KPI指标分组配置（kpi组件）")
+    private List<InsightDashboardSchemaDTO.KpiMetric> kpiMetrics;
 
     // ---- 页面操作字段（add-page / rename-page） ----
 

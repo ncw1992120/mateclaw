@@ -16,6 +16,7 @@ import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.model.AloudataCategoryEntity;
 import vip.mate.dataagent.service.AloudataSemanticSyncService;
+import vip.mate.dataagent.service.AloudataAnalysisViewService;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceManageService;
 
@@ -37,6 +38,7 @@ public class DataAgentDatasourceController {
     private final AloudataEndpointService aloudataEndpointService;
     private final AloudataSemanticSyncService aloudataSyncService;
     private final AloudataService aloudataService;
+    private final AloudataAnalysisViewService aloudataAnalysisViewService;
     private final WorkspaceGuard workspaceGuard;
 
     /**
@@ -298,6 +300,28 @@ public class DataAgentDatasourceController {
     }
 
     /**
+     * 实时获取单个指标详情（同义词、关联维度等），用于弹窗「懒加载详情」。
+     */
+    @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/detail")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标详情", description = "实时获取指定指标的同义词、关联维度等详情（懒加载）")
+    public R<AloudataMetricSemanticDTO> getMetricDetail(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标英文名") @PathVariable String metricName) {
+        return R.ok(aloudataSyncService.getMetricDetail(datasourceId, metricName));
+    }
+
+    /** 实时获取单个维度详情，用于选择弹窗悬浮展示。 */
+    @GetMapping("/{datasourceId}/aloudata/dimensions/{dimName}/detail")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "维度详情", description = "实时获取指定维度的类型、描述等详情（懒加载）")
+    public R<AloudataDimensionSemanticDTO> getDimensionDetail(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "维度英文名") @PathVariable String dimName) {
+        return R.ok(aloudataSyncService.getDimensionDetail(datasourceId, dimName));
+    }
+
+    /**
      * 查询指标关联的维度详情列表
      */
     @GetMapping("/{datasourceId}/aloudata/metrics/{metricName}/dimension-details")
@@ -370,6 +394,15 @@ public class DataAgentDatasourceController {
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "分页查询参数") AloudataMetricPageQuery query) {
         return R.ok(aloudataSyncService.pageMetrics(datasourceId, query));
+    }
+
+    /** 查询实时 Aloudata 指标目录树 */
+    @GetMapping("/{datasourceId}/aloudata/metrics/directory")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "Aloudata 指标目录树", description = "直接从 Aloudata 获取指标类目树和类目下指标")
+    public R<List<Map<String, Object>>> listMetricDirectory(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataSyncService.listMetricDirectory(datasourceId));
     }
 
     /**
@@ -456,5 +489,55 @@ public class DataAgentDatasourceController {
             @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
             @Parameter(description = "指标查询请求") @RequestBody AloudataMetricQueryRequest request) {
         return R.ok(aloudataService.queryMetrics(datasourceId, request));
+    }
+
+    /** 获取 Aloudata 已有指标视图目录（只读）。 */
+    @GetMapping("/{datasourceId}/analysis-views")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图目录", description = "获取当前 Aloudata 数据源下已授权的指标视图目录")
+    public R<List<AloudataAnalysisViewSummary>> listAnalysisViews(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId) {
+        return R.ok(aloudataAnalysisViewService.listTree(datasourceId));
+    }
+
+    /**
+     * 平铺查询 Aloudata 指标视图列表（支持关键字搜索与「只看我的」）。
+     * <p>
+     * 与 {@code /analysis-views}（树状目录）不同：本接口返回平铺列表并携带
+     * {@code owner}/{@code mine} 归属信息。注意 Aloudata 列表接口本身不过滤权限，
+     * 「只看我的」（按 owner == 当前认证值）是近似判断，不等价于「一定取数成功」。
+     */
+    @GetMapping("/{datasourceId}/analysis-views/list")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图列表", description = "平铺查询指标视图，支持关键字搜索与「只看我的」")
+    public R<List<AloudataAnalysisViewItem>> listAnalysisViewsFlat(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "视图名称关键字") @RequestParam(required = false) String keyword,
+            @Parameter(description = "仅返回当前账号创建的视图") @RequestParam(required = false, defaultValue = "false") boolean onlyMine) {
+        return R.ok(aloudataAnalysisViewService.listViews(datasourceId, keyword, onlyMine));
+    }
+
+    /**
+     * 指标视图的字段清单（指标 + 维度），含字段名 / 展示名 / 描述。
+     * <p>
+     * 供「字段名称」弹窗默认填充（字段名/描述/展示名）与「筛选预览」维度预置使用。
+     */
+    @GetMapping("/{datasourceId}/analysis-views/{viewName}/fields")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图字段", description = "获取指标视图包含的指标/维度的字段名、展示名与描述")
+    public R<List<AloudataAnalysisViewField>> listAnalysisViewFields(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标视图名称") @PathVariable String viewName) {
+        return R.ok(aloudataAnalysisViewService.listFields(datasourceId, viewName));
+    }
+
+    /** 获取 Aloudata 已有指标视图定义（只读）。 */
+    @GetMapping("/{datasourceId}/analysis-views/{viewName}")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "指标视图详情", description = "获取指定 Aloudata 指标视图的指标、维度和筛选定义")
+    public R<AloudataAnalysisViewDetail> getAnalysisView(
+            @Parameter(description = "数据源 ID") @PathVariable Long datasourceId,
+            @Parameter(description = "指标视图名称") @PathVariable String viewName) {
+        return R.ok(aloudataAnalysisViewService.getByName(datasourceId, viewName));
     }
 }

@@ -59,6 +59,7 @@
             <input
               v-model="form.displayName"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldDisplayName')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderDisplayName')"
             />
@@ -70,6 +71,7 @@
             <input
               v-model="form.productAddress"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldProductAddress')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderProductAddress')"
             />
@@ -81,6 +83,7 @@
             <input
               v-model="form.productPort"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldProductPort')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderProductPort')"
             />
@@ -92,6 +95,7 @@
             <input
               v-model="form.semanticAddress"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldSemanticAddress')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderSemanticAddress')"
             />
@@ -103,6 +107,7 @@
             <input
               v-model="form.semanticPort"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldSemanticPort')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderSemanticPort')"
             />
@@ -119,6 +124,7 @@
             <input
               v-model="form.tenantId"
               class="form-input"
+              :aria-label="t('metricPlatform.fieldTenantId')"
               :disabled="!isEditing"
               :placeholder="t('metricPlatform.placeholderTenantId')"
             />
@@ -132,7 +138,7 @@
                 <span class="form-tip">?</span>
               </el-tooltip>
             </label>
-            <select v-model="form.authMethod" class="form-select" :disabled="!isEditing">
+            <select v-model="form.authMethod" class="form-select" :aria-label="t('metricPlatform.fieldAuthMethod')" :disabled="!isEditing">
               <option value="UID">UID</option>
               <option value="TOKEN">TOKEN</option>
               <option value="ACCOUNT">ACCOUNT</option>
@@ -152,6 +158,7 @@
               <input
                 v-model="form.authValue"
                 class="form-input"
+                :aria-label="t('metricPlatform.fieldAuthValue')"
                 :type="showPassword ? 'text' : 'password'"
                 :disabled="!isEditing"
                 :placeholder="isEditing ? '请输入新认证值，留空表示不修改' : ''"
@@ -172,7 +179,7 @@
           <div class="form-field form-field-wide">
             <label class="checkbox-label">
               <label class="switch">
-                <input v-model="form.metaShared" type="checkbox" :disabled="!isEditing" />
+                <input v-model="form.metaShared" type="checkbox" aria-label="共享元数据" :disabled="!isEditing" />
                 <span class="slider"></span>
               </label>
               <span class="switch-text">共享元数据（同工作区所有用户可查看）</span>
@@ -206,7 +213,7 @@
             <div class="form-field form-field-wide">
               <label class="checkbox-label">
                 <label class="switch">
-                  <input v-model="form.aloudataSyncEnabled" type="checkbox" :disabled="!isEditing" />
+                  <input v-model="form.aloudataSyncEnabled" type="checkbox" :aria-label="t('metricPlatform.syncScheduleEnabled')" :disabled="!isEditing" />
                   <span class="slider"></span>
                 </label>
                 <span class="switch-text">{{ t('metricPlatform.syncScheduleEnabled') }}</span>
@@ -226,17 +233,17 @@
 
               <!-- 可视化 cron 编辑器：复用现有 5 段组件（分 时 日 月 周），编辑态可配置、非编辑态只读展示 -->
               <CronExpressionField v-if="isEditing" v-model="form.aloudataSyncCron" />
-              <template v-else>
-                <input
-                  :value="form.aloudataSyncCron"
-                  class="form-input mono"
-                  readonly
-                  :placeholder="t('metricPlatform.syncScheduleCronPlaceholder')"
-                />
-                <p v-if="aloudataSyncCronDesc" class="field-desc" style="margin: 0; font-size: 12px; color: var(--theme-text-muted);">
-                  {{ aloudataSyncCronDesc }}
-                </p>
-              </template>
+              <input
+                v-else
+                :value="form.aloudataSyncCron"
+                class="form-input mono"
+                :aria-label="t('metricPlatform.syncScheduleCron')"
+                readonly
+                :placeholder="t('metricPlatform.syncScheduleCronPlaceholder')"
+              />
+              <p v-if="!isEditing && aloudataSyncCronDesc" class="field-desc" style="margin: 0; font-size: 12px; color: var(--theme-text-muted);">
+                {{ aloudataSyncCronDesc }}
+              </p>
 
               <p v-if="form.lastAloudataSyncTime" class="field-desc" style="margin: 6px 0 0; font-size: 12px; color: var(--theme-text-muted);">
                 {{ t('metricPlatform.syncScheduleLastTime') }}：{{ formatSyncTime(form.lastAloudataSyncTime) }}
@@ -282,11 +289,16 @@
             <div class="tree-header">
               <span class="tree-title">类目</span>
             </div>
-            <div class="tree-content">
+            <div class="tree-content" role="tree" aria-label="指标类目">
               <div
                 class="tree-node tree-node-all"
                 :class="{ 'is-active': selectedCategoryId === 'all' }"
+                role="treeitem"
+                :aria-selected="selectedCategoryId === 'all'"
+                aria-label="全部指标"
+                :tabindex="selectedCategoryId === 'all' ? 0 : -1"
                 @click="selectCategory('all')"
+                @keydown="handleCategoryKeydown($event, 'all')"
               >
                 <span class="tree-node-expand is-placeholder" />
                 <span class="tree-node-icon">
@@ -317,6 +329,7 @@
                   <el-input
                     v-model="metricPagination.keyword"
                     size="small"
+                    :aria-label="t('metricPlatform.searchMetrics')"
                     :placeholder="t('metricPlatform.searchMetrics')"
                     clearable
                     @change="handleMetricSearch"
@@ -383,12 +396,13 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="pagination-wrapper">
+            <div ref="metricPaginationRoot" class="pagination-wrapper">
               <el-pagination
                 v-model:current-page="metricPagination.page"
                 v-model:page-size="metricPagination.size"
                 :total="metricPagination.total"
                 :page-sizes="[10, 20, 50, 100]"
+                aria-label="指标分页"
                 layout="total, sizes, prev, pager, next"
                 size="small"
                 @current-change="handleMetricPageChange"
@@ -438,11 +452,16 @@
             <div class="tree-header">
               <span class="tree-title">类目</span>
             </div>
-            <div class="tree-content">
+            <div class="tree-content" role="tree" aria-label="维度类目">
               <div
                 class="tree-node tree-node-all"
                 :class="{ 'is-active': selectedDimensionCategoryId === 'all' }"
+                role="treeitem"
+                :aria-selected="selectedDimensionCategoryId === 'all'"
+                aria-label="全部维度"
+                :tabindex="selectedDimensionCategoryId === 'all' ? 0 : -1"
                 @click="selectDimensionCategory('all')"
+                @keydown="handleCategoryKeydown($event, 'all', true)"
               >
                 <span class="tree-node-expand is-placeholder" />
                 <span class="tree-node-icon">
@@ -473,6 +492,7 @@
                   <el-input
                     v-model="dimensionPagination.keyword"
                     size="small"
+                    :aria-label="t('metricPlatform.searchDimensions')"
                     :placeholder="t('metricPlatform.searchDimensions')"
                     clearable
                     @change="handleDimensionSearch"
@@ -546,12 +566,13 @@
                 </template>
               </el-table-column>
             </el-table>
-            <div class="pagination-wrapper">
+            <div ref="dimensionPaginationRoot" class="pagination-wrapper">
               <el-pagination
                 v-model:current-page="dimensionPagination.page"
                 v-model:page-size="dimensionPagination.size"
                 :total="dimensionPagination.total"
                 :page-sizes="[10, 20, 50, 100]"
+                aria-label="维度分页"
                 layout="total, sizes, prev, pager, next"
                 size="small"
                 @current-change="handleDimensionPageChange"
@@ -571,7 +592,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch, computed } from 'vue'
+import { nextTick, onMounted, onUpdated, reactive, ref, watch, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage } from 'element-plus'
 import { Loading, FolderOpened, DataLine, Search } from '@element-plus/icons-vue'
@@ -596,6 +617,24 @@ import { storeToRefs } from 'pinia'
 const { t } = useI18n()
 const store = useDatasourceStore()
 const { currentDatasource } = storeToRefs(store)
+
+const metricPaginationRoot = ref<HTMLElement | null>(null)
+const dimensionPaginationRoot = ref<HTMLElement | null>(null)
+
+/** Element Plus 分页组件不会把 aria-label 传给内部 page-size combobox，渲染后补齐名称。 */
+function labelPaginationControls(): void {
+  const labels: Array<[typeof metricPaginationRoot, string]> = [
+    [metricPaginationRoot, '指标每页条数'],
+    [dimensionPaginationRoot, '维度每页条数'],
+  ]
+  for (const [root, label] of labels) {
+    const input = root.value?.querySelector<HTMLInputElement>('input[role="combobox"]')
+    if (input) input.setAttribute('aria-label', label)
+  }
+}
+
+onMounted(() => { void nextTick(labelPaginationControls) })
+onUpdated(() => { void nextTick(labelPaginationControls) })
 
 const props = defineProps<{
   datasourceId?: string
@@ -890,6 +929,16 @@ function selectDimensionCategory(categoryId: string): void {
   dimensionPagination.categoryId = categoryId
   dimensionPagination.page = 1
   loadDimensionPage()
+}
+
+function handleCategoryKeydown(event: KeyboardEvent, categoryId: string, dimension = false): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  if (dimension) {
+    selectDimensionCategory(categoryId)
+  } else {
+    selectCategory(categoryId)
+  }
 }
 
 /**
@@ -1935,6 +1984,11 @@ const indicators = reactive([
 
 .tree-node:hover {
   background: var(--theme-surface-hover);
+}
+
+.tree-node:focus-visible {
+  outline: 2px solid var(--theme-accent);
+  outline-offset: -2px;
 }
 
 .tree-node.is-active {

@@ -1,0 +1,4 @@
+id,order_date,region,status,amount
+201,2026-01-05,east,PAID,19.50
+202,2026-01-06,west,PAID,27.00
+203,2026-01-07,east,CANCELLED,4.00

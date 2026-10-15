@@ -1,0 +1,146 @@
+import type { DashboardDatasetInput, DashboardScriptFilterBinding, DashboardSystemScriptState } from '@/types'
+import { buildSystemScript, refreshPythonEditorSamples as refreshSystemScriptSamples, SYSTEM_SCRIPT_END, SYSTEM_SCRIPT_START } from './script-template'
+
+export const PYTHON_EDITOR_USER_MARKER = '# ===== 自定义处理代码（可编辑） ====='
+export const PYTHON_EDITOR_OUTPUT_MARKER = '# ===== 输出结果示例（参考） ====='
+
+export interface PythonSystemSource {
+  inputs: DashboardDatasetInput[]
+  bindings: DashboardScriptFilterBinding[]
+  queryParameters?: Array<{ field: string; title: string; parameterName: string; operators: string[] }>
+  outputContract?: {
+    kind: string
+    example: string
+    fieldRules: { minColumns: number; minDimensionColumns: number; minNumericColumns: number }
+  }
+}
+
+export function buildPythonEditorDocument(
+  source: PythonSystemSource,
+  userCode = '',
+  samplesByInputName: Record<string, Record<string, unknown>[]> = {},
+  includeDataExamples = true,
+  editableSystemCode?: string,
+): string {
+  const system = (editableSystemCode ?? buildSystemScript(source.inputs, [], source.bindings, undefined, samplesByInputName, source.queryParameters, includeDataExamples))
+    .replace(SYSTEM_SCRIPT_START, includeDataExamples ? '# ===== 造数示例与上游数据读取 =====' : '# ===== 系统生成区域：上游输入数据读取 =====')
+    .replace(SYSTEM_SCRIPT_END, '# ===== 数据读取结束 =====')
+  const outputExample = source.outputContract?.example
+    ? source.outputContract.example.split('\n').map((line) => `# ${line}`).join('\n')
+    : '# 当前组件暂无输出示例。'
+  return [
+    system,
+    PYTHON_EDITOR_USER_MARKER,
+    userCode.trim(),
+    PYTHON_EDITOR_OUTPUT_MARKER,
+    '# 示例仅用于参考；实际输出仍按组件契约校验。',
+    outputExample,
+  ].join('\n\n')
+}
+
+export function refreshPythonEditorSamples(
+  document: string,
+  inputs: DashboardDatasetInput[],
+  samplesByInputName: Record<string, Record<string, unknown>[]>,
+): string {
+  return refreshSystemScriptSamples(document, inputs, samplesByInputName)
+}
+
+export function parsePythonEditorDocument(document: string): { systemCode: string; userCode: string } {
+  const userMarkerIndex = document.indexOf(PYTHON_EDITOR_USER_MARKER)
+  if (userMarkerIndex < 0) return { systemCode: '', userCode: document.trim() }
+
+  const outputMarkerIndex = document.indexOf(PYTHON_EDITOR_OUTPUT_MARKER, userMarkerIndex + PYTHON_EDITOR_USER_MARKER.length)
+  const systemCode = document.slice(0, userMarkerIndex).trim()
+  const userStart = userMarkerIndex + PYTHON_EDITOR_USER_MARKER.length
+  const userCode = document.slice(userStart, outputMarkerIndex >= 0 ? outputMarkerIndex : undefined).trim()
+  return { systemCode, userCode }
+}
+
+export interface ReconciledSystemScript extends DashboardSystemScriptState {
+  hasGeneratedUpdate: boolean
+}
+
+const USER_REGION_MARKER = '# ===== 用户处理区域 ====='
+
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue)
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value as Record<string, unknown>).sort().map((key) => [key, stableValue((value as Record<string, unknown>)[key])]))
+  }
+  return value
+}
+
+function sourceJson(source: PythonSystemSource): string {
+  return JSON.stringify(stableValue(source))
+}
+
+export function fingerprintSystemSource(source: PythonSystemSource): string {
+  let hash = 2166136261
+  for (const char of sourceJson(source)) {
+    hash ^= char.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
+export function generateSystemScript(source: PythonSystemSource): string {
+  return buildSystemScript(source.inputs, [], source.bindings, source.outputContract)
+}
+
+export function effectiveSystemCode(state: DashboardSystemScriptState): string {
+  return state.mode === 'managed' ? (state.managedCode || state.generatedCode) : state.generatedCode
+}
+
+export function composeExecutionScript(state: DashboardSystemScriptState): string {
+  const system = effectiveSystemCode(state).trim()
+  const user = state.userCode.trim()
+  return [system, user ? `${USER_REGION_MARKER}\n${user}` : USER_REGION_MARKER].filter(Boolean).join('\n\n').trim()
+}
+
+export function reconcileSystemScript(state: DashboardSystemScriptState, source: PythonSystemSource): ReconciledSystemScript {
+  const generatedCode = generateSystemScript(source)
+  const generatedFingerprint = fingerprintSystemSource(source)
+  const managedCode = state.mode === 'managed'
+    ? addMissingInputReaders(state.managedCode || state.generatedCode, source.inputs)
+    : state.managedCode
+  return {
+    ...state,
+    ...(managedCode !== undefined ? { managedCode } : {}),
+    generatedCode,
+    generatedFingerprint,
+    hasGeneratedUpdate: state.generatedFingerprint !== generatedFingerprint,
+  }
+}
+
+/** 手动接管系统区时保留既有读取方式，同时补齐新增数据集的标准读取块。 */
+function addMissingInputReaders(systemCode: string, inputs: DashboardDatasetInput[]): string {
+  const lines = systemCode.split('\n')
+  const missing = inputs.filter((input) => {
+    if (!input.datasetId || !input.inputName) return false
+    const name = input.inputName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return !lines.some((line) =>
+      new RegExp(`^\\s*(?:if\\s+["']${name}["']\\s+not\\s+in\\s+locals\\(\\):|${name}\\s*=)`).test(line),
+    )
+  })
+  if (!missing.length) return systemCode
+
+  const blocks = missing.flatMap((input) => [
+    `if ${JSON.stringify(input.inputName)} not in locals():`,
+    `    ${input.inputName} = datasets.input(`,
+    `        input_name=${JSON.stringify(input.inputName)},`,
+    '    ).to_polars()',
+    '',
+  ]).join('\n').trimEnd()
+  const endMarkers = [SYSTEM_SCRIPT_END, '# ===== 数据读取结束 =====']
+  const endIndex = endMarkers
+    .map((marker) => systemCode.indexOf(marker))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0]
+  if (endIndex === undefined) return `${systemCode.trimEnd()}\n\n${blocks}`
+  return `${systemCode.slice(0, endIndex).trimEnd()}\n\n${blocks}\n\n${systemCode.slice(endIndex)}`
+}
+
+export function restoreGenerated(state: DashboardSystemScriptState): ReconciledSystemScript {
+  return { ...state, mode: 'generated', managedCode: undefined, hasGeneratedUpdate: false }
+}

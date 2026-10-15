@@ -1,0 +1,4 @@
+{
+  "request": {"method": "GET", "urlPath": "/anymetrics/api/v1/metrics/dimensionAll"},
+  "response": {"status": 200,"headers": {"Content-Type": "application/json"},"jsonBody": {"code":"200","success":true,"data":{"revenue":[{"dimName":"region","dimDisplayName":"区域","originDataType":"STRING"},{"dimName":"order_date","dimDisplayName":"日期","originDataType":"DATE"}]}}}
+}

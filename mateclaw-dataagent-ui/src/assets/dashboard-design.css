@@ -3,6 +3,19 @@
  * 仅用于洞察（insight）模块，避免覆盖全局主题变量
  */
 :root {
+  /* 仪表盘主题配置层；由 dashboard-theme.ts 在仪表盘根节点注入，缺失时继续走旧 --db-*。 */
+  --insight-page-bg: var(--db-bg);
+  --insight-card-bg: var(--db-card);
+  --insight-border: var(--db-border);
+  --insight-text: var(--db-text);
+  --insight-text-secondary: var(--db-text-secondary);
+  --insight-text-muted: var(--db-text-muted);
+  --insight-primary: var(--db-accent);
+  --insight-positive: var(--db-positive);
+  --insight-negative: var(--db-danger);
+  --insight-warning: var(--db-warning);
+  --insight-info: var(--db-accent);
+
   /* 圆角 */
   --radius-sm: 6px;
   --radius-md: 10px;
@@ -49,7 +62,21 @@
   --db-positive-bg: rgba(34, 197, 94, 0.08);
   --db-danger: #ef4444;
   --db-danger-bg: rgba(239, 68, 68, 0.08);
+
+  /* 涨跌方向色（国内金融惯例：涨红跌绿；与「好坏语义」的 positive/danger 分离，
+     面向海外场景时只需在此调整映射，组件内统一引用方向 token） */
+  --db-up: #ef4444;
+  --db-up-bg: rgba(239, 68, 68, 0.08);
+  --db-down: #22c55e;
+  --db-down-bg: rgba(34, 197, 94, 0.08);
+
   --db-warning: #f59e0b;
+  --db-status-success-bg: #e7f8ef;
+  --db-status-success-fg: #166534;
+  --db-status-warning-bg: #fdf1e0;
+  --db-status-warning-fg: #92400e;
+  --db-action-warning-fg: #9a3412;
+  --db-action-danger-fg: #b42318;
 
   /* 卡片配色（浅色系）：6 组，用于卡片图标底色与图表预览主色 */
   --db-card-blue-bg: #e7effe;
@@ -90,6 +117,166 @@
   --transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-base: 250ms cubic-bezier(0.16, 1, 0.3, 1);
   --transition-slow: 350ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Insight editor convergence tokens and low-noise property primitives. */
+.insight-editor-view {
+  --insight-control-height: 32px;
+  --insight-sidebar-width: 360px;
+  --insight-radius-control: 6px;
+  --insight-radius-card: 8px;
+  --insight-space-section: 16px;
+  --insight-space-field: 8px;
+  --insight-motion-fast: 160ms;
+}
+
+.insight-property-section {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--db-border, #edf0f5);
+}
+
+.insight-property-section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 24px;
+}
+
+.insight-property-section__title {
+  margin: 0;
+  color: var(--db-text-primary, #20242d);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 22px;
+}
+
+.insight-property-section__body {
+  margin-top: 12px;
+}
+
+.insight-inline-help {
+  position: relative;
+  display: inline-flex;
+}
+
+.insight-inline-help__trigger {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #cbd2de;
+  border-radius: 50%;
+  color: #7d8795;
+  background: #fff;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: help;
+}
+
+.insight-inline-help__trigger:hover,
+.insight-inline-help__trigger:focus-visible {
+  border-color: #5284ff;
+  color: #3164e8;
+  outline: 2px solid rgba(82, 132, 255, 0.18);
+  outline-offset: 1px;
+}
+
+.insight-inline-help__content {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  padding: 8px 10px;
+  border: 1px solid #e1e6ef;
+  border-radius: 6px;
+  color: #536071;
+  background: #fff;
+  box-shadow: 0 8px 22px rgba(32, 44, 64, 0.12);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.insight-editor-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px 16px;
+  color: #929aa8;
+  text-align: center;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.insight-editor-empty-state__icon {
+  color: #c6ccd6;
+  font-size: 28px;
+  line-height: 28px;
+}
+
+.insight-editor-empty-state__description {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.insight-editor-empty-state__action {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid #5284ff;
+  border-radius: 6px;
+  color: #3164e8;
+  background: #fff;
+  cursor: pointer;
+}
+
+.insight-dialog--sm .el-dialog__body,
+.insight-dialog--md .el-dialog__body,
+.insight-dialog--lg .el-dialog__body,
+.insight-dialog--preview .el-dialog__body {
+  padding: 20px 24px;
+}
+
+.insight-dialog--sm .el-dialog__footer,
+.insight-dialog--md .el-dialog__footer,
+.insight-dialog--lg .el-dialog__footer,
+.insight-dialog--preview .el-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 24px 20px;
+  border-top: 1px solid var(--db-border, #edf0f5);
+}
+
+.insight-dialog--sm .el-input__wrapper,
+.insight-dialog--md .el-input__wrapper,
+.insight-dialog--lg .el-input__wrapper,
+.insight-dialog--preview .el-input__wrapper,
+.insight-dialog--sm .el-button,
+.insight-dialog--md .el-button,
+.insight-dialog--lg .el-button,
+.insight-dialog--preview .el-button {
+  min-height: var(--insight-control-height, 32px);
+}
+
+.insight-dialog--sm .hint,
+.insight-dialog--md .hint,
+.insight-dialog--lg .hint,
+.insight-dialog--preview .hint {
+  margin: 0;
+  color: var(--db-text-muted, #7d8795);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .insight-editor-view *,
+  .insight-editor-view *::before,
+  .insight-editor-view *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }
 
 /* size=small 的控件保持 Element Plus 默认圆角，不跟随上面的全局 8px 覆盖。
@@ -169,6 +356,14 @@ html[data-theme='dark'] {
   --db-accent-border: rgba(99, 102, 241, 0.3);
   --db-positive-bg: rgba(34, 197, 94, 0.14);
   --db-danger-bg: rgba(239, 68, 68, 0.14);
+  --db-up-bg: rgba(239, 68, 68, 0.14);
+  --db-down-bg: rgba(34, 197, 94, 0.14);
+  --db-status-success-bg: #163b2a;
+  --db-status-success-fg: #57d38c;
+  --db-status-warning-bg: #3a2a1b;
+  --db-status-warning-fg: #fbbf24;
+  --db-action-warning-fg: #fbbf24;
+  --db-action-danger-fg: #ff8a80;
 
   /* 卡片浅色系在暗色下改用低透明度色层，保持"浅底"观感 */
   --db-card-blue-bg: rgba(65, 118, 230, 0.14);

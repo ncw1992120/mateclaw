@@ -3,7 +3,7 @@
     <!-- 头部栏 -->
     <header class="edit-header">
       <div class="header-left">
-        <button class="back-btn" @click="handleBack">
+        <button class="back-btn" aria-label="返回数据集列表" title="返回数据集列表" @click="handleBack">
           <span class="back-arrow">&lt;</span>
         </button>
         <h1 class="dataset-title">{{ datasetName || t('datasetEdit.untitled') }}</h1>
@@ -27,9 +27,10 @@
               type="text"
               :placeholder="t('datasetEdit.searchPlaceholder')"
               class="search-input"
+              aria-label="搜索数据集预览"
             />
           </div>
-          <button class="icon-btn more-btn" @click="handleMore">⋯</button>
+          <button class="icon-btn more-btn" aria-label="更多操作" title="更多操作" @click="handleMore">⋯</button>
         </template>
       </div>
     </header>
@@ -43,8 +44,9 @@
 
           <!-- 数据集名称 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.datasetName') }}</label>
+            <label class="section-label" for="dataset-name">{{ t('datasetEdit.datasetName') }}</label>
             <input
+              id="dataset-name"
               v-model="datasetName"
               type="text"
               class="name-input"
@@ -54,8 +56,8 @@
 
           <!-- 数据源区域 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.datasource') }}</label>
-            <select v-model="selectedDatasource" class="datasource-select">
+            <label class="section-label" for="dataset-datasource">{{ t('datasetEdit.datasource') }}</label>
+            <select id="dataset-datasource" v-model="selectedDatasource" class="datasource-select" aria-label="选择数据源">
               <option value="">{{ t('datasetEdit.selectDatasource') }}</option>
               <option v-for="ds in datasourceList" :key="ds.id" :value="ds.id">
                 {{ ds.name }}
@@ -63,41 +65,96 @@
             </select>
           </div>
 
-          <!-- 上传文件区域 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.uploadFile') }}</label>
-            <div class="file-actions">
-              <button class="file-action-btn" :title="t('datasetEdit.upload')" @click="handleUpload">
-                <span class="action-icon upload-icon">⬆️</span>
-              </button>
-              <button class="file-action-btn" :title="t('datasetEdit.download')" @click="handleDownload">
-                <span class="action-icon download-icon">⬇️</span>
-              </button>
-              <button class="file-action-btn" :title="t('datasetEdit.refresh')" @click="handleRefresh">
-                <span class="action-icon refresh-icon">🔄</span>
-              </button>
-            </div>
+            <label class="section-label" for="dataset-source-type">来源类型</label>
+            <select id="dataset-source-type" v-model="selectedSourceType" class="datasource-select" aria-label="选择数据集来源类型">
+              <option value="JDBC_TABLE" :disabled="!isJdbcDatasource">JDBC 表</option>
+              <option value="JDBC_SQL" :disabled="!isJdbcDatasource">JDBC SQL</option>
+              <option value="ALOUDATA_ANALYSIS_VIEW" :disabled="!isAloudataDatasource">Aloudata 指标视图</option>
+              <option value="HTTP_API" :disabled="!!selectedDatasource && !isApiDatasource">HTTP/API</option>
+              <option value="FILE">文件</option>
+            </select>
+            <div v-if="sourceTypeCompatibilityHint" class="definition-hint compatibility-hint">{{ sourceTypeCompatibilityHint }}</div>
+          </div>
+
+          <div v-if="selectedSourceType === 'JDBC_SQL'" class="section-block">
+            <label class="section-label" for="dataset-source-sql">SQL（仅 JDBC）</label>
+            <textarea id="dataset-source-sql" v-model="sourceSql" class="sql-input" rows="6" placeholder="select ... from ..." aria-label="JDBC SQL" />
+          </div>
+
+          <div v-if="selectedSourceType === 'ALOUDATA_ANALYSIS_VIEW'" class="section-block">
+            <label class="section-label" for="dataset-analysis-view">指标视图（只读）</label>
+            <select id="dataset-analysis-view" v-model="analysisViewId" class="datasource-select" aria-label="选择指标视图">
+              <option value="">选择已授权指标视图</option>
+              <option v-for="view in analysisViews" :key="view.id || view.viewName" :value="view.viewName">
+                {{ view.displayName || view.viewName }}
+              </option>
+            </select>
+            <div v-if="analysisViewsLoading" class="table-loading-hint">正在加载指标视图…</div>
+          </div>
+
+          <div v-if="selectedSourceType === 'HTTP_API'" class="section-block">
+            <label class="section-label" for="dataset-api-definition">已登记 HTTP/API 定义</label>
+            <select id="dataset-api-definition" v-model="apiDefinitionId" class="datasource-select" aria-label="选择已登记 HTTP API 定义">
+              <option value="">选择已登记的 API 定义</option>
+              <option v-for="definition in registeredApiDefinitions" :key="definition.id" :value="definition.id">
+                {{ definition.name }}{{ definition.method || definition.path ? ` · ${definition.method || 'GET'} ${definition.path || ''}` : '' }}{{ definition.parameterCount ? ` · ${definition.parameterCount} 个参数` : '' }}
+              </option>
+            </select>
+            <div class="definition-hint">仅引用所选数据源已登记的 API 定义，不支持在脚本或页面输入 URL。</div>
+            <div v-if="selectedDatasource && registeredApiDefinitions.length === 0" class="empty-hint">当前数据源暂无已登记定义，请先在数据源管理中登记。</div>
+          </div>
+
+          <div v-if="selectedSourceType === 'FILE'" class="section-block">
+            <label class="section-label" for="dataset-file-object">已上传文件对象</label>
+            <input id="dataset-file-object" v-model="fileObjectId" class="name-input" placeholder="上传后自动回填对象引用" readonly aria-label="文件对象引用" />
+            <input ref="fileInputRef" type="file" class="file-input" accept=".csv,.json,.parquet,.xlsx" aria-label="选择数据集文件" @change="handleFileSelected" />
+            <button class="upload-file-btn" :disabled="fileUploading" @click="fileInputRef?.click()">{{ fileUploading ? '上传中…' : '选择并上传文件' }}</button>
+            <div class="definition-hint">文件会上传到受控对象存储，页面只保存对象引用，不接受本地路径或 URL。</div>
+            <select v-model="fileFormat" class="datasource-select" aria-label="选择文件格式">
+              <option value="csv">CSV</option>
+              <option value="json">JSON</option>
+              <option value="parquet">Parquet</option>
+              <option value="xlsx">XLSX</option>
+            </select>
           </div>
 
           <!-- 表区域 -->
           <div class="section-block">
-            <label class="section-label">{{ t('datasetEdit.table') }}</label>
-            <div v-if="tablesLoading" class="table-loading-hint">
+            <div class="section-label">{{ t('datasetEdit.table') }}</div>
+            <div id="dataset-table-list" v-if="selectedSourceType === 'JDBC_TABLE' && tablesLoading" class="table-loading-hint">
               <span>{{ t('datasetEdit.loadingTables') }}</span>
             </div>
-            <ul v-else-if="datasourceTables.length > 0" class="table-list">
+            <ul v-else-if="selectedSourceType === 'JDBC_TABLE' && datasourceTables.length > 0" class="table-list">
               <li
                 v-for="table in datasourceTables"
                 :key="table.id"
                 class="table-item"
                 :class="{ selected: isSelectedTable(table) }"
+                role="checkbox"
+                tabindex="0"
+                :aria-checked="isSelectedTable(table)"
+                :aria-label="`选择数据表 ${table.tableName}`"
                 @click="handleToggleTable(table)"
+                @keydown="handleTableKeydown($event, table)"
               >
                 <span class="table-check" :class="{ checked: isSelectedTable(table) }">✓</span>
                 <span class="table-name-text">{{ table.tableName }}</span>
               </li>
             </ul>
-            <div v-else-if="selectedDatasource" class="empty-hint">{{ t('datasetEdit.noTablesInDs') }}</div>
+            <div v-else-if="selectedDatasource && selectedSourceType === 'JDBC_TABLE'" class="table-empty-state">
+              <div class="empty-hint">{{ t('datasetEdit.noTablesInDs') }}</div>
+              <button
+                type="button"
+                class="refresh-tables-btn"
+                :disabled="tablesLoading"
+                aria-label="刷新数据表目录"
+                @click="handleRefreshTables"
+              >
+                {{ tablesLoading ? '探测中…' : '刷新表目录' }}
+              </button>
+            </div>
+            <div v-else-if="selectedDatasource" class="empty-hint table-source-not-applicable">当前来源类型不使用 JDBC 表目录</div>
             <div v-else class="empty-hint">{{ t('datasetEdit.selectDatasourceFirst') }}</div>
           </div>
         </div>
@@ -106,13 +163,13 @@
       <!-- 右侧主内容区 - 空状态 -->
       <main class="main-content empty-state">
         <div class="empty-illustration">
-          <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="30" y="40" width="140" height="100" rx="8" fill="#f2f3f5" stroke="#e5e6eb" stroke-width="2"/>
-            <rect x="50" y="60" width="100" height="12" rx="4" fill="#e5e6eb"/>
-            <rect x="50" y="82" width="80" height="12" rx="4" fill="#e5e6eb"/>
-            <rect x="50" y="104" width="60" height="12" rx="4" fill="#e5e6eb"/>
-            <circle cx="150" cy="55" r="15" fill="#e8f3ff" stroke="#165dff" stroke-width="1.5"/>
-            <path d="M145 55 L149 59 L156 51" stroke="#165dff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <svg width="200" height="160" viewBox="0 0 200 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect class="illustration-card" x="30" y="40" width="140" height="100" rx="8" stroke-width="2"/>
+              <rect class="illustration-line" x="50" y="60" width="100" height="12" rx="4"/>
+              <rect class="illustration-line" x="50" y="82" width="80" height="12" rx="4"/>
+              <rect class="illustration-line" x="50" y="104" width="60" height="12" rx="4"/>
+              <circle class="illustration-check" cx="150" cy="55" r="15" stroke-width="1.5"/>
+              <path class="illustration-check-mark" d="M145 55 L149 59 L156 51" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </div>
         <p class="empty-title">{{ t('datasetEdit.selectTableHint') }}</p>
@@ -157,10 +214,10 @@
         </div>
         <div class="toolbar-right">
           <label class="unlimit-row-check">
-            <input v-model="unlimitRows" type="checkbox" />
+            <input v-model="unlimitRows" type="checkbox" :aria-label="t('datasetEdit.unlimitRows')" />
             <span>{{ t('datasetEdit.unlimitRows') }}</span>
           </label>
-          <button class="toolbar-btn refresh-btn" @click="handleRefreshData">
+          <button class="toolbar-btn refresh-btn" aria-label="刷新数据预览" title="刷新数据预览" @click="handleRefreshData">
             <span class="btn-icon">🔄</span>
           </button>
         </div>
@@ -178,6 +235,7 @@
                 type="text"
                 :placeholder="t('datasetEdit.searchFieldPlaceholder')"
                 class="field-search-input"
+                aria-label="搜索字段"
               />
             </div>
 
@@ -188,7 +246,16 @@
                 :key="group.name"
                 class="field-group"
               >
-                <div class="group-header" @click="toggleGroup(group.name)">
+                <div
+                  class="group-header"
+                  role="button"
+                  tabindex="0"
+                  :aria-expanded="expandedGroups.has(group.name)"
+                  :aria-label="`${expandedGroups.has(group.name) ? '收起' : '展开'}字段分组 ${group.label}`"
+                  @click="toggleGroup(group.name)"
+                  @keydown.enter.prevent="toggleGroup(group.name)"
+                  @keydown.space.prevent="toggleGroup(group.name)"
+                >
                   <span class="group-toggle">{{ expandedGroups.has(group.name) ? '▼' : '▶' }}</span>
                   <span class="group-name">{{ group.label }}</span>
                   <span class="group-count">{{ group.fields.length }}</span>
@@ -202,9 +269,11 @@
                   >
                     <span class="field-name">{{ field.label || field.name }}</span>
                     <span v-if="field.type" class="field-type-tag">{{ field.type }}</span>
-                    <span
+                    <button
+                      type="button"
                       class="field-eye-btn"
                       :class="{ hidden: isFieldHidden(field.name) }"
+                      :aria-label="isFieldHidden(field.name) ? t('datasetEdit.showColumn') : t('datasetEdit.hideColumn')"
                       :title="isFieldHidden(field.name) ? t('datasetEdit.showColumn') : t('datasetEdit.hideColumn')"
                       @click.stop="toggleFieldVisibility(field.name)"
                     >
@@ -212,7 +281,7 @@
                         <path d="M8 3C4.5 3 1.73 5.11 1 8c.73 2.89 3.5 5 7 5s6.27-2.11 7-5c-.73-2.89-3.5-5-7-5zm0 9a4 4 0 110-8 4 4 0 010 8z" fill="currentColor"/>
                         <circle cx="8" cy="8" r="2" fill="currentColor"/>
                       </svg>
-                    </span>
+                    </button>
                   </li>
                 </ul>
               </div>
@@ -238,6 +307,7 @@
                         type="checkbox"
                         :checked="isAllRowsSelected"
                         :indeterminate="isPartialRowsSelected"
+                        aria-label="全选预览行"
                         @change="handleSelectAllRows"
                       />
                     </th>
@@ -294,6 +364,7 @@
                       <input
                         type="checkbox"
                         :checked="isRowSelected(row)"
+                        :aria-label="`选择第 ${(dataCurrentPage - 1) * dataPageSize + idx + 1} 行`"
                         @change="handleToggleRowSelect(row)"
                       />
                     </td>
@@ -311,6 +382,7 @@
                           ref="editInputRef"
                           v-model="editCellValue"
                           class="cell-edit-input"
+                          :aria-label="`编辑第 ${idx + 1} 行 ${col.title || col.name}`"
                           @blur="handleFinishEdit(row, col.name)"
                           @keydown.enter="handleFinishEdit(row, col.name)"
                           @keydown.escape="handleCancelEdit"
@@ -354,7 +426,10 @@ import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as datasourceApi from '@/api/datasource'
 import * as datasetApi from '@/api/dataset'
-import type { DatasourceColumn, DatasetField, DatasetColumnDef, DatasetData } from '@/types'
+import type { DatasourceColumn, DatasetField, DatasetColumnDef, DatasetData, DatasetBatch, DatasetInputDescriptor } from '@/types'
+import { buildDatasetSourceDefinition, type DatasetSourceFormState } from '@/utils/dataset-management'
+
+const DEFAULT_COLUMN_WIDTH = 150
 
 /** 字段项结构 */
 interface FieldItem {
@@ -398,8 +473,62 @@ const searchKeyword = ref('')
 /** 选中的数据源 ID */
 const selectedDatasource = ref('')
 
+/** 数据集来源类型；SQL 只对 JDBC_SQL 开放 */
+const selectedSourceType = ref<'JDBC_TABLE' | 'JDBC_SQL' | 'ALOUDATA_ANALYSIS_VIEW' | 'HTTP_API' | 'FILE'>('JDBC_TABLE')
+const sourceSql = ref('')
+const analysisViewId = ref('')
+const analysisViews = ref<Array<{ id: string; viewName: string; displayName: string; categoryName?: string }>>([])
+const analysisViewsLoading = ref(false)
+const apiDefinitionId = ref('')
+const fileObjectId = ref('')
+const fileFormat = ref('csv')
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const fileUploading = ref(false)
+
 /** 数据源列表 */
-const datasourceList = ref<Array<{ id: string; name: string }>>([])
+const datasourceList = ref<Array<{ id: string; name: string; sourceType?: string; connectionParams?: string }>>([])
+
+/** 数据源类型约束：未知类型按 JDBC 兼容处理，保留旧数据源响应兼容性。 */
+const selectedDatasourceType = computed(() => {
+  const sourceType = datasourceList.value.find(ds => ds.id === selectedDatasource.value)?.sourceType
+  return String(sourceType || '').trim().toLowerCase()
+})
+const isAloudataDatasource = computed(() => selectedDatasourceType.value === 'aloudata')
+const isApiDatasource = computed(() => !selectedDatasourceType.value || ['api', 'http', 'http_api'].includes(selectedDatasourceType.value))
+const isJdbcDatasource = computed(() => {
+  if (!selectedDatasource.value) return true
+  if (isAloudataDatasource.value || (isApiDatasource.value && selectedDatasourceType.value)) return false
+  // 兼容历史数据源响应：未返回 sourceType 时按 JDBC 处理。
+  return !selectedDatasourceType.value || [
+    'jdbc', 'mysql', 'postgresql', 'sqlserver', 'oracle', 'snowflake',
+    'bigquery', 'redshift', 'clickhouse', 'doris',
+  ].includes(selectedDatasourceType.value)
+})
+const sourceTypeCompatibilityHint = computed(() => {
+  if (!selectedDatasource.value) return ''
+  if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) return '当前数据源不是 Aloudata，不能选择指标视图。'
+  if ((selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) return '当前数据源不是 JDBC，不能选择表或编写 SQL。'
+  if (selectedSourceType.value === 'HTTP_API' && !isApiDatasource.value) return '当前数据源不是 HTTP/API，不能选择接口定义。'
+  return ''
+})
+
+const registeredApiDefinitions = computed(() => {
+  const datasource = datasourceList.value.find(ds => ds.id === selectedDatasource.value)
+  if (!datasource?.connectionParams) return []
+  try {
+    const raw = JSON.parse(datasource.connectionParams).apiDefinitions
+    const normalize = (id: string, value: any) => ({
+      id,
+      name: String(value?.name || value?.displayName || value?.operationId || id),
+      method: value?.method || value?.httpMethod,
+      path: value?.path || value?.urlPath,
+      parameterCount: Array.isArray(value?.parameters) ? value.parameters.length : undefined,
+    })
+    if (Array.isArray(raw)) return raw.map((item: any) => normalize(String(item.id || item.apiDefinitionId || item.operationId), item)).filter((item: any) => item.id)
+    if (raw && typeof raw === 'object') return Object.entries(raw).map(([id, value]: [string, any]) => normalize(id, value))
+  } catch { /* 非 JSON 连接参数按无目录处理 */ }
+  return []
+})
 
 /** 选中数据源下的表列表 */
 const datasourceTables = ref<Array<{ id: string; tableName: string; tableComment?: string }>>([])
@@ -482,7 +611,14 @@ const primaryKeyFields = computed(() => {
 
 /** 是否可以完成（已选择数据源和至少一张表且输入了名称） */
 const canSave = computed(() => {
-  return !!selectedDatasource.value && selectedTableObjects.value.length > 0 && !!datasetName.value.trim()
+  if (!datasetName.value.trim()) return false
+  if (sourceTypeCompatibilityHint.value) return false
+  if (selectedSourceType.value === 'JDBC_SQL') return !!selectedDatasource.value && !!sourceSql.value.trim()
+  if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') return !!selectedDatasource.value && !!analysisViewId.value
+  if (selectedSourceType.value === 'HTTP_API') return !!selectedDatasource.value && !!apiDefinitionId.value.trim()
+  if (selectedSourceType.value === 'FILE') return !!fileObjectId.value.trim()
+  if (selectedSourceType.value === 'JDBC_TABLE') return !!selectedDatasource.value && selectedTableObjects.value.length > 0
+  return false
 })
 
 /** 过滤后的字段分组 */
@@ -583,12 +719,35 @@ onMounted(async () => {
 })
 
 watch(selectedDatasource, async (newDsId) => {
-  if (newDsId) {
+  if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && !isAloudataDatasource.value) {
+    selectedSourceType.value = isApiDatasource.value ? 'HTTP_API' : isJdbcDatasource.value ? 'JDBC_TABLE' : 'FILE'
+  }
+  if (newDsId && (selectedSourceType.value === 'JDBC_TABLE' || selectedSourceType.value === 'JDBC_SQL') && !isJdbcDatasource.value) {
+    selectedSourceType.value = isAloudataDatasource.value ? 'ALOUDATA_ANALYSIS_VIEW' : isApiDatasource.value ? 'HTTP_API' : 'FILE'
+  }
+  if (newDsId && selectedSourceType.value === 'HTTP_API' && !isApiDatasource.value) {
+    selectedSourceType.value = isAloudataDatasource.value ? 'ALOUDATA_ANALYSIS_VIEW' : isJdbcDatasource.value ? 'JDBC_TABLE' : 'FILE'
+  }
+  if (newDsId && selectedSourceType.value === 'JDBC_TABLE') {
     await loadTables(newDsId)
+  } else if (newDsId && selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW') {
+    await loadAnalysisViews(newDsId)
   } else {
     datasourceTables.value = []
     selectedTableObjects.value = []
   }
+})
+
+watch(selectedSourceType, async (sourceType) => {
+  if (sourceType === 'JDBC_TABLE' && selectedDatasource.value) await loadTables(selectedDatasource.value)
+  if (sourceType === 'ALOUDATA_ANALYSIS_VIEW' && selectedDatasource.value) await loadAnalysisViews(selectedDatasource.value)
+  if (sourceType !== 'JDBC_TABLE') {
+    datasourceTables.value = []
+    selectedTableObjects.value = []
+  }
+  if (sourceType !== 'ALOUDATA_ANALYSIS_VIEW') analysisViewId.value = ''
+  if (sourceType !== 'HTTP_API') apiDefinitionId.value = ''
+  if (sourceType !== 'FILE') fileObjectId.value = ''
 })
 
 watch(dataCurrentPage, async () => {
@@ -601,7 +760,7 @@ watch(dataCurrentPage, async () => {
 async function loadDatasources(): Promise<void> {
   try {
     const list = await datasourceApi.list()
-    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string }>
+    datasourceList.value = (list || []) as unknown as Array<{ id: string; name: string; sourceType?: string; connectionParams?: string }>
   } catch {
     datasourceList.value = []
   }
@@ -621,6 +780,31 @@ async function loadTables(dsId: string): Promise<void> {
   }
 }
 
+/** 重新从 JDBC 数据源探测表目录 */
+async function handleRefreshTables(): Promise<void> {
+  const dsId = selectedDatasource.value
+  if (!dsId || !isJdbcDatasource.value) return
+  try {
+    await datasourceApi.triggerSchemaDiscovery(dsId)
+    await loadTables(dsId)
+  } catch (error: any) {
+    // 保留空态并允许用户再次尝试，同时给出可理解的反馈。
+    ElMessage.error(`刷新表目录失败${error?.message ? `：${error.message}` : ''}`)
+  }
+}
+
+async function loadAnalysisViews(dsId: string): Promise<void> {
+  analysisViewsLoading.value = true
+  try {
+    const views = await datasourceApi.listAnalysisViews(dsId)
+    analysisViews.value = (views || []) as unknown as Array<{ id: string; viewName: string; displayName: string; categoryName?: string }>
+  } catch {
+    analysisViews.value = []
+  } finally {
+    analysisViewsLoading.value = false
+  }
+}
+
 /** 加载数据集基本信息 */
 async function loadDatasetInfo(dsId: string): Promise<void> {
   try {
@@ -628,6 +812,25 @@ async function loadDatasetInfo(dsId: string): Promise<void> {
     if (ds) {
       datasetName.value = ds.name || ''
       selectedDatasource.value = ds.datasourceId || ''
+      selectedSourceType.value = (ds.sourceType as typeof selectedSourceType.value) || 'JDBC_TABLE'
+      if (selectedSourceType.value === 'JDBC_SQL' && ds.sourceConfig) {
+        try { sourceSql.value = JSON.parse(ds.sourceConfig).sql || '' } catch { sourceSql.value = '' }
+      }
+      if (selectedSourceType.value === 'ALOUDATA_ANALYSIS_VIEW' && ds.sourceConfig) {
+        try { analysisViewId.value = JSON.parse(ds.sourceConfig).analysisViewId || '' } catch { analysisViewId.value = '' }
+      }
+      if (selectedSourceType.value === 'HTTP_API' && ds.sourceConfig) {
+        try { apiDefinitionId.value = JSON.parse(ds.sourceConfig).apiDefinitionId || '' } catch { apiDefinitionId.value = '' }
+      }
+      if (selectedSourceType.value === 'FILE' && ds.sourceConfig) {
+        try {
+          const config = JSON.parse(ds.sourceConfig)
+          fileObjectId.value = config.objectId || ''
+          fileFormat.value = config.format || 'csv'
+        } catch {
+          fileObjectId.value = ''
+        }
+      }
     }
     const fields = await datasetApi.listFields(dsId)
     datasetFields.value = (fields || []) as unknown as DatasetField[]
@@ -715,6 +918,13 @@ function handleToggleTable(table: { id: string; tableName: string }): void {
   }
 }
 
+/** 支持键盘选择数据表 */
+function handleTableKeydown(event: KeyboardEvent, table: { id: string; tableName: string }): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  handleToggleTable(table)
+}
+
 /** 返回上一页 */
 function handleBack(): void {
   if (currentMode.value === 'preview') {
@@ -731,25 +941,81 @@ async function handleFinish(): Promise<void> {
     return
   }
   try {
+    const sourceState: DatasetSourceFormState = {
+      sourceType: selectedSourceType.value,
+      datasourceId: selectedDatasource.value,
+      tableIds: selectedTableObjects.value.map(t => t.id),
+      sql: sourceSql.value,
+      analysisViewId: analysisViewId.value,
+      apiDefinitionId: apiDefinitionId.value,
+      objectId: fileObjectId.value,
+      format: fileFormat.value,
+    }
     const result = await datasetApi.create({
       name: datasetName.value.trim(),
       datasourceId: selectedDatasource.value,
       tableIds: selectedTableObjects.value.map(t => t.id),
+      sourceDefinition: buildDatasetSourceDefinition(sourceState),
     })
     if (result) {
       createdDatasetId.value = String(result.id)
-      const syncResult = await datasetApi.syncData(createdDatasetId.value)
-      if (syncResult && syncResult.status === 'error') {
-        ElMessage.warning(t('datasetEdit.syncDataFail') || '数据同步失败，请稍后重试')
-      }
+      // 统一来源（JDBC SQL、Aloudata、HTTP/API、文件）通过 Adapter 预览；
+      // 不再调用只支持旧 JDBC 表落库的 /sync，避免新建文件/API 数据集停在配置态。
+      await loadUnifiedDatasetPreview(createdDatasetId.value)
       currentMode.value = 'preview'
       await loadDatasetInfo(createdDatasetId.value)
-      await loadDatasetData(createdDatasetId.value)
       ElMessage.success(t('datasetEdit.createSuccess'))
     }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
     ElMessage.error(t('datasetEdit.createFail') + ': ' + msg)
+  }
+}
+
+/** 创建后按统一 DatasetSourceAdapter 读取首批预览，避免依赖旧本地落库同步。 */
+async function loadUnifiedDatasetPreview(datasetId: string): Promise<void> {
+  const inputName = datasetName.value.trim() || 'dataset'
+  const descriptor = await datasetApi.getInputDescriptor(datasetId, inputName) as unknown as DatasetInputDescriptor
+  const schema = descriptor?.schema || []
+  datasetFields.value = schema.map((column, index) => ({
+    id: `${datasetId}-${index}`,
+    columnName: column.name,
+    columnAlias: column.title,
+    columnComment: '',
+    dataType: column.dataType,
+    fieldCategory: column.semanticRole === 'measure' ? 'measure' : 'dimension',
+    primaryKey: false,
+    nullable: column.nullable,
+    ordinalPosition: index + 1,
+  })) as unknown as DatasetField[]
+  const batch = await datasetApi.previewInput({
+    datasetId,
+    inputName,
+    columns: [],
+    filters: [],
+    limit: dataPageSize.value,
+    offset: 0,
+  }) as unknown as DatasetBatch
+  const rows = batch?.rows || []
+  datasetRows.value = rows
+  dataTotal.value = batch?.rowCount ?? rows.length
+  datasetColumns.value = schema.map(column => ({
+    name: column.name,
+    title: column.title || column.name,
+    dataType: column.dataType,
+    fieldCategory: column.semanticRole === 'measure' ? 'measure' : 'dimension',
+    editable: true,
+    width: DEFAULT_COLUMN_WIDTH,
+  }))
+  if (datasetColumns.value.length === 0 && rows.length > 0) {
+    datasetColumns.value = Object.keys(rows[0]).filter(key => key !== '_rowId').map(name => ({
+      name,
+      title: name,
+      dataType: 'STRING',
+      fieldCategory: 'dimension',
+      editable: true,
+      width: DEFAULT_COLUMN_WIDTH,
+    }))
   }
 }
 
@@ -955,10 +1221,34 @@ async function handleRefreshData(): Promise<void> {
   }
 }
 
-/** 刷新表列表 */
-function handleRefresh(): void {
-  if (selectedDatasource.value) {
-    loadTables(selectedDatasource.value)
+async function handleFileSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+  const extension = file.name.split('.').pop()?.toLowerCase() || ''
+  const supportedFormats = new Set(['csv', 'json', 'parquet', 'xlsx'])
+  if (!supportedFormats.has(extension)) {
+    ElMessage.error('仅支持 CSV、JSON、Parquet 或 XLSX 文件')
+    input.value = ''
+    return
+  }
+  const maxBytes = 50 * 1024 * 1024
+  if (file.size > maxBytes) {
+    ElMessage.error('文件大小不能超过 50MB')
+    input.value = ''
+    return
+  }
+  fileUploading.value = true
+  try {
+    const result = await datasetApi.uploadFile(file)
+    fileObjectId.value = result?.objectId || ''
+    fileFormat.value = extension
+    ElMessage.success('文件上传成功')
+  } catch {
+    ElMessage.error('文件上传失败')
+  } finally {
+    fileUploading.value = false
+    input.value = ''
   }
 }
 
@@ -1035,39 +1325,34 @@ function stopResize(): void {
   document.body.style.userSelect = ''
 }
 
-/** 上传文件 */
-function handleUpload(): void {}
-
-/** 下载文件 */
-function handleDownload(): void {}
-
 /** 了解如何配置 */
-function handleLearnMore(): void {}
+function handleLearnMore(): void { ElMessage.info('请先选择数据源和表，系统会在右侧展示可配置字段') }
 
 /** 来源表 */
-function handleSourceTable(): void {}
+function handleSourceTable(): void { ElMessage.info('来源表信息将在数据集详情中展示') }
 
 /** 新建计算字段 */
-function handleAddCalcField(): void {}
+function handleAddCalcField(): void { ElMessage.info('计算字段配置将在后续版本开放') }
 
 /** 新建分组依据 */
-function handleAddGroupBy(): void {}
+function handleAddGroupBy(): void { ElMessage.info('分组依据配置将在后续版本开放') }
 
 /** 聚合编辑器 */
-function handleAggregationEditor(): void {}
+function handleAggregationEditor(): void { ElMessage.info('聚合编辑器将在后续版本开放') }
 
 /** 字段设置 */
-function handleFieldSetting(): void {}
+function handleFieldSetting(): void { ElMessage.info('字段设置将在后续版本开放') }
 
 /** 更多操作 */
-function handleMore(): void {}
+function handleMore(): void { ElMessage.info('更多操作将在后续版本开放') }
 </script>
 
 <style scoped>
 .dataset-edit-page {
   width: 100%;
   height: 100%;
-  background: #f7f8fa;
+  background: var(--theme-bg);
+  color: var(--theme-text);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1078,8 +1363,8 @@ function handleMore(): void {}
   align-items: center;
   justify-content: space-between;
   padding: 14px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
 }
 
@@ -1098,7 +1383,7 @@ function handleMore(): void {}
   height: 32px;
   background: none;
   border: none;
-  color: #165dff;
+  color: var(--main-orange);
   font-size: 16px;
   cursor: pointer;
   border-radius: 4px;
@@ -1107,7 +1392,7 @@ function handleMore(): void {}
 }
 
 .back-btn:hover {
-  background: #e8f3ff;
+  background: var(--theme-surface-hover);
 }
 
 .back-arrow {
@@ -1118,7 +1403,7 @@ function handleMore(): void {}
 .dataset-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -1142,7 +1427,7 @@ function handleMore(): void {}
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--theme-border-strong);
   font-family: inherit;
 }
 
@@ -1153,30 +1438,30 @@ function handleMore(): void {}
 }
 
 .cancel-btn:hover {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .save-btn {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .save-btn:hover {
-  background: #0e42d2;
-  border-color: #0e42d2;
+  background: var(--dark-orange);
+  border-color: var(--dark-orange);
 }
 
 .finish-btn {
-  background: #165dff;
+  background: var(--main-orange);
   color: #fff;
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .finish-btn:hover {
-  background: #0e42d2;
-  border-color: #0e42d2;
+  background: var(--dark-orange);
+  border-color: var(--dark-orange);
 }
 
 .finish-btn:disabled,
@@ -1189,10 +1474,10 @@ function handleMore(): void {}
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   font-family: inherit;
@@ -1200,7 +1485,7 @@ function handleMore(): void {}
 }
 
 .name-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .search-box {
@@ -1211,21 +1496,21 @@ function handleMore(): void {}
   width: 200px;
   height: 32px;
   padding: 0 12px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   font-family: inherit;
 }
 
 .search-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .search-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .icon-btn {
@@ -1244,7 +1529,7 @@ function handleMore(): void {}
 }
 
 .icon-btn:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .more-btn {
@@ -1268,9 +1553,9 @@ function handleMore(): void {}
 }
 
 .left-panel {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   overflow-y: auto;
   flex-shrink: 0;
 }
@@ -1292,7 +1577,7 @@ function handleMore(): void {}
 .panel-title {
   font-size: 14px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 16px 0;
 }
 
@@ -1304,7 +1589,7 @@ function handleMore(): void {}
   display: block;
   font-size: 13px;
   font-weight: 500;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   margin-bottom: 8px;
 }
 
@@ -1312,19 +1597,19 @@ function handleMore(): void {}
   width: 100%;
   height: 34px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border-strong);
   border-radius: 6px;
   font-size: 13px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
-  background: #fff;
+  background: var(--theme-surface);
   cursor: pointer;
   transition: border-color 0.2s;
   font-family: inherit;
 }
 
 .datasource-select:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .file-actions {
@@ -1338,8 +1623,8 @@ function handleMore(): void {}
   justify-content: center;
   width: 36px;
   height: 36px;
-  background: #f7f8fa;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface-hover);
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
@@ -1347,8 +1632,8 @@ function handleMore(): void {}
 }
 
 .file-action-btn:hover {
-  border-color: #165dff;
-  background: #e8f3ff;
+  border-color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .action-icon {
@@ -1361,14 +1646,39 @@ function handleMore(): void {}
   padding: 0;
 }
 
+.table-empty-state {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.refresh-tables-btn {
+  padding: 5px 10px;
+  color: var(--main-orange);
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.refresh-tables-btn:hover:not(:disabled) {
+  background: var(--theme-surface-hover);
+  border-color: var(--main-orange);
+}
+
+.refresh-tables-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .table-item {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
   font-size: 13px;
-  color: #4e5969;
-  background: #f7f8fa;
+  color: var(--theme-text-secondary);
+  background: var(--theme-surface-hover);
   border-radius: 4px;
   margin-bottom: 6px;
   cursor: pointer;
@@ -1377,13 +1687,18 @@ function handleMore(): void {}
 }
 
 .table-item:hover {
-  background: #e8f3ff;
-  color: #165dff;
+  background: var(--theme-surface-hover);
+  color: var(--main-orange);
+}
+
+.table-item:focus-visible {
+  outline: 2px solid var(--main-orange);
+  outline-offset: 2px;
 }
 
 .table-item.selected {
-  background: #e8f3ff;
-  border-color: #165dff;
+  background: var(--theme-surface-hover);
+  border-color: var(--main-orange);
 }
 
 .table-check {
@@ -1393,7 +1708,7 @@ function handleMore(): void {}
   width: 16px;
   height: 16px;
   border-radius: 3px;
-  border: 1.5px solid #c9cdd4;
+  border: 1.5px solid var(--theme-border-strong);
   font-size: 10px;
   color: #fff;
   flex-shrink: 0;
@@ -1401,8 +1716,8 @@ function handleMore(): void {}
 }
 
 .table-check.checked {
-  background: #165dff;
-  border-color: #165dff;
+  background: var(--main-orange);
+  border-color: var(--main-orange);
 }
 
 .table-name-text {
@@ -1413,14 +1728,14 @@ function handleMore(): void {}
 
 .empty-hint {
   font-size: 12px;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   text-align: center;
   padding: 12px 0;
 }
 
 .table-loading-hint {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   text-align: center;
   padding: 12px 0;
 }
@@ -1436,25 +1751,43 @@ function handleMore(): void {}
 .empty-state {
   align-items: center;
   justify-content: center;
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
 }
 
 .empty-illustration {
   margin-bottom: 20px;
 }
 
+.empty-illustration .illustration-card {
+  fill: var(--theme-surface-hover);
+  stroke: var(--theme-border-strong);
+}
+
+.empty-illustration .illustration-line {
+  fill: var(--theme-border-strong);
+}
+
+.empty-illustration .illustration-check {
+  fill: var(--theme-surface-hover);
+  stroke: var(--main-orange);
+}
+
+.empty-illustration .illustration-check-mark {
+  stroke: var(--main-orange);
+}
+
 .empty-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d2129;
+  color: var(--theme-text);
   margin: 0 0 8px 0;
 }
 
 .empty-desc {
   font-size: 13px;
-  color: #86909c;
+  color: var(--theme-text-secondary);
   margin: 0 0 16px 0;
   text-align: center;
   max-width: 360px;
@@ -1463,7 +1796,7 @@ function handleMore(): void {}
 
 .learn-link {
   font-size: 13px;
-  color: #165dff;
+  color: var(--main-orange);
   text-decoration: none;
   transition: opacity 0.15s;
 }
@@ -1478,8 +1811,8 @@ function handleMore(): void {}
   align-items: center;
   justify-content: space-between;
   padding: 10px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border-bottom: 1px solid var(--theme-border);
   flex-shrink: 0;
   gap: 12px;
   overflow-x: auto;
@@ -1499,11 +1832,11 @@ function handleMore(): void {}
   gap: 4px;
   height: 30px;
   padding: 0 10px;
-  background: #fff;
-  border: 1px solid #e5e6eb;
+  background: var(--theme-surface);
+  border: 1px solid var(--theme-border);
   border-radius: 5px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   white-space: nowrap;
   transition: all 0.2s;
@@ -1511,8 +1844,8 @@ function handleMore(): void {}
 }
 
 .toolbar-btn:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .toolbar-btn:disabled {
@@ -1530,7 +1863,7 @@ function handleMore(): void {}
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1559,10 +1892,10 @@ function handleMore(): void {}
   width: 100%;
   height: 32px;
   padding: 0 10px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 6px;
   font-size: 12px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
   transition: border-color 0.2s;
   box-sizing: border-box;
@@ -1570,11 +1903,11 @@ function handleMore(): void {}
 }
 
 .field-search-input:focus {
-  border-color: #165dff;
+  border-color: var(--main-orange);
 }
 
 .field-search-input::placeholder {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
 }
 
 .field-groups {
@@ -1600,12 +1933,12 @@ function handleMore(): void {}
 }
 
 .group-header:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .group-toggle {
   font-size: 10px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   width: 12px;
   text-align: center;
   flex-shrink: 0;
@@ -1614,14 +1947,14 @@ function handleMore(): void {}
 .group-name {
   font-size: 13px;
   font-weight: 500;
-  color: #1d2129;
+  color: var(--theme-text);
   flex: 1;
 }
 
 .group-count {
   font-size: 11px;
-  color: #86909c;
-  background: #f2f3f5;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   padding: 1px 6px;
   border-radius: 10px;
   flex-shrink: 0;
@@ -1639,14 +1972,14 @@ function handleMore(): void {}
   justify-content: space-between;
   padding: 6px 10px;
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s;
 }
 
 .field-item:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .field-name {
@@ -1657,8 +1990,8 @@ function handleMore(): void {}
 
 .field-type-tag {
   font-size: 10px;
-  color: #86909c;
-  background: #f2f3f5;
+  color: var(--theme-text-muted);
+  background: var(--theme-surface-hover);
   padding: 1px 6px;
   border-radius: 3px;
   flex-shrink: 0;
@@ -1672,27 +2005,31 @@ function handleMore(): void {}
   flex-shrink: 0;
   width: 18px;
   height: 18px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   border-radius: 4px;
   transition: all 0.15s;
   opacity: 0.5;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
 }
 
 .field-eye-btn:hover {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
 .field-eye-btn.hidden {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   opacity: 0.35;
 }
 
 .field-eye-btn.hidden:hover {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
@@ -1702,9 +2039,9 @@ function handleMore(): void {}
 }
 
 .data-preview {
-  background: #fff;
+  background: var(--theme-surface);
   border-radius: 8px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1716,7 +2053,7 @@ function handleMore(): void {}
   align-items: center;
   justify-content: center;
   flex: 1;
-  color: #c9cdd4;
+  color: var(--theme-text-secondary);
   font-size: 13px;
 }
 
@@ -1734,7 +2071,7 @@ function handleMore(): void {}
 }
 
 .data-table thead tr {
-  background: #fafafa;
+  background: var(--theme-surface);
 }
 
 .data-th {
@@ -1742,12 +2079,12 @@ function handleMore(): void {}
   text-align: left;
   font-size: 12px;
   font-weight: 600;
-  color: #4e5969;
-  border-bottom: 2px solid #e5e6eb;
+  color: var(--theme-text-secondary);
+  border-bottom: 2px solid var(--theme-border);
   white-space: nowrap;
   position: sticky;
   top: 0;
-  background: #fafafa;
+  background: var(--theme-surface);
   z-index: 1;
   min-width: 80px;
 }
@@ -1769,7 +2106,7 @@ function handleMore(): void {}
 }
 
 .sortable-th:hover {
-  background: #f2f3f5;
+  background: var(--theme-surface-hover);
 }
 
 .th-content {
@@ -1796,18 +2133,18 @@ function handleMore(): void {}
 }
 
 .th-category.dimension {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .th-category.measure {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
 }
 
 .sort-indicator {
   font-size: 12px;
-  color: #165dff;
+  color: var(--main-orange);
   flex-shrink: 0;
 }
 
@@ -1819,7 +2156,7 @@ function handleMore(): void {}
   width: 16px;
   height: 16px;
   margin-left: 2px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   border-radius: 3px;
   transition: all 0.15s;
@@ -1827,19 +2164,19 @@ function handleMore(): void {}
 }
 
 .th-eye-btn:hover {
-  color: #165dff;
-  background: #e8f3ff;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
 .th-eye-btn.hidden {
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   opacity: 0.4;
 }
 
 .th-eye-btn.hidden:hover {
-  color: #0fc6c2;
-  background: #e8fffb;
+  color: var(--main-orange);
+  background: var(--theme-surface-hover);
   opacity: 1;
 }
 
@@ -1851,8 +2188,8 @@ function handleMore(): void {}
 .data-td {
   padding: 10px 16px;
   font-size: 12.5px;
-  color: #1d2129;
-  border-bottom: 1px solid #f2f3f5;
+  color: var(--theme-text);
+  border-bottom: 1px solid var(--theme-border);
   vertical-align: middle;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1868,7 +2205,7 @@ function handleMore(): void {}
 .row-num-td {
   width: 50px;
   text-align: center;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 12px;
 }
 
@@ -1877,7 +2214,7 @@ function handleMore(): void {}
 }
 
 .editable-td:hover {
-  background: #f7f8fa;
+  background: var(--theme-surface-hover);
 }
 
 .cell-editing {
@@ -1889,32 +2226,32 @@ function handleMore(): void {}
   height: 100%;
   min-height: 36px;
   padding: 8px 14px;
-  border: 2px solid #165dff;
+  border: 2px solid var(--main-orange);
   border-radius: 0;
   font-size: 12.5px;
-  color: #1d2129;
+  color: var(--theme-text);
   outline: none;
-  background: #fff;
+  background: var(--theme-surface);
   box-sizing: border-box;
   font-family: inherit;
 }
 
 .data-row:hover {
-  background: #fafbfc;
+  background: var(--theme-surface-hover);
 }
 
 .data-row.selected {
-  background: #f0f7ff;
+  background: var(--theme-surface-hover);
 }
 
 .data-row.editing {
-  background: #fff;
+  background: var(--theme-surface);
 }
 
 .no-data-row .no-data-cell {
   text-align: center;
   padding: 40px 0;
-  color: #c9cdd4;
+  color: var(--theme-text-muted);
   font-size: 13px;
 }
 
@@ -1923,8 +2260,8 @@ function handleMore(): void {}
   align-items: center;
   justify-content: space-between;
   padding: 10px 16px;
-  border-top: 1px solid #f2f3f5;
-  background: #fafafa;
+  border-top: 1px solid var(--theme-border);
+  background: var(--theme-surface);
   flex-shrink: 0;
 }
 
@@ -1942,7 +2279,7 @@ function handleMore(): void {}
 
 .tab-item {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
   cursor: pointer;
   padding: 4px 0;
   transition: color 0.15s;
@@ -1950,7 +2287,7 @@ function handleMore(): void {}
 
 .page-info-text {
   font-size: 12px;
-  color: #86909c;
+  color: var(--theme-text-muted);
 }
 
 .page-arrow {
@@ -1959,10 +2296,10 @@ function handleMore(): void {}
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: 1px solid #e5e6eb;
+  border: 1px solid var(--theme-border);
   border-radius: 4px;
-  background: #fff;
-  color: #4e5969;
+  background: var(--theme-surface);
+  color: var(--theme-text-secondary);
   font-size: 13px;
   cursor: pointer;
   transition: all 0.15s;
@@ -1970,8 +2307,8 @@ function handleMore(): void {}
 }
 
 .page-arrow:hover:not(:disabled) {
-  border-color: #165dff;
-  color: #165dff;
+  border-color: var(--main-orange);
+  color: var(--main-orange);
 }
 
 .page-arrow:disabled {
@@ -1979,9 +2316,13 @@ function handleMore(): void {}
   cursor: not-allowed;
 }
 
+.file-input { display: none; }
+.upload-file-btn { margin-top: 8px; padding: 8px 12px; border: 1px solid var(--theme-border); border-radius: 8px; background: var(--theme-surface-hover); color: var(--theme-text); cursor: pointer; }
+.upload-file-btn:disabled { opacity: .6; cursor: wait; }
+
 .page-num {
   font-size: 12px;
-  color: #4e5969;
+  color: var(--theme-text-secondary);
   min-width: 60px;
   text-align: center;
 }
@@ -2001,6 +2342,6 @@ function handleMore(): void {}
 }
 
 .col-resize-handle:hover {
-  border-right-color: #165dff;
+  border-right-color: var(--main-orange);
 }
 </style>

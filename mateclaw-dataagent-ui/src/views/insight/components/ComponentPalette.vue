@@ -2,7 +2,7 @@
   <div class="component-palette">
     <div class="palette-header">
       <span>{{ t('insight.paletteTitle') }}</span>
-      <button type="button" class="palette-collapse-btn" title="收起面板" @click="emit('collapse')">
+      <button type="button" class="palette-collapse-btn" title="收起面板" aria-label="收起面板" @click="emit('collapse')">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
       </button>
     </div>
@@ -34,8 +34,12 @@
             v-for="item in group.items"
             :key="item.type + (item.chartType ?? '')"
             class="palette-item"
+            role="button"
+            tabindex="0"
+            :aria-label="t(item.labelKey)"
             draggable="true"
             @dragstart="handleDragStart($event, item)"
+            @keydown="handleKeydown($event, item)"
           >
             <span class="palette-icon" v-html="item.icon"></span>
             <span class="palette-label">{{ t(item.labelKey) }}</span>
@@ -57,6 +61,7 @@ defineOptions({
 
 const emit = defineEmits<{
   (e: 'collapse'): void
+  (e: 'add-component', payload: { type: InsightComponentType; chartType?: ChartType }): void
 }>()
 
 const { t } = useI18n()
@@ -105,6 +110,7 @@ const ICONS = {
   filter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="4,4 20,4 14,12 14,20 10,18 10,12"/></svg>',
   timeFilter: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><polyline points="12,6 12,12 16,14"/></svg>',
   aiAnalysis: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>',
+  combination: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="7" y="7" width="5" height="5" rx="1" fill="currentColor" opacity="0.4"/><rect x="14" y="7" width="3" height="10" rx="1" fill="currentColor" opacity="0.4"/><rect x="7" y="14" width="5" height="3" rx="1" fill="currentColor" opacity="0.4"/></svg>',
 } as const
 
 /** 按语义分组的物料列表 */
@@ -118,6 +124,7 @@ const groups: PaletteGroup[] = [
       { type: 'filter', icon: ICONS.filter, labelKey: 'insight.component.filter' },
       { type: 'timeFilter', icon: ICONS.timeFilter, labelKey: 'insight.component.timeFilter' },
       { type: 'aiAnalysis', icon: ICONS.aiAnalysis, labelKey: 'insight.component.aiAnalysis' },
+      { type: 'combination', icon: ICONS.combination, labelKey: 'insight.component.combination' },
     ],
   },
   {
@@ -170,6 +177,13 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   }
   event.dataTransfer.effectAllowed = 'copy'
   event.dataTransfer.setData('application/json', JSON.stringify(item))
+}
+
+/** 键盘用户无法拖拽时，使用 Enter/Space 直接添加组件。 */
+function handleKeydown(event: KeyboardEvent, item: PaletteItem): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  emit('add-component', { type: item.type, chartType: item.chartType })
 }
 </script>
 
@@ -292,20 +306,20 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
 .palette-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 12px;
   margin: 0 4px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: grab;
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast);
   user-select: none;
 }
 
 .palette-item:hover {
   background: var(--db-hover);
-  border-color: var(--db-border);
 }
 
 .palette-item:active {
@@ -313,23 +327,42 @@ function handleDragStart(event: DragEvent, item: PaletteItem): void {
   background: var(--db-accent-light, var(--db-hover));
 }
 
+.palette-item:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: -2px;
+}
+
 .palette-icon {
-  width: 18px;
-  height: 18px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--db-text-secondary);
+  color: var(--db-accent);
+  background: color-mix(in srgb, var(--db-accent) 8%, transparent);
+  border-radius: 6px;
   flex-shrink: 0;
 }
 
 .palette-icon svg {
-  width: 100%;
-  height: 100%;
+  width: 18px;
+  height: 18px;
 }
 
 .palette-label {
   font-size: 13px;
   color: var(--db-text);
+}
+
+@media (pointer: coarse) {
+  .palette-item {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .palette-item {
+    transition: none;
+  }
 }
 </style>

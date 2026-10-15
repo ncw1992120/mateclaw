@@ -1,0 +1,5 @@
+{
+  "request": {"method":"GET","urlPath":"/anymetrics/api/v1/category/list","queryParameters":{"categoryType":{"equalTo":"CATEGORY_METRIC"}}},
+  "priority": 1,
+  "response": {"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"code":"200","success":true,"data":[{"id":"sales","name":"销售","type":"CATEGORY_METRIC"}]}}
+}

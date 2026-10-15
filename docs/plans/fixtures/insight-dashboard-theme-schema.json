@@ -1,0 +1,40 @@
+{
+  "version": "1.2",
+  "theme": {
+    "mode": "custom",
+    "presetId": "teal",
+    "overrides": {
+      "metricPalette": ["#102030", "#204060", "#306090", "#4080C0", "#50A0E0"],
+      "chartPalette": ["#0F766E", "#2563EB", "#F59E0B", "#8B5CF6", "#EC4899"],
+      "radius": "large",
+      "shadow": "elevated"
+    }
+  },
+  "pages": [{
+    "id": "page-1",
+    "name": "首页",
+    "components": [{
+      "id": "kpi-1",
+      "type": "kpi",
+      "title": "指标概览",
+      "config": {"density": "large"},
+      "kpiMetrics": [{
+        "fieldKey": "gmv",
+        "displayName": "销售额",
+        "unit": "万元",
+        "visible": true,
+        "x": 0,
+        "y": 0,
+        "w": 284,
+        "h": 88,
+        "visual": {"iconKey": "chart-bar", "colorMode": "custom", "accentColor": "#C2410C"},
+        "styles": {
+          "name": {"size": 14, "family": "system", "color": "", "colorMode": "theme", "bold": "normal"},
+          "value": {"size": 28, "family": "system", "color": "#102030", "colorMode": "custom", "bold": "bold"},
+          "unit": {"size": 15, "family": "system", "color": "", "colorMode": "theme", "bold": "normal"},
+          "helper": {"size": 12, "family": "system", "color": "", "colorMode": "theme", "bold": "normal"}
+        }
+      }]
+    }]
+  }]
+}

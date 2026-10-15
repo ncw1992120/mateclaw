@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.FilterValue;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.TimeRangeValue;
@@ -14,6 +15,14 @@ import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.util.InsightChartOptionHelper;
+import vip.mate.dataagent.support.InsightFieldLabels;
+import vip.mate.dataagent.auth.crypto.AesPasswordCryptor;
+import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.repository.DatasourceMapper;
+import vip.mate.dataagent.service.DatasourceConnectionPoolService;
+import vip.mate.dataagent.dataset.jdbc.CompiledJdbcQuery;
+import vip.mate.dataagent.dataset.jdbc.SqlValidationService;
+import vip.mate.dataagent.util.JdbcUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +46,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
     private final InsightDashboardService dashboardService;
     private final AloudataService aloudataService;
+    private final DatasourceMapper datasourceMapper;
+    private final DatasourceConnectionPoolService datasourceConnectionPoolService;
+    private final SqlValidationService sqlValidationService;
 
     /** KPI 环比变化格式化模板 */
     private static final String KPI_CHANGE_FORMAT = "%.2f%%";
@@ -78,7 +90,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         // 校验 dataSource
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
-            return buildError(component.getId(), "组件未配置数据源");
+            // 组件布局由仪表盘 Schema 决定；没有直连数据源时仍应显示画布组件及其空态。
+            // 例如经数据集管道/脚本配置的组件，其结果由前端结果集链路恢复。
+            return null;
         }
         try {
             return doBind(component);
@@ -119,6 +133,16 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                     || "aiAnalysis".equals(component.getType())) {
                 continue;
             }
+            // 筛选器变更只查询受影响组件，避免先把整张仪表盘全部取数再丢弃无关结果。
+            if (componentLevelTargetId != null && !componentLevelTargetId.equals(component.getId())) {
+                continue;
+            }
+            if (componentLevelTargetId == null && sourceFilterId != null && !sourceFilterId.isBlank()) {
+                List<String> boundIds = component.getBoundFilterIds();
+                if (boundIds == null || !boundIds.contains(sourceFilterId)) {
+                    continue;
+                }
+            }
             InsightComponentDataDTO data = bindComponentWithFilters(component, filterContext);
             if (data != null) {
                 componentDataMap.put(component.getId(), data);
@@ -134,6 +158,9 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                     }
                     // aiAnalysis 组件：构建查询概要（模板填充），AI 分析部分由前端触发生成
                     if ("aiAnalysis".equals(component.getType())) {
+                        if (sourceFilterId != null && !sourceFilterId.isBlank()) {
+                            return null;
+                        }
                         return buildAiAnalysisData(component, schema, filterContext, componentDataMap);
                     }
                     // 组件级时间筛选：仅影响指定组件
@@ -169,10 +196,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
      * 绑定单个组件数据（合并运行时筛选条件）
      * <p>
      * 运行时筛选上下文分为两类，分别对应 Aloudata API 的不同参数：
-     * <ul>
-     *   <li>时间范围（timeRange）→ 转换为 timeConstraint 表达式（API 5.6 节）</li>
-     *   <li>维度筛选（dimensionFilters）→ 转换为 filters 表达式字符串数组（API 5.4 节）</li>
-     * </ul>
+     * 时间范围与维度筛选都转换为 filters 表达式；metric_time 的上下界按 Aloudata 分区格式
+     * 合并成同一个 filters 字符串，避免下推到错误的 timeConstraint 参数。
      */
     private InsightComponentDataDTO bindComponentWithFilters(Component component,
                                                               DashboardFilterContextDTO filterContext) {
@@ -186,7 +211,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
         DataSource ds = component.getDataSource();
         if (ds == null || ds.getDatasourceId() == null || ds.getDatasourceId().isBlank()) {
-            return buildError(component.getId(), "组件未配置数据源");
+            return null;
         }
         try {
             return doBind(component, filterContext);
@@ -221,8 +246,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
             if (tab.getDataSource() == null || tab.getDataSource().getDatasourceId() == null
                     || tab.getDataSource().getDatasourceId().isBlank()) {
-                // 未配置数据源的 Tab，返回空数据
-                tabData.setError("未配置数据源");
+                // Tab 配置仍由 Schema 展示；没有数据源时让前端显示标准空态。
                 tabsMap.put(tab.getId(), tabData);
                 continue;
             }
@@ -291,6 +315,11 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     private InsightComponentDataDTO doBind(Component component, DashboardFilterContextDTO filterContext) {
         DataSource ds = component.getDataSource();
 
+        // JDBC 卡片直接 SQL 预览：复用统一 SQL AST 校验和只读连接池，结果仍走同一组件渲染器。
+        if (isJdbcSql(ds)) {
+            return buildJdbcSqlPreview(component, ds);
+        }
+
         // KPI 多指标模式：每个指标分别查询
         boolean isKpiMultiKpi = "kpi".equals(component.getType())
                 && component.getMultiKpi() != null && component.getMultiKpi()
@@ -326,14 +355,17 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
                 }
             }
         }
-        request.setFilters(filterExpressions);
-
-        // 3. 构建 timeConstraint 表达式（API 5.6 节）：运行时时间范围优先，其次静态配置
-        String timeConstraint = null;
         if (filterContext != null && filterContext.getTimeRange() != null) {
-            timeConstraint = buildTimeConstraint(filterContext.getTimeRange());
+            String partitionFilter = buildMetricTimeFilter(
+                    filterContext.getTimeRange(), filterContext.getTimeGranularity());
+            if (partitionFilter != null) filterExpressions.add(partitionFilter);
         }
-        if (timeConstraint == null && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
+        request.setFilters(AloudataFilterExpressions.combineMetricTimeExpressions(filterExpressions));
+
+        // 保留既有静态 timeConstraint；运行时 metric_time 分区条件已按平台格式写入 filters。
+        String timeConstraint = null;
+        if ((filterContext == null || filterContext.getTimeRange() == null)
+                && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
             timeConstraint = ds.getTimeConstraint();
         }
         request.setTimeConstraint(timeConstraint);
@@ -341,7 +373,7 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         // 4. 调用 Aloudata 查询
         AloudataMetricQueryResponse response = aloudataService.queryMetrics(datasourceId, request);
         if (response == null || response.getData() == null) {
-            return buildError(component.getId(), "查询无数据");
+            return buildEmptyData(component);
         }
 
         // 3. 转换响应格式：列式 columns → 行式 List<String> + List<List<String>>
@@ -358,11 +390,64 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             columns = extractColumnNames(metricData.getRows().get(0));
             rows = convertRows(metricData.getRows(), columns);
         } else {
-            return buildError(component.getId(), "查询无数据");
+            return buildEmptyData(component);
         }
 
         // 4. 按组件类型生成渲染数据
         return buildByComponentType(component, columns, rows);
+    }
+
+    private boolean isJdbcSql(DataSource ds) {
+        return ds != null && "JDBC".equalsIgnoreCase(ds.getSourceType())
+                && ds.getSql() != null && !ds.getSql().isBlank();
+    }
+
+    private InsightComponentDataDTO buildJdbcSqlPreview(Component component, DataSource ds) {
+        final long datasourceId;
+        try {
+            datasourceId = Long.parseLong(ds.getDatasourceId());
+        } catch (Exception e) {
+            return buildError(component.getId(), "JDBC 数据源 ID 无效");
+        }
+        DatasourceEntity datasource = datasourceMapper.selectById(datasourceId);
+        if (datasource == null) return buildError(component.getId(), "JDBC 数据源不存在");
+        if (Boolean.FALSE.equals(datasource.getEnabled())) return buildError(component.getId(), "JDBC 数据源已禁用");
+
+        int limit = ds.getLimit() == null ? 100 : Math.min(ds.getLimit(), 500);
+        CompiledJdbcQuery compiled;
+        try {
+            compiled = sqlValidationService.compile(ds.getSql(), List.of(), List.of(), limit, 0);
+        } catch (Exception e) {
+            return buildError(component.getId(), "SQL 校验失败: " + e.getMessage());
+        }
+
+        try (java.sql.Connection connection = datasourceConnectionPoolService.getReadOnlyConnection(
+                JdbcUtils.buildJdbcUrl(datasource), datasource.getUsername(),
+                AesPasswordCryptor.decrypt(datasource.getPassword()));
+             java.sql.PreparedStatement statement = connection.prepareStatement(compiled.sql())) {
+            statement.setQueryTimeout(30);
+            for (int i = 0; i < compiled.parameters().size(); i++) {
+                statement.setObject(i + 1, compiled.parameters().get(i));
+            }
+            try (java.sql.ResultSet resultSet = statement.executeQuery()) {
+                java.sql.ResultSetMetaData metadata = resultSet.getMetaData();
+                List<String> columns = new ArrayList<>();
+                for (int i = 1; i <= metadata.getColumnCount(); i++) columns.add(metadata.getColumnLabel(i));
+                List<List<String>> rows = new ArrayList<>();
+                while (resultSet.next() && rows.size() < limit) {
+                    List<String> row = new ArrayList<>();
+                    for (int i = 1; i <= metadata.getColumnCount(); i++) {
+                        Object value = resultSet.getObject(i);
+                        row.add(value == null ? null : String.valueOf(value));
+                    }
+                    rows.add(row);
+                }
+                return buildByComponentType(component, columns, rows);
+            }
+        } catch (java.sql.SQLException e) {
+            log.warn("JDBC SQL 预览失败，组件 {}: {}", component.getId(), e.getMessage());
+            return buildError(component.getId(), "JDBC 查询失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -663,12 +748,15 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
 
         if (schema != null && !schema.getAllComponents().isEmpty()) {
             for (Component comp : schema.getAllComponents()) {
+                Map<String, String> fieldLabels = InsightFieldLabels.fromComponent(schema, comp.getId());
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {
-                        metrics.addAll(comp.getDataSource().getMetrics());
+                        metrics.addAll(comp.getDataSource().getMetrics().stream()
+                                .map(name -> fieldLabels.getOrDefault(name, name)).toList());
                     }
                     if (comp.getDataSource().getDimensions() != null) {
-                        dimensions.addAll(comp.getDataSource().getDimensions());
+                        dimensions.addAll(comp.getDataSource().getDimensions().stream()
+                                .map(name -> fieldLabels.getOrDefault(name, name)).toList());
                     }
                     if (comp.getDataSource().getFilters() != null) {
                         filters.addAll(comp.getDataSource().getFilters());
@@ -733,6 +821,20 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
+     * 构建无数据但组件有效的预览结果。由前端按 Schema 渲染组件布局，并展示各自的空态。
+     */
+    private InsightComponentDataDTO buildEmptyData(Component component) {
+        InsightComponentDataDTO dto = new InsightComponentDataDTO();
+        dto.setComponentId(component.getId());
+        dto.setRenderType("kpi".equals(component.getType())
+                ? DataAgentConstants.INSIGHT_RENDER_TYPE_KPI
+                : "chart".equals(component.getType())
+                        ? DataAgentConstants.INSIGHT_RENDER_TYPE_ECHARTS
+                        : DataAgentConstants.INSIGHT_RENDER_TYPE_TABLE);
+        return dto;
+    }
+
+    /**
      * 将静态 filters（Map 结构）转换为 Aloudata 表达式字符串列表
      * <p>
      * Schema 中 filters 保留结构化格式便于前端编辑器交互，构建查询请求时转换为
@@ -758,11 +860,12 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
             return expressions;
         }
         for (Map<String, Object> filter : staticFilters) {
-            String expr = buildFilterExpression(
-                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD),
-                    (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR),
-                    filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE)
-            );
+            String field = (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_FIELD);
+            String operator = (String) filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_OPERATOR);
+            Object value = filter.get(DataAgentConstants.INSIGHT_FILTER_KEY_VALUE);
+            String expr = AloudataFilterExpressions.METRIC_TIME_FIELD.equals(field)
+                    ? AloudataFilterExpressions.of(field, operator, value)
+                    : buildFilterExpression(field, operator, value);
             if (expr != null) {
                 expressions.add(expr);
             }
@@ -856,22 +959,12 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
     }
 
     /**
-     * 根据时间范围预设构建 timeConstraint 表达式（API 5.6 节）
-     * <p>
-     * 参考文档示例和生成的 SQL，timeConstraint 使用语义层表达式格式：
-     * <ul>
-     *   <li>自定义日期：使用 &gt;= 和 &lt; 字面量比较，例如
-     *       ([metric_time__day] &gt;= "2024-01-01" AND [metric_time__day] &lt; "2024-02-01")</li>
-     * </ul>
-     * <p>
-     * 注意：结束日期需要 +1 天，使用半开区间 [start, end+1)，
-     * 因为 Aloudata 的指标日期是 DATETIME 类型，"2024-01-31" 实际代表当天零点，
-     * 需要取到 &lt; "2024-02-01" 才能包含 1 月 31 日的数据。
+     * 构建单条 metric_time 分区范围表达式，使用半开区间 [start, end+1)。
      *
      * @param timeRange 时间范围筛选值
-     * @return timeConstraint 表达式字符串，无效预设时返回 null
+     * @return filters 中的表达式字符串，无效预设时返回 null
      */
-    private String buildTimeConstraint(TimeRangeValue timeRange) {
+    private String buildMetricTimeFilter(TimeRangeValue timeRange, String timeGranularity) {
         String preset = timeRange.getPreset();
         if (preset == null || preset.isBlank()) {
             return null;
@@ -897,7 +990,8 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         }
         // 结束日期 +1 天，使用半开区间 [start, end+1) 以包含结束日期当天的全部数据
         LocalDate endExclusive = end.plusDays(1);
-        return "([metric_time__day] >= \"" + start.format(fmt) + "\" AND [metric_time__day] < \"" + endExclusive.format(fmt) + "\")";
+        return AloudataFilterExpressions.metricTimeRange(
+                start.format(fmt), endExclusive.format(fmt), timeGranularity);
     }
 
     /**

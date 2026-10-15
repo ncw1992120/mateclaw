@@ -2,7 +2,11 @@ package vip.mate.dataagent.service.impl;
 
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.agentscope.core.agent.Event;
 import io.agentscope.core.agent.EventType;
 import io.agentscope.core.message.*;
@@ -26,6 +30,7 @@ import vip.mate.dataagent.repository.InsightDashboardMapper;
 import vip.mate.dataagent.service.AloudataSemanticEsService;
 import vip.mate.dataagent.service.DatasourceManageService;
 import vip.mate.dataagent.service.InsightDashboardService;
+import vip.mate.dataagent.service.DashboardThemeValidator;
 import vip.mate.dataagent.service.SchemaEmbeddingService;
 import vip.mate.dataagent.support.Utf8SseEmitter;
 
@@ -105,7 +110,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
 
             4. 图表子类型(chartType)可选值：line(折线图)、bar(柱状图)、pie(饼图)、area(面积图)、scatter(散点图)、radar(雷达图)
             5. renderType对应关系：chart类型 -> "echarts"，kpi类型 -> "kpi"，table类型 -> "table"
-            6. position说明：栅格布局，总宽度24列。w=12表示半宽，w=24表示全宽。h=4为默认高度。x、y、w、h 均为整数，w 范围 1-24，h 范围 1-30。
+            6. position说明：栅格布局，总宽度24列。w=12表示半宽，w=24表示全宽。h=4为默认高度。x、y、w、h 为数字，支持小数以保留画布手动缩放精度；新建组件默认使用整数列，修改布局时保留现有小数坐标，除非用户明确要求重排。w 范围 1-24，h 范围 1-30。
             7. 组件布局要求：每行放2个组件（w=12），从上到下依次排列，y值递增
             8. metrics 必须使用数据源信息中列出的指标英文名(metricName)，dimensions 必须使用维度英文名(dimName)。不要使用物理字段名或自造名称。
             9. 根据用户需求合理选择图表类型：
@@ -209,28 +214,284 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     }
 
     @Override
-    public List<InsightDashboardVO> listDashboards() {
+    public List<InsightDashboardVO> listDashboards(String visibility) {
         LambdaQueryWrapper<InsightDashboardEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(InsightDashboardEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId());
         wrapper.orderByDesc(InsightDashboardEntity::getUpdateTime);
         List<InsightDashboardEntity> entities = insightDashboardMapper.selectList(wrapper);
-        return entities.stream().map(this::toVO).collect(Collectors.toList());
+        return filterByVisibility(entities, visibility).stream()
+                .map(this::toVO).collect(Collectors.toList());
+    }
+
+    /** 摘要列表每页默认条数 */
+    private static final int SUMMARY_DEFAULT_SIZE = 20;
+    /** 摘要列表每页最大条数 */
+    private static final int SUMMARY_MAX_SIZE = 100;
+    /** 排序字段白名单：列表只暴露更新时间与名称，避免暴露内部列 */
+    private static final Set<String> SUMMARY_SORT_FIELDS = Set.of("updateTime", "name");
+    /** 列表缩略图：chartType → 展示形态 */
+    private static final Map<String, String> CHART_KIND_BY_TYPE = Map.ofEntries(
+            Map.entry("bar", "bar"),
+            Map.entry("line", "line"),
+            Map.entry("area", "area"),
+            Map.entry("pie", "donut"),
+            Map.entry("scatter", "dual-line"),
+            Map.entry("radar", "donut"),
+            Map.entry("funnel", "funnel"),
+            Map.entry("gauge", "donut"),
+            Map.entry("heatmap", "bar-alert"),
+            Map.entry("candlestick", "bar-alert"),
+            Map.entry("sankey", "funnel"),
+            Map.entry("treemap", "bar"),
+            Map.entry("sunburst", "donut"),
+            Map.entry("tree", "line"),
+            Map.entry("graph", "dual-line"),
+            Map.entry("map", "area"),
+            Map.entry("lines", "dual-line"),
+            Map.entry("boxplot", "bar"),
+            Map.entry("parallel", "dual-line"),
+            Map.entry("themeRiver", "area"),
+            Map.entry("pictorialBar", "bar"),
+            Map.entry("effectScatter", "dual-line")
+    );
+
+    /**
+     * 分页查询仪表盘摘要。
+     * <p>
+     * 列表首屏只需要卡片元信息：这里只投影轻量字段，并从 Schema 推导缩略图类型，
+     * 不返回 schemaJson / reportContent。分页、计数、过滤、排序全部交给数据库。
+     */
+    @Override
+    public InsightDashboardPageVO pageDashboards(InsightDashboardSummaryQuery query) {
+        InsightDashboardSummaryQuery effective = query == null ? new InsightDashboardSummaryQuery() : query;
+        int page = normalizePage(effective.getPage());
+        int size = normalizeSize(effective.getSize());
+        long workspaceId = workspaceGuard.currentWorkspaceId();
+
+        long all = countOrZero(summaryWrapper(workspaceId, effective));
+        long draft = countOrZero(summaryWrapper(workspaceId, effective), DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        long published = countOrZero(summaryWrapper(workspaceId, effective), DataAgentConstants.INSIGHT_DASHBOARD_STATUS_PUBLISHED);
+
+        LambdaQueryWrapper<InsightDashboardEntity> pageWrapper = summaryWrapper(workspaceId, effective);
+        if (effective.getStatus() != null && !effective.getStatus().isBlank()) {
+            pageWrapper.eq(InsightDashboardEntity::getStatus, effective.getStatus().trim());
+        }
+        applySorting(pageWrapper, effective);
+        pageWrapper.last("LIMIT " + size + " OFFSET " + ((page - 1) * size));
+
+        List<InsightDashboardEntity> entities = insightDashboardMapper.selectList(pageWrapper);
+
+        InsightDashboardPageVO result = new InsightDashboardPageVO();
+        result.setRecords(entities.stream().map(this::toSummaryVO).collect(Collectors.toList()));
+        result.setTotal(all);
+        result.setPage(page);
+        result.setSize(size);
+        result.setCounts(new InsightDashboardCountsVO(all, draft, published));
+        return result;
+    }
+
+    /** 构造摘要查询的基础条件：工作区隔离 + 软删除 + 可见性 + 关键词 */
+    private LambdaQueryWrapper<InsightDashboardEntity> summaryWrapper(long workspaceId, InsightDashboardSummaryQuery query) {
+        LambdaQueryWrapper<InsightDashboardEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(InsightDashboardEntity::getWorkspaceId, workspaceId);
+        wrapper.eq(InsightDashboardEntity::getDeleted, 0);
+        String visibility = query.getVisibility();
+        if (visibility != null && !visibility.isBlank()) {
+            Set<String> wanted = Arrays.stream(visibility.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toSet());
+            if (!wanted.isEmpty()) {
+                wrapper.and(w -> {
+                    boolean first = true;
+                    for (String item : wanted) {
+                        if (!first) {
+                            w.or();
+                        }
+                        w.eq(InsightDashboardEntity::getVisibility, item);
+                        first = false;
+                    }
+                    // 未显式设置可见性的历史数据按 private 处理（与旧列表过滤保持一致）
+                    if (wanted.contains(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE)) {
+                        if (!first) {
+                            w.or();
+                        }
+                        w.isNull(InsightDashboardEntity::getVisibility);
+                    }
+                });
+            }
+        }
+        String keyword = query.getKeyword() == null ? null : query.getKeyword().trim();
+        if (keyword != null && !keyword.isEmpty()) {
+            wrapper.and(w -> w.like(InsightDashboardEntity::getName, keyword)
+                    .or().like(InsightDashboardEntity::getDescription, keyword)
+                    .or().like(InsightDashboardEntity::getOwnerName, keyword));
+        }
+        return wrapper;
+    }
+
+    private long countOrZero(LambdaQueryWrapper<InsightDashboardEntity> wrapper) {
+        return countOrZero(wrapper, null);
+    }
+
+    /** 计数失败不阻塞列表：返回 0 由页面按空态处理 */
+    private long countOrZero(LambdaQueryWrapper<InsightDashboardEntity> wrapper, String status) {
+        if (status != null) {
+            wrapper.eq(InsightDashboardEntity::getStatus, status);
+        }
+        try {
+            Long count = insightDashboardMapper.selectCount(wrapper);
+            return count == null ? 0L : count;
+        } catch (RuntimeException ex) {
+            log.warn("仪表盘摘要计数失败: {}", ex.getMessage());
+            return 0L;
+        }
+    }
+
+    /** 只接受白名单排序字段，其余按更新时间倒序 */
+    private void applySorting(LambdaQueryWrapper<InsightDashboardEntity> wrapper, InsightDashboardSummaryQuery query) {
+        String sortBy = normalizeSortBy(query.getSortBy());
+        boolean desc = isDescending(query.getSortOrder());
+        if ("name".equals(sortBy)) {
+            wrapper.orderBy(true, desc, InsightDashboardEntity::getName);
+        } else {
+            wrapper.orderBy(true, desc, InsightDashboardEntity::getUpdateTime);
+        }
+        // 同值时用主键兜底排序，避免翻页出现重复/漏行
+        wrapper.orderBy(true, desc, InsightDashboardEntity::getId);
+    }
+
+    /** 排序字段白名单归一：未指定或不在白名单内返回 null（调用方按更新时间处理） */
+    static String normalizeSortBy(String sortBy) {
+        if (sortBy == null || sortBy.isBlank()) {
+            return null;
+        }
+        String trimmed = sortBy.trim();
+        return SUMMARY_SORT_FIELDS.contains(trimmed) ? trimmed : null;
+    }
+
+    /** 排序方向归一：仅 "asc" 为升序，其余（含空值）按倒序 */
+    static boolean isDescending(String sortOrder) {
+        return sortOrder == null || !"asc".equalsIgnoreCase(sortOrder.trim());
+    }
+
+    /** 页码归一：小于 1 或缺失均按第一页 */
+    static int normalizePage(Integer page) {
+        if (page == null || page < 1) {
+            return 1;
+        }
+        return page;
+    }
+
+    /** 每页条数归一：缺失取默认 20，上限 100 */
+    static int normalizeSize(Integer size) {
+        if (size == null || size < 1) {
+            return SUMMARY_DEFAULT_SIZE;
+        }
+        return Math.min(size, SUMMARY_MAX_SIZE);
+    }
+
+    /**
+     * 从 Schema 推导列表缩略图类型。
+     * 只做一次轻量解析：空 Schema / 解析失败回退 empty，非 chart 组件回退 kpi-grid。
+     */
+    String resolveChartKind(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) {
+            return "empty";
+        }
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(schemaJson);
+        } catch (Exception ex) {
+            return "empty";
+        }
+        JsonNode pages = root == null ? null : root.get("pages");
+        if (pages == null || !pages.isArray() || pages.size() == 0) {
+            return "empty";
+        }
+        Map<String, Integer> chartCounts = new LinkedHashMap<>();
+        boolean hasDataComponent = false;
+        for (JsonNode page : pages) {
+            JsonNode components = page.get("components");
+            if (components == null || !components.isArray()) {
+                continue;
+            }
+            for (JsonNode component : components) {
+                String type = component.path("type").asText("");
+                if ("chart".equals(type)) {
+                    String chartType = component.path("chartType").asText("");
+                    String kind = CHART_KIND_BY_TYPE.get(chartType);
+                    chartCounts.merge(kind == null ? "line" : kind, 1, Integer::sum);
+                } else if ("kpi".equals(type) || "table".equals(type)) {
+                    hasDataComponent = true;
+                }
+            }
+        }
+        if (!chartCounts.isEmpty()) {
+            return chartCounts.entrySet().stream()
+                    .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder())
+                            .thenComparing(Map.Entry.comparingByKey()))
+                    .map(Map.Entry::getKey)
+                    .findFirst()
+                    .orElse("line");
+        }
+        return hasDataComponent ? "kpi-grid" : "empty";
+    }
+
+    private InsightDashboardSummaryVO toSummaryVO(InsightDashboardEntity entity) {
+        InsightDashboardSummaryVO vo = new InsightDashboardSummaryVO();
+        // 只复制同名字段：schemaJson / reportContent 无对应属性，天然不会被带出
+        BeanUtils.copyProperties(entity, vo);
+        if (entity.getCreateTime() != null) {
+            vo.setCreateTime(entity.getCreateTime().toString());
+        }
+        if (entity.getUpdateTime() != null) {
+            vo.setUpdateTime(entity.getUpdateTime().toString());
+        }
+        vo.setChartKind(resolveChartKind(entity.getSchemaJson()));
+        return vo;
+    }
+
+    /**
+     * 按可见性过滤（纯函数，便于单测）：
+     * DB 层仅按 workspace 过滤，可见性在此做精确匹配。
+     * visibility 为空或空白时返回原列表；取值逗号分隔，缺省按 private 处理。
+     */
+    static List<InsightDashboardEntity> filterByVisibility(List<InsightDashboardEntity> entities, String visibility) {
+        if (visibility == null || visibility.isBlank()) {
+            return entities;
+        }
+        Set<String> wanted = Arrays.stream(visibility.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(Collectors.toSet());
+        if (wanted.isEmpty()) {
+            return entities;
+        }
+        return entities.stream()
+                .filter(e -> wanted.contains(e.getVisibility() != null
+                        ? e.getVisibility()
+                        : DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE))
+                .collect(Collectors.toList());
     }
 
     @Override
     public InsightDashboardVO getDashboard(Long id) {
-        requireOwnership(id);
-        InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
-        return toVO(entity);
+        return toVO(requireOwnership(id));
     }
 
     @Override
     public InsightDashboardVO createDashboard(InsightDashboardCreateRequest request) {
+        validateSchemaJson(request.getSchemaJson());
         InsightDashboardEntity entity = new InsightDashboardEntity();
         entity.setName(request.getName());
         entity.setDescription(request.getDescription());
         entity.setSchemaJson(request.getSchemaJson() != null ? request.getSchemaJson() : "{\"version\":\"1.0\",\"components\":[]}");
         entity.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        entity.setVisibility(request.getVisibility() != null
+                ? request.getVisibility()
+                : DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_DEFAULT);
+        entity.setTemplateMeta(request.getTemplateMeta());
         entity.setAgentId(request.getAgentId());
         entity.setWorkspaceId(workspaceGuard.currentWorkspaceId());
         entity.setOwnerId(workspaceGuard.currentUserId());
@@ -244,6 +505,13 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     public InsightDashboardVO updateDashboard(Long id, InsightDashboardUpdateRequest request) {
         requireOwnership(id);
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
+        String actualUpdateTime = entity.getUpdateTime() == null ? null : entity.getUpdateTime().toString();
+        if (!matchesExpectedUpdateTime(request.getExpectedUpdateTime(), actualUpdateTime)) {
+            log.warn("仪表盘更新冲突: id={}, expectedUpdateTime={}, actualUpdateTime={}, userId={}",
+                    id, request.getExpectedUpdateTime(), actualUpdateTime, workspaceGuard.currentUserId());
+            throw new IllegalStateException("仪表盘已被其他操作更新，请刷新后再保存");
+        }
+        String changedFields = changedFields(request);
         if (request.getName() != null) {
             entity.setName(request.getName());
         }
@@ -251,6 +519,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             entity.setDescription(request.getDescription());
         }
         if (request.getSchemaJson() != null) {
+            validateSchemaJson(request.getSchemaJson());
             entity.setSchemaJson(request.getSchemaJson());
         }
         if (request.getReportContent() != null) {
@@ -265,9 +534,36 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (request.getOwnerName() != null) {
             entity.setOwnerName(request.getOwnerName());
         }
+        if (request.getVisibility() != null) {
+            entity.setVisibility(request.getVisibility());
+        }
+        if (request.getTemplateMeta() != null) {
+            entity.setTemplateMeta(request.getTemplateMeta());
+        }
         entity.setModifier(workspaceGuard.currentUserNickname());
         insightDashboardMapper.updateById(entity);
+        log.info("仪表盘更新审计: dashboardId={}, userId={}, workspaceId={}, fields={}, schemaBytes={}, source=dashboard-api",
+                id, workspaceGuard.currentUserId(), workspaceGuard.currentWorkspaceId(), changedFields,
+                request.getSchemaJson() == null ? 0 : request.getSchemaJson().length());
         return toVO(entity);
+    }
+
+    private String changedFields(InsightDashboardUpdateRequest request) {
+        List<String> fields = new ArrayList<>();
+        if (request.getName() != null) fields.add("name");
+        if (request.getDescription() != null) fields.add("description");
+        if (request.getSchemaJson() != null) fields.add("schemaJson");
+        if (request.getReportContent() != null) fields.add("reportContent");
+        if (request.getStatus() != null) fields.add("status");
+        if (request.getAgentId() != null) fields.add("agentId");
+        if (request.getOwnerName() != null) fields.add("ownerName");
+        if (request.getVisibility() != null) fields.add("visibility");
+        if (request.getTemplateMeta() != null) fields.add("templateMeta");
+        return String.join(",", fields);
+    }
+
+    static boolean matchesExpectedUpdateTime(String expected, String actual) {
+        return expected == null || (actual != null && expected.equals(actual));
     }
 
     @Override
@@ -281,14 +577,18 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public InsightDashboardVO copyDashboard(Long id) {
-        requireOwnership(id);
+        requireWorkspaceScoped(id);
         InsightDashboardEntity source = insightDashboardMapper.selectById(id);
-        if (source == null || source.getDeleted() == 1) {
+        if (source == null || (source.getDeleted() != null && source.getDeleted() == 1)) {
             throw new BusinessException(404, "仪表盘不存在: " + id);
         }
 
         InsightDashboardEntity copy = new InsightDashboardEntity();
         BeanUtils.copyProperties(source, copy);
+        // fork 语义：副本归当前用户私有；清空模板展示元数据（tags/category/usageCount），
+        // 仅当源为模板时保留来源标记，供编辑器提示「示例数据来自模板 X，可替换为自有数据」
+        copy.setVisibility(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_PRIVATE);
+        copy.setTemplateMeta(buildDerivedProvenance(source));
         copy.setId(null);
         copy.setName(generateCopyName(source.getName()));
         copy.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
@@ -304,6 +604,84 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         insightDashboardMapper.insert(copy);
         log.info("复制仪表盘: sourceId={}, newId={}, name={}", id, copy.getId(), copy.getName());
         return toVO(copy);
+    }
+
+    /**
+     * 存为样例模板：派生一份 visibility=template 的副本，保留数据集绑定与 Schema（带示例数据可直接使用），
+     * 并记录模板元信息（来源、作者、标签、分类）。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public InsightDashboardVO saveAsTemplate(Long id, InsightDashboardSaveAsTemplateRequest request) {
+        requireOwnership(id);
+        InsightDashboardEntity source = insightDashboardMapper.selectById(id);
+        if (source == null || (source.getDeleted() != null && source.getDeleted() == 1)) {
+            throw new BusinessException(404, "仪表盘不存在: " + id);
+        }
+        InsightDashboardSaveAsTemplateRequest req =
+                request != null ? request : new InsightDashboardSaveAsTemplateRequest();
+
+        InsightDashboardEntity template = new InsightDashboardEntity();
+        BeanUtils.copyProperties(source, template);
+        template.setId(null);
+        template.setName(req.getName() != null && !req.getName().isBlank()
+                ? req.getName() : source.getName());
+        template.setDescription(req.getDescription() != null ? req.getDescription() : source.getDescription());
+        template.setStatus(DataAgentConstants.INSIGHT_DASHBOARD_STATUS_DRAFT);
+        template.setOwnerId(workspaceGuard.currentUserId());
+        template.setOwnerName(workspaceGuard.currentUserNickname());
+        template.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        template.setSchemaJson(remapSchemaIds(source.getSchemaJson()));
+        template.setVisibility(DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_TEMPLATE);
+        template.setTemplateMeta(buildTemplateMeta(req, id));
+        template.setModifier(null);
+        template.setCreateTime(null);
+        template.setUpdateTime(null);
+        template.setDeleted(0);
+
+        insightDashboardMapper.insert(template);
+        log.info("存为样例模板: sourceId={}, templateId={}, name={}", id, template.getId(), template.getName());
+        return toVO(template);
+    }
+
+    /**
+     * 模板派生副本的来源标记：仅当源是模板/官方样例时写入 {sourceTemplateId, sourceTemplateName}；
+     * 非模板返回 null，保证普通复制的 templateMeta 始终为空。
+     */
+    private String buildDerivedProvenance(InsightDashboardEntity source) {
+        String sourceVisibility = source.getVisibility();
+        boolean fromTemplate = DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_TEMPLATE.equals(sourceVisibility)
+                || DataAgentConstants.INSIGHT_DASHBOARD_VISIBILITY_OFFICIAL.equals(sourceVisibility);
+        if (!fromTemplate || source.getId() == null) {
+            return null;
+        }
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("sourceTemplateId", source.getId());
+        meta.put("sourceTemplateName", source.getName());
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (JsonProcessingException e) {
+            log.warn("模板派生来源标记序列化失败: sourceId={}", source.getId());
+            return null;
+        }
+    }
+
+    /**
+     * 构建模板元信息 JSON：{sourceDashboardId, authorName, tags, category, usageCount, isOfficial}
+     */
+    private String buildTemplateMeta(InsightDashboardSaveAsTemplateRequest request, Long sourceId) {
+        Map<String, Object> meta = new LinkedHashMap<>();
+        meta.put("sourceDashboardId", sourceId);
+        meta.put("authorName", workspaceGuard.currentUserNickname());
+        meta.put("tags", request.getTags() == null ? List.of() : request.getTags());
+        meta.put("category", request.getCategory());
+        meta.put("usageCount", 0);
+        meta.put("isOfficial", Boolean.FALSE);
+        try {
+            return objectMapper.writeValueAsString(meta);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(500, "模板元信息序列化失败: " + e.getMessage());
+        }
     }
 
     /**
@@ -327,42 +705,53 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             return schemaJson;
         }
         try {
-            InsightDashboardSchemaDTO schema = objectMapper.readValue(schemaJson, InsightDashboardSchemaDTO.class);
+            JsonNode schema = objectMapper.readTree(schemaJson);
             Map<String, String> pageIdMap = new HashMap<>();
             Map<String, String> componentIdMap = new HashMap<>();
+            Map<String, String> tabIdMap = new HashMap<>();
             Map<String, String> perspectiveIdMap = new HashMap<>();
 
-            if (schema.getPages() != null) {
-                for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
-                    String oldPageId = page.getId();
+            JsonNode pages = schema.path("pages");
+            if (pages.isArray()) {
+                for (JsonNode page : pages) {
+                    if (!page.isObject()) {
+                        continue;
+                    }
+                    String oldPageId = textValue(page, "id");
                     String newPageId = generateSchemaId("page");
                     pageIdMap.put(oldPageId, newPageId);
-                    page.setId(newPageId);
+                    ((ObjectNode) page).put("id", newPageId);
 
-                    if (page.getComponents() != null) {
-                        for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
-                            remapComponentIds(component, componentIdMap);
+                    JsonNode components = page.path("components");
+                    if (components.isArray()) {
+                        for (JsonNode component : components) {
+                            remapComponentIds(component, componentIdMap, tabIdMap);
                         }
                     }
                 }
             }
 
-            if (schema.getComponents() != null) {
-                for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
-                    remapComponentIds(component, componentIdMap);
+            JsonNode components = schema.path("components");
+            if (components.isArray()) {
+                for (JsonNode component : components) {
+                    remapComponentIds(component, componentIdMap, tabIdMap);
                 }
             }
 
-            if (schema.getPerspectives() != null) {
-                for (InsightDashboardSchemaDTO.Perspective perspective : schema.getPerspectives()) {
-                    String oldPerspectiveId = perspective.getId();
+            JsonNode perspectives = schema.path("perspectives");
+            if (perspectives.isArray()) {
+                for (JsonNode perspective : perspectives) {
+                    if (!perspective.isObject()) {
+                        continue;
+                    }
+                    String oldPerspectiveId = textValue(perspective, "id");
                     String newPerspectiveId = generateSchemaId("persp");
                     perspectiveIdMap.put(oldPerspectiveId, newPerspectiveId);
-                    perspective.setId(newPerspectiveId);
+                    ((ObjectNode) perspective).put("id", newPerspectiveId);
                 }
             }
 
-            updateSchemaReferences(schema, pageIdMap, componentIdMap, perspectiveIdMap);
+            updateSchemaReferences(schema, pageIdMap, componentIdMap, perspectiveIdMap, tabIdMap);
             return objectMapper.writeValueAsString(schema);
         } catch (Exception e) {
             log.warn("复制仪表盘时 Schema ID 重映射失败，保留原始 Schema: {}", e.getMessage());
@@ -370,18 +759,57 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
     }
 
+    private void validateSchemaJson(String schemaJson) {
+        if (schemaJson == null || schemaJson.isBlank()) return;
+        try {
+            DashboardThemeValidator.validate(objectMapper.readValue(schemaJson, InsightDashboardSchemaDTO.class));
+        } catch (IllegalArgumentException e) {
+            throw new BusinessException(400, "仪表盘主题配置不合法: " + e.getMessage());
+        } catch (Exception e) {
+            throw new BusinessException(400, "仪表盘 Schema 格式不合法");
+        }
+    }
+
     /**
      * 重新映射单个组件及其 Tab 的 ID
      */
-    private void remapComponentIds(InsightDashboardSchemaDTO.Component component, Map<String, String> componentIdMap) {
-        String oldComponentId = component.getId();
+    private void remapComponentIds(JsonNode component,
+                                   Map<String, String> componentIdMap,
+                                   Map<String, String> tabIdMap) {
+        if (!component.isObject()) {
+            return;
+        }
+        String oldComponentId = textValue(component, "id");
         String newComponentId = generateSchemaId("comp");
         componentIdMap.put(oldComponentId, newComponentId);
-        component.setId(newComponentId);
+        ((ObjectNode) component).put("id", newComponentId);
 
-        if (component.getTabs() != null) {
-            for (InsightDashboardSchemaDTO.Tab tab : component.getTabs()) {
-                tab.setId(generateSchemaId("tab"));
+        remapTabChildren(component.path("tabs"), componentIdMap, tabIdMap);
+        JsonNode containerConfig = component.path("containerConfig");
+        if (containerConfig.isObject()) {
+            remapTabChildren(containerConfig.path("tabs"), componentIdMap, tabIdMap);
+        }
+    }
+
+    private void remapTabChildren(JsonNode tabs,
+                                  Map<String, String> componentIdMap,
+                                  Map<String, String> tabIdMap) {
+        if (!tabs.isArray()) {
+            return;
+        }
+        for (JsonNode tab : tabs) {
+            if (!tab.isObject()) {
+                continue;
+            }
+            String oldTabId = textValue(tab, "id");
+            String newTabId = generateSchemaId("tab");
+            tabIdMap.put(oldTabId, newTabId);
+            ((ObjectNode) tab).put("id", newTabId);
+            JsonNode children = tab.path("children");
+            if (children.isArray()) {
+                for (JsonNode child : children) {
+                    remapComponentIds(child, componentIdMap, tabIdMap);
+                }
             }
         }
     }
@@ -389,25 +817,33 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     /**
      * 更新 Schema 中页面 parentId、组件 boundFilterIds 与 perspectiveIds 等引用
      */
-    private void updateSchemaReferences(InsightDashboardSchemaDTO schema,
+    private void updateSchemaReferences(JsonNode schema,
                                         Map<String, String> pageIdMap,
                                         Map<String, String> componentIdMap,
-                                        Map<String, String> perspectiveIdMap) {
-        if (schema.getPages() != null) {
-            for (InsightDashboardSchemaDTO.Page page : schema.getPages()) {
-                if (page.getParentId() != null && !page.getParentId().isBlank()) {
-                    page.setParentId(pageIdMap.getOrDefault(page.getParentId(), page.getParentId()));
-                }
-                if (page.getComponents() != null) {
-                    for (InsightDashboardSchemaDTO.Component component : page.getComponents()) {
-                        updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+                                        Map<String, String> perspectiveIdMap,
+                                        Map<String, String> tabIdMap) {
+        JsonNode pages = schema.path("pages");
+        if (pages.isArray()) {
+            for (JsonNode page : pages) {
+                if (page.isObject()) {
+                    ObjectNode pageObject = (ObjectNode) page;
+                    String parentId = textValue(page, "parentId");
+                    if (!parentId.isBlank()) {
+                        pageObject.put("parentId", pageIdMap.getOrDefault(parentId, parentId));
+                    }
+                    JsonNode components = page.path("components");
+                    if (components.isArray()) {
+                        for (JsonNode component : components) {
+                            updateComponentReferences(component, componentIdMap, perspectiveIdMap, tabIdMap);
+                        }
                     }
                 }
             }
         }
-        if (schema.getComponents() != null) {
-            for (InsightDashboardSchemaDTO.Component component : schema.getComponents()) {
-                updateComponentReferences(component, componentIdMap, perspectiveIdMap);
+        JsonNode components = schema.path("components");
+        if (components.isArray()) {
+            for (JsonNode component : components) {
+                updateComponentReferences(component, componentIdMap, perspectiveIdMap, tabIdMap);
             }
         }
     }
@@ -415,21 +851,68 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
     /**
      * 更新组件内部的 ID 引用（boundFilterIds、perspectiveIds）
      */
-    private void updateComponentReferences(InsightDashboardSchemaDTO.Component component,
+    private void updateComponentReferences(JsonNode component,
                                            Map<String, String> componentIdMap,
-                                           Map<String, String> perspectiveIdMap) {
-        if (component.getBoundFilterIds() != null) {
-            List<String> newBoundFilterIds = component.getBoundFilterIds().stream()
-                    .map(oldId -> componentIdMap.getOrDefault(oldId, oldId))
-                    .collect(Collectors.toList());
-            component.setBoundFilterIds(newBoundFilterIds);
+                                           Map<String, String> perspectiveIdMap,
+                                           Map<String, String> tabIdMap) {
+        if (!component.isObject()) {
+            return;
         }
-        if (component.getPerspectiveIds() != null) {
-            List<String> newPerspectiveIds = component.getPerspectiveIds().stream()
-                    .map(oldId -> perspectiveIdMap.getOrDefault(oldId, oldId))
-                    .collect(Collectors.toList());
-            component.setPerspectiveIds(newPerspectiveIds);
+        ObjectNode componentObject = (ObjectNode) component;
+        remapStringArray(componentObject, "boundFilterIds", componentIdMap);
+        remapStringArray(componentObject, "perspectiveIds", perspectiveIdMap);
+
+        JsonNode containerConfig = component.path("containerConfig");
+        if (containerConfig.isObject()) {
+            ObjectNode containerObject = (ObjectNode) containerConfig;
+            String activeTab = textValue(containerConfig, "activeTab");
+            if (!activeTab.isBlank()) {
+                containerObject.put("activeTab", tabIdMap.getOrDefault(activeTab, activeTab));
+            }
+            updateTabChildren(containerConfig.path("tabs"), componentIdMap, perspectiveIdMap, tabIdMap);
         }
+        updateTabChildren(component.path("tabs"), componentIdMap, perspectiveIdMap, tabIdMap);
+        JsonNode children = component.path("children");
+        if (children.isArray()) {
+            for (JsonNode child : children) {
+                updateComponentReferences(child, componentIdMap, perspectiveIdMap, tabIdMap);
+            }
+        }
+    }
+
+    private void updateTabChildren(JsonNode tabs,
+                                   Map<String, String> componentIdMap,
+                                   Map<String, String> perspectiveIdMap,
+                                   Map<String, String> tabIdMap) {
+        if (!tabs.isArray()) {
+            return;
+        }
+        for (JsonNode tab : tabs) {
+            JsonNode children = tab.path("children");
+            if (children.isArray()) {
+                for (JsonNode child : children) {
+                    updateComponentReferences(child, componentIdMap, perspectiveIdMap, tabIdMap);
+                }
+            }
+        }
+    }
+
+    private void remapStringArray(ObjectNode object, String fieldName, Map<String, String> idMap) {
+        JsonNode values = object.path(fieldName);
+        if (!values.isArray()) {
+            return;
+        }
+        ArrayNode remapped = object.arrayNode();
+        for (JsonNode value : values) {
+            String oldId = value.asText();
+            remapped.add(idMap.getOrDefault(oldId, oldId));
+        }
+        object.set(fieldName, remapped);
+    }
+
+    private String textValue(JsonNode object, String fieldName) {
+        JsonNode value = object.get(fieldName);
+        return value != null && value.isTextual() ? value.asText() : "";
     }
 
     /**
@@ -866,7 +1349,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             }
             for (InsightDashboardSchemaDTO.Component c : page.getComponents()) {
                 InsightDashboardSchemaDTO.Position p = c.getPosition();
-                String pos = p == null ? "无" : String.format("(x=%d,y=%d,w=%d,h=%d)", p.getX(), p.getY(), p.getW(), p.getH());
+                String pos = p == null ? "无" : String.format("(x=%s,y=%s,w=%s,h=%s)", p.getX(), p.getY(), p.getW(), p.getH());
                 sb.append("  - id=").append(c.getId())
                         .append(" | type=").append(c.getType())
                         .append(" | title=").append(c.getTitle())
@@ -1187,10 +1670,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         InsightDashboardSchemaDTO.Position p = c.getPosition();
         if (op.getW() != null) {
-            p.setW(Math.max(1, Math.min(24, op.getW())));
+            p.setW((double) Math.max(1, Math.min(24, op.getW())));
         }
         if (op.getH() != null) {
-            p.setH(Math.max(1, Math.min(30, op.getH())));
+            p.setH((double) Math.max(1, Math.min(30, op.getH())));
         }
     }
 
@@ -1206,10 +1689,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         InsightDashboardSchemaDTO.Position p = c.getPosition();
         if (op.getX() != null) {
-            p.setX(Math.max(0, Math.min(23, op.getX())));
+            p.setX((double) Math.max(0, Math.min(23, op.getX())));
         }
         if (op.getY() != null) {
-            p.setY(Math.max(0, op.getY()));
+            p.setY((double) Math.max(0, op.getY()));
         }
     }
 
@@ -1256,6 +1739,10 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         c.setId(op.getId() != null && !op.getId().isBlank() ? op.getId() : generateSchemaId("comp"));
         c.setType(op.getType());
         c.setTitle(op.getTitle() != null && !op.getTitle().isBlank() ? op.getTitle() : resolveDefaultTitle(op.getType()));
+        c.setTitleIconStyle(op.getTitleIconStyle());
+        c.setThemeAccentGroup(op.getThemeAccentGroup());
+        c.setChildren(op.getChildren());
+        c.setContainerConfig(op.getContainerConfig());
         c.setChartType(op.getChartType());
         c.setRenderType(op.getRenderType() != null && !op.getRenderType().isBlank()
                 ? op.getRenderType() : resolveRenderType(op.getType()));
@@ -1263,6 +1750,7 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         c.setConfig(op.getConfig());
         c.setTabs(op.getTabs());
         c.setBoundFilterIds(op.getBoundFilterIds());
+        c.setKpiMetrics(op.getKpiMetrics());
         c.setPosition(op.getPosition());
         // timeFilter 默认 config
         if ("timeFilter".equals(op.getType()) && c.getConfig() == null) {
@@ -1284,6 +1772,18 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         if (op.getTitle() != null) {
             c.setTitle(op.getTitle());
         }
+        if (op.getTitleIconStyle() != null) {
+            c.setTitleIconStyle(op.getTitleIconStyle());
+        }
+        if (op.getThemeAccentGroup() != null) {
+            c.setThemeAccentGroup(op.getThemeAccentGroup());
+        }
+        if (op.getChildren() != null) {
+            c.setChildren(op.getChildren());
+        }
+        if (op.getContainerConfig() != null) {
+            c.setContainerConfig(op.getContainerConfig());
+        }
         if (op.getChartType() != null) {
             c.setChartType(op.getChartType());
         }
@@ -1301,6 +1801,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
         }
         if (op.getBoundFilterIds() != null) {
             c.setBoundFilterIds(op.getBoundFilterIds());
+        }
+        if (op.getKpiMetrics() != null) {
+            c.setKpiMetrics(op.getKpiMetrics());
         }
     }
 
@@ -1570,16 +2073,16 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
                 int col = componentIndex % DataAgentConstants.INSIGHT_GENERATE_COLUMNS_PER_ROW;
                 int row = componentIndex / DataAgentConstants.INSIGHT_GENERATE_COLUMNS_PER_ROW;
                 if (pos.getX() == null) {
-                    pos.setX(col * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
+                    pos.setX((double) (col * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W));
                 }
                 if (pos.getY() == null) {
-                    pos.setY(row * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
+                    pos.setY((double) (row * DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H));
                 }
                 if (pos.getW() == null || pos.getW() == 0) {
-                    pos.setW(DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
+                    pos.setW((double) DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_W);
                 }
                 if (pos.getH() == null || pos.getH() == 0) {
-                    pos.setH(DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
+                    pos.setH((double) DataAgentConstants.INSIGHT_GENERATE_DEFAULT_COMPONENT_H);
                 }
 
                 if (component.getRenderType() == null || component.getRenderType().isBlank()) {
@@ -1662,9 +2165,9 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
      * 写操作归属校验：存在性 + workspaceId 一致性 + 归属
      * （仅创建者本人 或 工作区 admin/owner 可修改/删除；历史无主数据仅管理员层级可维护）。
      */
-    private void requireOwnership(Long id) {
+    private InsightDashboardEntity requireOwnership(Long id) {
         InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
-        if (entity == null || entity.getDeleted() == 1) {
+        if (entity == null || (entity.getDeleted() != null && entity.getDeleted() == 1)) {
             throw new BusinessException(404, "仪表盘不存在: " + id);
         }
         Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
@@ -1673,6 +2176,24 @@ public class InsightDashboardServiceImpl implements InsightDashboardService {
             throw new BusinessException(403, "无权访问该仪表盘");
         }
         workspaceGuard.requireResourceOwner(entity.getOwnerId());
+        return entity;
+    }
+
+    /**
+     * 工作区内可见性校验（仅存在性 + workspace 一致，不校验归属）：
+     * 用于「复制」——模板/官方样例由他人或系统拥有，但工作区内成员可见即可派生。
+     */
+    private InsightDashboardEntity requireWorkspaceScoped(Long id) {
+        InsightDashboardEntity entity = insightDashboardMapper.selectById(id);
+        if (entity == null || (entity.getDeleted() != null && entity.getDeleted() == 1)) {
+            throw new BusinessException(404, "仪表盘不存在: " + id);
+        }
+        Long currentWorkspaceId = workspaceGuard.currentWorkspaceId();
+        if (entity.getWorkspaceId() == null
+                || !entity.getWorkspaceId().equals(currentWorkspaceId)) {
+            throw new BusinessException(403, "无权访问该仪表盘");
+        }
+        return entity;
     }
 
     private InsightDashboardVO toVO(InsightDashboardEntity entity) {

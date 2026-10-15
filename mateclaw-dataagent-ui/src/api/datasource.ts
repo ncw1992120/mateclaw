@@ -82,6 +82,67 @@ export function previewTableData(datasourceId: string, tableId: string, limit: n
   )
 }
 
+/** 查询 Aloudata 已授权指标视图目录（只读） */
+export interface AloudataAnalysisViewSummary {
+  id: string
+  viewName: string
+  displayName: string
+  categoryId?: string
+  categoryName?: string
+}
+
+export function listAnalysisViews(datasourceId: string | number) {
+  return api.get<AloudataAnalysisViewSummary[]>(`${BASE_URL}/${datasourceId}/analysis-views`)
+}
+
+/** Aloudata 指标视图平铺列表项（带归属信息，用于「只看我的」） */
+export interface AloudataAnalysisViewItem {
+  id: string
+  viewName: string
+  displayName: string
+  description?: string
+  /** 视图创建者（Aloudata UID） */
+  owner?: string
+  /** 是否归属当前认证账号 */
+  mine?: boolean
+}
+
+/**
+ * 平铺查询 Aloudata 指标视图（支持关键字搜索与「只看我的」）。
+ * 注意：Aloudata 列表接口本身不过滤权限，「只看我的」按 owner 近似过滤，
+ * 不等价于「一定有取数权限」。
+ */
+export function searchAnalysisViews(
+  datasourceId: string | number,
+  params: { keyword?: string; onlyMine?: boolean } = {},
+) {
+  return api.get<AloudataAnalysisViewItem[]>(`${BASE_URL}/${datasourceId}/analysis-views/list`, { params })
+}
+
+/** Aloudata 指标视图字段（指标/维度）的名称、展示名与描述 */
+export interface AloudataAnalysisViewField {
+  name: string
+  displayName?: string
+  description?: string
+  /** measure（指标）| dimension（维度） */
+  role?: string
+}
+
+/**
+ * 查询指标视图的字段清单（指标 + 维度，含展示名与描述）。
+ * 视图详情只返回名称数组，展示名/描述由后端聚合指标详情与维度列表补齐。
+ */
+export function listAnalysisViewFields(datasourceId: string | number, viewName: string) {
+  return api.get<AloudataAnalysisViewField[]>(
+    `${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}/fields`,
+  )
+}
+
+/** 查询已选 Aloudata 指标视图详情 */
+export function getAnalysisView(datasourceId: string | number, viewName: string) {
+  return api.get(`${BASE_URL}/${datasourceId}/analysis-views/${encodeURIComponent(viewName)}`)
+}
+
 // ==================== Aloudata 语义层同步 ====================
 
 /** 触发 Aloudata 语义层全量同步 */

@@ -3,12 +3,28 @@
     <!-- 数据源配置表单页（直接打开，不再走选择页） -->
     <DatasourceForm
       v-if="showFormPage"
-      :source-id="60"
+      :source-id="selectedSourceTypeId"
       :edit-id="editingDsId"
       @back="handleBackFromForm"
       @cancel="handleBackFromForm"
       @submit="handleFormSubmit"
     />
+
+    <div v-else-if="showSourcePicker" class="source-picker-page">
+      <div class="source-picker-card">
+        <h1>{{ jdbcSourcePickerStep ? '选择 JDBC 数据库' : '选择数据源类型' }}</h1>
+        <p>{{ jdbcSourcePickerStep ? '选择数据库引擎，再填写连接信息。' : '先选择连接方式，再填写连接信息。HTTP/API 与文件对象在数据集配置中登记。' }}</p>
+        <button v-if="jdbcSourcePickerStep" class="source-picker-back" @click="jdbcSourcePickerStep = false">← 返回</button>
+        <div class="source-options">
+          <button v-for="source in sourceOptions" :key="source.id" class="source-option" :class="{ 'source-option--disabled': source.disabled }" :disabled="source.disabled" :title="source.disabled ? '开发中，还未上线，敬请期待' : undefined" :aria-label="`选择${source.name}数据源`" @click="selectSourceType(source.id)">
+            <AloudataBrandMark v-if="source.id === 60" class="source-option-icon" />
+            <span v-else class="source-option-icon">{{ source.icon }}</span>
+            <span><strong>{{ source.name }}</strong><small>{{ source.description }}</small></span>
+          </button>
+        </div>
+        <button class="source-picker-cancel" @click="showSourcePicker = false">取消</button>
+      </div>
+    </div>
 
     <template v-else>
       <!-- 身份页头：标题 + 启停统计 + 描述（左） + 主操作（右），与技能/智能体页同一版式语言 -->
@@ -49,7 +65,7 @@
             </svg>
             <span class="btn-text">{{ uidSyncing ? t('datasourcePage.uidSyncing') : t('datasourcePage.uidSyncBtn') }}</span>
           </button>
-          <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" type="button" class="btn-create-pill" @click="handleCreateDatasource">
+          <button v-if="hasPermission(PERMISSION.DATASOURCE_CREATE)" type="button" class="btn-create-pill btn-create-top" @click="handleCreateDatasource">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
@@ -65,7 +81,7 @@
       </div>
 
       <!-- 全局空态：线型 SVG chip + 文案 + 新建按钮，与技能/智能体页同形态 -->
-      <div v-else-if="!loading && metricPlatformList.length === 0" class="global-empty surface-card">
+      <div v-else-if="!loading && datasources.length === 0" class="global-empty surface-card">
         <div class="global-empty-icon">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <ellipse cx="12" cy="5" rx="9" ry="3" />
@@ -81,15 +97,20 @@
 
       <!-- 主从布局：左侧数据源列表 / 右侧数据源详情 -->
       <div v-else class="master-detail-layout">
-        <!-- 左侧：数据源列表（仅指标平台） -->
+        <!-- 左侧：按当前工作区权限过滤的数据源列表 -->
         <aside class="ds-sidebar">
           <div class="ds-list-scroll">
             <div
-              v-for="ds in metricPlatformList"
+              v-for="ds in datasources"
               :key="ds.id"
               class="ds-list-item"
               :class="{ active: selectedDsId === ds.id, disabled: !ds.enabled }"
+              role="button"
+              tabindex="0"
+              :aria-label="`选择数据源：${ds.name}`"
               @click="handleSelectDs(ds)"
+              @keydown.enter="handleSelectDs(ds)"
+              @keydown.space.prevent="handleSelectDs(ds)"
             >
               <span class="item-icon">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -98,70 +119,62 @@
                   <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" />
                 </svg>
               </span>
-              <!-- 单行紧凑布局：名称弹性占据剩余空间，共享标签/账号徽标/操作按钮依次右靠 -->
-              <span class="item-name" :title="ds.name">{{ ds.name }}</span>
-              <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
-              <div
-                class="item-account-badge"
-                :class="resolveAccountBadge(ds.id).dotClass"
-                :title="`查询账号：${resolveAccountBadge(ds.id).text}`"
-              >
-                <span class="badge-dot"></span>
-                <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
-                <span
-                  v-if="resolveAccountBadge(ds.id).testOk !== null"
-                  class="badge-test"
-                  :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
-                  :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
-                >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
-              </div>
-              <!-- 「⋯」更多菜单：重命名/删除收进下拉，行面只留一个安静触发器 -->
-              <el-dropdown
-                v-if="ds.permission === 'edit'"
-                class="item-more"
-                trigger="click"
-                popper-class="ds-more-popper"
-                @command="(cmd: string | number | object) => handleItemCommand(cmd, ds)"
-              >
-                <button class="item-more-btn" :title="t('datasourcePage.moreActions')" @click.stop>
-                  <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" aria-hidden="true">
-                    <circle cx="5" cy="12" r="1.7" />
-                    <circle cx="12" cy="12" r="1.7" />
-                    <circle cx="19" cy="12" r="1.7" />
-                  </svg>
-                </button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="rename">
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <div class="item-info">
+                <div class="item-main-row">
+                  <span class="item-name">{{ ds.name }}</span>
+                  <div v-if="ds.permission === 'edit'" class="item-actions" @click.stop @keydown.stop>
+                    <button
+                      class="item-action-btn"
+                      :title="t('datasourcePage.actionRename')"
+                      :aria-label="t('datasourcePage.actionRename')"
+                      @click="handleRename(ds)"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
                       </svg>
-                      {{ t('datasourcePage.actionRename') }}
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete" class="danger">
-                      <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    </button>
+                    <button
+                      class="item-action-btn danger"
+                      :title="t('datasourcePage.actionDelete')"
+                      :aria-label="t('datasourcePage.actionDelete')"
+                      @click="handleDelete(ds)"
+                    >
+                      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="3 6 5 6 21 6"/>
                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                         <line x1="10" y1="11" x2="10" y2="17"/>
                         <line x1="14" y1="11" x2="14" y2="17"/>
                       </svg>
-                      {{ t('datasourcePage.actionDelete') }}
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+                    </button>
+                  </div>
+                </div>
+                <div class="item-meta-row">
+                  <span class="item-type">{{ displaySourceType(ds.sourceType) }}</span>
+                  <span v-if="ds.metaShared" class="item-shared-tag">共享</span>
+                  <div class="item-account-badge" :class="resolveAccountBadge(ds.id).dotClass">
+                    <span class="badge-dot"></span>
+                    <span class="badge-text">{{ resolveAccountBadge(ds.id).text }}</span>
+                    <span
+                      v-if="resolveAccountBadge(ds.id).testOk !== null"
+                      class="badge-test"
+                      :class="resolveAccountBadge(ds.id).testOk ? 'test-ok' : 'test-fail'"
+                      :title="resolveAccountBadge(ds.id).testOk ? '连接正常' : '连接失败'"
+                    >{{ resolveAccountBadge(ds.id).testOk ? '✓' : '✗' }}</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </aside>
 
-        <!-- 右侧：数据源详情（指标平台专属视图） -->
+        <!-- 右侧：按来源类型展示数据源详情 -->
         <main class="ds-detail">
           <!-- 顶部操作工具栏：启停 / 测试 / 同步 -->
           <div v-if="selectedDs" class="detail-toolbar">
             <div class="toolbar-left">
               <span class="ds-name">{{ selectedDs.name }}</span>
-              <span class="ds-type-tag">{{ t('datasourcePage.typeMetricPlatform') }}</span>
+              <span class="ds-type-tag">{{ displaySourceType(selectedDs.sourceType) }}</span>
               <span class="ds-status" :class="selectedDs.enabled ? 'on' : 'off'">
                 {{ selectedDs.enabled ? t('datasourcePage.statusEnabled') : t('datasourcePage.statusDisabled') }}
               </span>
@@ -196,7 +209,7 @@
                 <span class="btn-text">{{ t('datasourcePage.actionTest') }}</span>
               </button>
               <button
-                v-if="canSyncMetadata"
+                v-if="canSyncMetadata && isAloudataDatasource"
                 class="toolbar-btn"
                 :disabled="syncing || debouncedSyncPending"
                 :title="t('metricPlatform.syncTrigger')"
@@ -225,9 +238,20 @@
 
           <div v-if="selectedDsId" class="detail-body">
             <MetricPlatformPanel
+              v-if="isAloudataDatasource"
               :datasource-id="selectedDsId"
               :refresh-key="panelRefreshKey"
             />
+            <div v-else class="generic-datasource-panel">
+              <h2>{{ selectedDs.name }}</h2>
+              <p>JDBC 数据源已接入，可在数据集配置中选择数据表或编写标准 SQL。</p>
+              <dl>
+                <dt>连接地址</dt><dd>{{ selectedDs.host || '未公开' }}{{ selectedDs.port ? `:${selectedDs.port}` : '' }}</dd>
+                <dt>数据库</dt><dd>{{ selectedDs.databaseName || '未配置' }}</dd>
+                <dt>元数据表数</dt><dd>{{ selectedDs.tableCount ?? 0 }}</dd>
+              </dl>
+              <button v-if="selectedDs.permission === 'edit'" class="generic-edit-btn" @click="handleEditDatasource(selectedDs)">编辑连接</button>
+            </div>
           </div>
           <div v-else class="detail-placeholder">
             <p>{{ t('datasourcePage.selectSource') }}</p>
@@ -293,6 +317,7 @@ import type { Datasource } from '@/types'
 import { encryptSensitiveField } from '@/utils/sensitiveCrypto'
 import DatasourceForm from './datasource/DatasourceForm.vue'
 import MetricPlatformPanel from './datasource/MetricPlatformPanel.vue'
+import AloudataBrandMark from '@/components/AloudataBrandMark.vue'
 
 const { t } = useI18n()
 const store = useDatasourceStore()
@@ -305,6 +330,9 @@ const METRIC_PLATFORM_TYPES = new Set(['aloudata', 'metric_platform', 'metricpla
 
 /** 是否显示数据源配置表单页 */
 const showFormPage = ref(false)
+const showSourcePicker = ref(false)
+const jdbcSourcePickerStep = ref(false)
+const selectedSourceTypeId = ref(3)
 /** 当前编辑的数据源ID（空字符串表示新建） */
 const editingDsId = ref('')
 const selectedDsId = ref('')
@@ -323,18 +351,13 @@ const uidMappingMap = ref<Map<string, UserUidMappingStatusVO>>(new Map())
 /** 是否可同步元数据（后端 /aloudata/sync 实际挂 @RequireGlobalAdmin，工作区 admin/owner 点了会被拒，按钮可见性与之对齐） */
 const canSyncMetadata = computed<boolean>(() => userStore.isAdmin)
 
-/** 仅展示指标平台数据源 */
-const metricPlatformList = computed<Datasource[]>(() => {
-  return datasources.value.filter((ds) => METRIC_PLATFORM_TYPES.has((ds.sourceType || '').toLowerCase()))
-})
-
 /** 当前选中的数据源对象 */
 const selectedDs = computed<Datasource | null>(() => {
-  return metricPlatformList.value.find((d) => d.id === selectedDsId.value) || null
+  return datasources.value.find((d) => d.id === selectedDsId.value) || null
 })
 
 /** 选中数据源后默认选中第一个 */
-watch(metricPlatformList, (list) => {
+watch(datasources, (list) => {
   if (list.length > 0 && !list.some((d) => d.id === selectedDsId.value)) {
     selectedDsId.value = list[0].id
   }
@@ -348,8 +371,8 @@ const statsReady = ref(false)
 
 /** 启停统计：与侧栏列表同源 */
 const statusCounts = computed(() => ({
-  enabled: metricPlatformList.value.filter((d) => d.enabled).length,
-  disabled: metricPlatformList.value.filter((d) => !d.enabled).length,
+  enabled: datasources.value.filter((d) => d.enabled).length,
+  disabled: datasources.value.filter((d) => !d.enabled).length,
 }))
 
 onMounted(async () => {
@@ -472,12 +495,59 @@ function resolveAccountBadge(dsId: string): { text: string; dotClass: string; te
 /** 跳转到新建数据源 */
 function handleCreateDatasource(): void {
   editingDsId.value = ''
+  jdbcSourcePickerStep.value = false
+  showSourcePicker.value = true
+}
+
+function displaySourceType(sourceType?: string): string {
+  const value = (sourceType || '').toLowerCase()
+  if (METRIC_PLATFORM_TYPES.has(value)) return t('datasourcePage.typeMetricPlatform')
+  if (value === 'mysql') return 'MySQL'
+  if (value === 'postgresql') return 'PostgreSQL'
+  if (value === 'sqlserver') return 'SQL Server'
+  if (value === 'doris') return 'Doris'
+  if (value === 'clickhouse') return 'ClickHouse'
+  if (value === 'starrocks') return 'StarRocks'
+  return 'JDBC'
+}
+
+function handleEditDatasource(ds: Datasource): void {
+  editingDsId.value = ds.id
+  showFormPage.value = true
+}
+
+const jdbcSourceOptions = [
+  { id: 3, name: 'MySQL', icon: '🐬', description: '关系型数据库' },
+  { id: 15, name: 'PostgreSQL', icon: '🐘', description: '关系型数据库' },
+  { id: 17, name: 'SQL Server', icon: '🔷', description: '关系型数据库' },
+  { id: 61, name: 'Doris', icon: '🐿️', description: 'OLAP 数据库 · MySQL 协议' },
+  { id: 62, name: 'ClickHouse', icon: '🟡', description: 'OLAP 数据库' },
+  { id: 63, name: 'StarRocks', icon: '⭐', description: 'OLAP 数据库' },
+]
+
+const sourceOptions = computed(() => jdbcSourcePickerStep.value
+  ? jdbcSourceOptions
+  : [
+      { id: 60, name: 'Aloudata', icon: '', description: '指标视图语义层' },
+      { id: 'jdbc' as const, name: 'JDBC', icon: '🔌', description: '开发中，还未上线，敬请期待', disabled: true },
+    ])
+
+function selectSourceType(sourceId: number | 'jdbc'): void {
+  if (sourceId === 'jdbc') {
+    jdbcSourcePickerStep.value = true
+    return
+  }
+  selectedSourceTypeId.value = sourceId
+  jdbcSourcePickerStep.value = false
+  showSourcePicker.value = false
   showFormPage.value = true
 }
 
 /** 表单页返回列表 */
 function handleBackFromForm(): void {
   showFormPage.value = false
+  showSourcePicker.value = false
+  jdbcSourcePickerStep.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -485,6 +555,8 @@ function handleBackFromForm(): void {
 /** 表单提交成功 */
 function handleFormSubmit(): void {
   showFormPage.value = false
+  showSourcePicker.value = false
+  jdbcSourcePickerStep.value = false
   editingDsId.value = ''
   store.fetchDatasources()
 }
@@ -629,6 +701,8 @@ async function doSync(): Promise<void> {
   try {
     const result = await datasourceApi.syncAloudataSemantic(selectedDs.value.id)
     if (result?.status === 'completed') {
+      // 同步写入语义层后强制刷新右侧指标/维度面板，避免用户仍看到同步前的空态。
+      panelRefreshKey.value += 1
       ElMessage.success(t('metricPlatform.syncSuccess'))
     } else {
       ElMessage.error(result?.message || t('metricPlatform.syncFailed'))
@@ -806,6 +880,28 @@ async function handleTestAccountConnection(): Promise<void> {
   background: transparent;
   overflow: hidden;
 }
+
+.source-picker-page { flex: 1; display: flex; align-items: center; justify-content: center; padding: 32px; background: var(--theme-bg); }
+.source-picker-card { width: min(760px, 100%); padding: 32px; border: 1px solid var(--theme-border); border-radius: 16px; background: var(--theme-surface); box-shadow: 0 8px 32px rgba(0,0,0,.06); }
+.source-picker-card h1 { margin: 0 0 8px; color: var(--theme-text); font-size: 24px; }
+.source-picker-card p { margin: 0 0 24px; color: var(--theme-text-muted); }
+.source-picker-back { margin: -12px 0 16px; padding: 4px 0; border: 0; background: transparent; color: var(--main-orange); cursor: pointer; }
+.source-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.source-option { display: flex; align-items: center; gap: 14px; padding: 16px; text-align: left; border: 1px solid var(--theme-border); border-radius: 10px; background: var(--theme-bg); color: var(--theme-text); cursor: pointer; }
+.source-option:hover:not(:disabled) { border-color: var(--main-orange); background: var(--theme-surface-hover); }
+.source-option--disabled { color: var(--theme-text-muted); opacity: .55; cursor: not-allowed; }
+.source-option-icon { font-size: 26px; }
+.source-option strong, .source-option small { display: block; }
+.source-option small { margin-top: 4px; color: var(--theme-text-muted); }
+.source-picker-cancel { margin-top: 20px; padding: 8px 16px; border: 1px solid var(--theme-border); border-radius: 8px; background: transparent; color: var(--theme-text); cursor: pointer; }
+.generic-datasource-panel { padding: 28px; color: var(--theme-text); }
+.generic-datasource-panel h2 { margin: 0 0 8px; font-size: 20px; }
+.generic-datasource-panel p { margin: 0 0 20px; color: var(--theme-text-muted); }
+.generic-datasource-panel dl { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 16px; max-width: 560px; }
+.generic-datasource-panel dt { color: var(--theme-text-muted); }
+.generic-datasource-panel dd { margin: 0; color: var(--theme-text); }
+.generic-edit-btn { margin-top: 20px; padding: 8px 14px; border: 1px solid var(--main-orange); border-radius: 8px; color: var(--main-orange); background: transparent; cursor: pointer; }
+@media (max-width: 640px) { .source-options { grid-template-columns: 1fr; } }
 
 /* 身份页头：标题/描述靠左，主操作靠右，单行对齐 */
 .ds-content-header {

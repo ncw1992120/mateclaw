@@ -17,4 +17,7 @@ public class DatasetCreateRequest {
     private String datasourceId;
 
     private List<String> tableIds;
+
+    /** 新版类型化来源定义；为空时沿用旧 JDBC_TABLE 请求。 */
+    private DatasetSourceDefinition sourceDefinition;
 }

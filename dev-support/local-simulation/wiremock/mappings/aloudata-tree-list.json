@@ -1,0 +1,12 @@
+{
+  "request": {"method": "GET", "urlPath": "/anymetrics/api/v1/analysisview/treeList"},
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {
+      "code": "200",
+      "success": true,
+      "data": [{"id":"local-sales-folder","name":"本地模拟指标视图","children":[{"id":"local-sales-view","name":"local_sales_view","type":"ANALYSIS_VIEW"}]}]
+    }
+  }
+}

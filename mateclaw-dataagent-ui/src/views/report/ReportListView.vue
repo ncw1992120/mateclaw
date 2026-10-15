@@ -15,6 +15,7 @@
       </div>
       <el-input
         v-model="searchKeyword"
+        aria-label="搜索报告"
         :placeholder="t('insight.reportSearchPlaceholder')"
         :prefix-icon="Search"
         clearable
@@ -32,7 +33,11 @@
         type="button"
         class="tab-btn"
         :class="{ active: activeTab === tab.key }"
+        role="tab"
+        :aria-selected="String(activeTab === tab.key)"
+        :tabindex="activeTab === tab.key ? 0 : -1"
         @click="switchTab(tab.key)"
+        @keydown="handleTabKeydown($event, tab.key)"
       >
         <svg v-if="tab.key === 'mine'" class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <svg v-else-if="tab.key === 'square'" class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
@@ -89,7 +94,12 @@
           v-for="report in filteredReports"
           :key="report.id"
           class="report-card"
+          role="button"
+          tabindex="0"
+          :aria-label="`查看报告：${report.name}`"
           @click="handleViewReport(report)"
+          @keydown.enter="handleViewReport(report)"
+          @keydown.space.prevent="handleViewReport(report)"
         >
           <div class="card-header">
             <span class="card-name">{{ report.name }}</span>
@@ -358,6 +368,26 @@ function switchTab(key: TabKey): void {
   }
   activeTab.value = key
   loadReports()
+}
+
+function handleTabKeydown(event: KeyboardEvent, key: TabKey): void {
+  const currentIndex = tabs.findIndex((tab) => tab.key === key)
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % tabs.length
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex + tabs.length - 1) % tabs.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = tabs.length - 1
+  else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    switchTab(key)
+    return
+  } else return
+  event.preventDefault()
+  const nextKey = tabs[nextIndex].key
+  switchTab(nextKey)
+  requestAnimationFrame(() => {
+    document.querySelector<HTMLElement>(`.tab-bar .tab-btn:nth-child(${nextIndex + 1})`)?.focus()
+  })
 }
 
 /** 加载报告列表 */

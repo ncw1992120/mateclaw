@@ -26,6 +26,18 @@ public class DatasetEntity {
     /** 关联数据源 ID */
     private Long datasourceId;
 
+    /** 统一数据集来源类型：JDBC_TABLE/JDBC_SQL/ALOUDATA_ANALYSIS_VIEW/HTTP_API/FILE */
+    @TableField("source_type")
+    private String sourceType;
+
+    /** 来源配置（仅 DataAgent 内部使用，禁止返回 Runner） */
+    @TableField("source_config")
+    private String sourceConfig;
+
+    /** 数据集契约版本 */
+    @TableField("schema_version")
+    private Integer schemaVersion;
+
     /** 数据源名称（冗余存储，便于列表展示） */
     private String datasourceName;
 

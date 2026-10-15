@@ -1,6 +1,6 @@
 <template>
-  <div class="skills-page">
-    <!-- 固定头部：身份页头 + 筛选行，滚动时保持可见 -->
+  <div ref="skillsPageRef" class="skills-page">
+      <!-- 固定头部：身份页头 + 筛选行，滚动时保持可见 -->
     <div class="skills-fixed">
       <!-- 内容区身份页头：标题 + 一句描述（左） + 主操作（右）；页面级页头已并入侧栏，内容区自带身份锚点 -->
       <div class="skill-content-header">
@@ -534,7 +534,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onUpdated, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { ElMessage, ElMessageBox, ElPagination } from 'element-plus'
 import { Plus, Search, Check } from '@element-plus/icons-vue'
@@ -547,6 +547,15 @@ import ImportSkillDialog from './ImportSkillDialog.vue'
 const { t, locale } = useI18n()
 const agentStore = useAgentStore()
 const { hasPermission } = usePermission()
+
+const skillsPageRef = ref<HTMLElement | null>(null)
+
+/** Element Plus 分页尺寸选择器的内部 combobox 不会继承分页容器的 aria-label，补上稳定名称。 */
+function labelPaginationSizeSelectors(): void {
+  skillsPageRef.value?.querySelectorAll<HTMLInputElement>('.skill-pagination input.el-select__input').forEach((input, index) => {
+    if (!input.getAttribute('aria-label')) input.setAttribute('aria-label', `技能分页每页条数${index + 1}`)
+  })
+}
 
 /** 当前工作区 ID：优先从当前 Agent 获取，否则取列表中第一个 Agent 的，最后兜底 1 */
 const currentWorkspaceId = computed<number>(() => {
@@ -915,8 +924,10 @@ onMounted(() => {
   console.log('[SkillManage] 初始化, workspaceId:', currentWorkspaceId.value)
   window.addEventListener('resize', handleWindowResize)
   loadAll()
+  labelPaginationSizeSelectors()
 })
 
+onUpdated(labelPaginationSizeSelectors)
 onBeforeUnmount(() => {
   window.removeEventListener('resize', handleWindowResize)
 })

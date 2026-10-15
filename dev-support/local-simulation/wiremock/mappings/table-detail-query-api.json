@@ -1,0 +1,27 @@
+{
+  "name": "table-detail-query-api",
+  "request": {
+    "method": "POST",
+    "urlPath": "/mock/api/table-detail-query"
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": {
+      "code": 0,
+      "data": {
+        "rows": [
+          { "metric_date": "2026-09-01", "strategy_id": "A", "region": "east", "in_account": 120.5 },
+          { "metric_date": "2026-09-01", "strategy_id": "B", "region": "east", "in_account": 80.0 },
+          { "metric_date": "2026-09-30", "strategy_id": "A", "region": "west", "in_account": 60.0 }
+        ],
+        "total": 3
+      }
+    }
+  },
+  "metadata": {
+    "purpose": "表格详情页查询链路（实施计划任务 8）：HTTP API 数据源有界残余场景",
+    "coverage": "固定 3 行 fixture：重复维度、日期边界内/外（2026-10-01 不存在 → 半开区间）、分页总数",
+    "note": "HTTP 源端不支持排序下推：orders 由 DataAgent ResidualRowOperations 有界残余执行"
+  }
+}

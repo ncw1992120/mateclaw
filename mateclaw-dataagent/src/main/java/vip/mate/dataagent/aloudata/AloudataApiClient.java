@@ -1,9 +1,12 @@
 package vip.mate.dataagent.aloudata;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.*;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
@@ -42,7 +45,12 @@ public class AloudataApiClient {
 
     private final AloudataEndpointService endpointService;
     private final RestTemplate restTemplate;
+    private final RestTemplate pickerRestTemplate;
     private final CircuitBreaker circuitBreaker;
+
+    private static final Set<String> UNBOUNDED_PICKER_ENDPOINTS = Set.of(
+            "category_list", "metric_tree", "metric_list", "dimension_list",
+            "metric_dimensions", "metric_all_dimensions", "metric_batch_detail", "dimension_detail");
 
     /**
      * 构造客户端：按保护配置初始化 HTTP 超时，并从 Resilience4j 注册表获取
@@ -52,6 +60,7 @@ public class AloudataApiClient {
      * @param circuitBreakerRegistry  Resilience4j 熔断器注册表（由 spring-boot3 starter 自动装配）
      * @param protectionProperties    服务保护配置
      */
+    @Autowired
     public AloudataApiClient(AloudataEndpointService endpointService,
                              CircuitBreakerRegistry circuitBreakerRegistry,
                              ProtectionProperties protectionProperties) {
@@ -60,9 +69,32 @@ public class AloudataApiClient {
         factory.setConnectTimeout(protectionProperties.getAloudata().getConnectTimeoutMs());
         factory.setReadTimeout(protectionProperties.getAloudata().getReadTimeoutMs());
         this.restTemplate = new RestTemplate(factory);
+        this.pickerRestTemplate = createUnboundedPickerRestTemplate();
         this.circuitBreaker = circuitBreakerRegistry
                 .circuitBreaker(DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA);
     }
+
+    /** 供内置 mock 和轻量单元测试复用的无 Spring 保护配置构造器。 */
+    public AloudataApiClient(AloudataEndpointService endpointService) {
+        this.endpointService = endpointService;
+        this.restTemplate = new RestTemplate();
+        this.pickerRestTemplate = createUnboundedPickerRestTemplate();
+        this.circuitBreaker = CircuitBreaker.ofDefaults(DataAgentConstants.CIRCUIT_BREAKER_ALOUDATA);
+    }
+
+    private RestTemplate createUnboundedPickerRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(0);
+        factory.setReadTimeout(0);
+        return new RestTemplate(factory);
+    }
+
+    /**
+     * 是否输出 Aloudata 实际请求明细。默认关闭，避免生产日志泄露筛选值；联调时可通过
+     * {@code MATECLAW_ALOUDATA_LOG_REQUEST=true} 打开。认证值始终脱敏。
+     */
+    @Value("${mateclaw.aloudata.log-request:false}")
+    private boolean requestLogEnabled;
 
     /** anymetrics 默认端口 */
     private static final int DEFAULT_ANYMETRICS_PORT = 8083;
@@ -101,10 +133,7 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         HttpMethod method = resolveMethod(endpointName);
-        HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
-
-        log.debug("调用 Aloudata API: {} {}", method, url);
-        return executeProtected(endpointName, url, method, entity);
+        return send(new PreparedRequest(endpointName, method, path, url, Map.of(), requestBody, headers));
     }
 
     /**
@@ -125,15 +154,40 @@ public class AloudataApiClient {
      * @param params       参数 Map，key 为参数名，value 为参数值
      * @return 原始响应体
      */
+    /**
+     * 基于参数规范的 API 调用
+     * <p>
+     * 与正式调用唯一的分叉点：本方法只负责「按端点声明把参数变成一次 HTTP 请求」，
+     * 真正的发送在 {@link #send(PreparedRequest)}；本地 mock 复用的正是这一段，
+     * 因此 mock 与正式在路径、参数、请求方式、参数校验上完全一致，只有 host:port 不同。
+     */
     public ResponseEntity<Map> callWithParams(String endpointName, AloudataConfigDTO config,
                                               Map<String, Object> params) {
+        return send(prepare(endpointName, config, params));
+    }
+
+    /**
+     * 按端点声明构造请求：默认值填充 → 必填/枚举校验 → 按 paramLocation 分发 → 拼 URL。
+     * <p>
+     * 这是「一次 Aloudata 调用」的唯一契约来源；本地 mock 与真实调用共用，避免 mock 与
+     * 正式环境在参数名、请求方式、参数校验上出现漂移（历史 bug 的主要来源）。
+     */
+    protected PreparedRequest prepare(String endpointName, AloudataConfigDTO config,
+                                      Map<String, Object> params) {
         ApiEndpoint endpoint = endpointService.getEndpoint(endpointName);
         if (endpoint == null) {
             throw new IllegalArgumentException("未定义的 API 端点: " + endpointName);
         }
 
         // 合并默认值：对有 defaultValue 但未传入的参数自动填充
-        Map<String, Object> effectiveParams = applyDefaults(endpoint, params);
+        Map<String, Object> effectiveParams = new LinkedHashMap<>();
+        if (params != null) effectiveParams.putAll(params);
+        // 认证参数来自数据源连接上下文，不要求每个调用方重复传递；同时保留
+        // 显式参数覆盖能力以兼容历史调用。
+        effectiveParams.putIfAbsent("tenant-id", config.getTenantId());
+        effectiveParams.putIfAbsent("auth-type", config.getAuthType() != null ? config.getAuthType() : "UID");
+        effectiveParams.putIfAbsent("auth-value", config.getAuthValue());
+        effectiveParams = applyDefaults(endpoint, effectiveParams);
 
         // 参数校验
         validateParams(endpoint, effectiveParams);
@@ -142,7 +196,8 @@ public class AloudataApiClient {
         HttpHeaders headers = buildAuthHeaders(config);
 
         Map<String, String> pathVariables = new LinkedHashMap<>();
-        List<String[]> queryParams = new ArrayList<>();
+        List<String[]> rawQueryParams = new ArrayList<>();
+        Map<String, Object> queryParams = new LinkedHashMap<>();
         Map<String, Object> bodyParams = new LinkedHashMap<>();
 
         for (ApiParam paramDef : endpoint.getRequestParams()) {
@@ -162,19 +217,20 @@ public class AloudataApiClient {
                     if (value instanceof Collection<?> collection) {
                         for (Object item : collection) {
                             if (item != null) {
-                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                                rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
                             }
                         }
                     } else if (value.getClass().isArray()) {
                         for (int i = 0; i < java.lang.reflect.Array.getLength(value); i++) {
                             Object item = java.lang.reflect.Array.get(value, i);
                             if (item != null) {
-                                queryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
+                                rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(item)});
                             }
                         }
                     } else {
-                        queryParams.add(new String[]{paramDef.getName(), String.valueOf(value)});
+                        rawQueryParams.add(new String[]{paramDef.getName(), String.valueOf(value)});
                     }
+                    queryParams.put(paramDef.getName(), value);
                 }
                 case "BODY" -> bodyParams.put(paramDef.getName(), value);
                 default -> log.warn("未知的参数位置类型 [{}]: {}", paramDef.getName(), location);
@@ -186,19 +242,98 @@ public class AloudataApiClient {
         String url = buildUrl(endpointName, path, config, pathVariables);
 
         // 追加查询参数
-        if (!queryParams.isEmpty()) {
-            String queryString = queryParams.stream()
+        if (!rawQueryParams.isEmpty()) {
+            String queryString = rawQueryParams.stream()
                     .map(pair -> pair[0] + "=" + pair[1])
                     .collect(Collectors.joining("&"));
             url += (url.contains("?") ? "&" : "?") + queryString;
         }
 
-        Object requestBody = bodyParams.isEmpty() ? null : bodyParams;
         HttpMethod method = resolveMethod(endpointName);
-        HttpEntity<?> entity = new HttpEntity<>(requestBody, headers);
+        return new PreparedRequest(endpointName, method, path, url, queryParams, bodyParams, headers);
+    }
 
-        log.debug("调用 Aloudata API (参数规范): {} {}", method, url);
-        return executeProtected(endpointName, url, method, entity);
+    /** 真正发起 HTTP；本地 mock 只覆写这一步，URL/参数/方法均由 {@link #prepare} 保证一致。 */
+    protected ResponseEntity<Map> send(PreparedRequest request) {
+        HttpEntity<?> entity = new HttpEntity<>(request.body(), request.headers());
+        if (requestLogEnabled) {
+            log.info("{}", formatRequestLog(request));
+            log.info("[aloudata-curl] {}", formatCurlCommand(request));
+        } else {
+            log.debug("调用 Aloudata API (参数规范): {} {}", request.method(), request.url());
+        }
+        return executeProtected(request.endpointName(), request.url(), request.method(), entity);
+    }
+
+    /**
+     * 格式化实际发出的请求，供联调日志和测试复用。query/body 是已经经过端点参数规范
+     * 分发后的最终值，不是页面草稿；auth-value 只显示掩码。
+     */
+    public static String formatRequestLog(PreparedRequest request) {
+        return String.format("[aloudata-request] endpoint=%s method=%s url=%s queryParams=%s body=%s",
+                request.endpointName(), request.method(), request.url(),
+                sanitizeRequestParams(request.queryParams()), sanitizeRequestParams(request.body()));
+    }
+
+    private static Object sanitizeRequestParams(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            Map<Object, Object> sanitized = new LinkedHashMap<>();
+            map.forEach((key, nestedValue) -> sanitized.put(key,
+                    isSensitiveParameter(String.valueOf(key)) ? "***" : sanitizeRequestParams(nestedValue)));
+            return sanitized;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(AloudataApiClient::sanitizeRequestParams).toList();
+        }
+        return value;
+    }
+
+    private static boolean isSensitiveParameter(String name) {
+        String normalized = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        return normalized.equals("auth-value") || normalized.contains("authorization") || normalized.contains("token");
+    }
+
+    /** 仅供联调日志把 body 序列化成 JSON；与业务序列化无关，失败时退化为 toString。 */
+    private static final ObjectMapper CURL_LOG_JSON = new ObjectMapper();
+
+    /**
+     * 将实际请求还原为可直接复制执行的 curl 命令（联调用）。仅包含 URL、方法与
+     * query/body 参数；Content-Type 是 body 能被服务端按 JSON 解析的必要头，
+     * 认证 Header（tenant-id / auth-type / auth-value）按要求不输出，调用时需自行补充。
+     */
+    public static String formatCurlCommand(PreparedRequest request) {
+        StringBuilder command = new StringBuilder("curl -X ")
+                .append(request.method().name())
+                .append(" '").append(request.url()).append('\'');
+        Object body = request.body();
+        if (body instanceof Map<?, ?> map && !map.isEmpty()) {
+            command.append(" -H 'Content-Type: application/json' -d '")
+                    .append(toShellSafeJson(body)).append('\'');
+        }
+        return command.toString();
+    }
+
+    private static String toShellSafeJson(Object body) {
+        String json;
+        try {
+            json = CURL_LOG_JSON.writeValueAsString(body);
+        } catch (Exception e) {
+            json = String.valueOf(body);
+        }
+        /* 单引号包裹的 shell 字符串内部转义：' -> '\'' */
+        return json.replace("'", "'\\''");
+    }
+
+    /** 底层发送：便于本地 mock 仅改写 host:port 后复用同一套 HTTP 行为（超时、头、反序列化）。 */
+    protected ResponseEntity<Map> exchange(String url, HttpMethod method, HttpEntity<?> entity) {
+        return restTemplate.exchange(url, method, entity, Map.class);
+    }
+
+    private ResponseEntity<Map> exchange(String endpointName, String url, HttpMethod method, HttpEntity<?> entity) {
+        if (UNBOUNDED_PICKER_ENDPOINTS.contains(endpointName)) {
+            return pickerRestTemplate.exchange(url, method, entity, Map.class);
+        }
+        return exchange(url, method, entity);
     }
 
     /**
@@ -223,10 +358,15 @@ public class AloudataApiClient {
         long startMs = System.currentTimeMillis();
         try {
             ResponseEntity<Map> response = circuitBreaker.executeSupplier(
-                    () -> restTemplate.exchange(url, method, entity, Map.class));
+                    () -> exchange(endpointName, url, method, entity));
             log.info("[Aloudata] API 调用成功: endpoint={}, method={}, status={}, costMs={}",
                     endpointName, method, response.getStatusCode().value(),
                     System.currentTimeMillis() - startMs);
+            if ("metrics_query".equals(endpointName)) {
+                Object hitMvType = extractHitMvType(response.getBody());
+                log.info("[Aloudata] metrics/query 响应: data.hitMvType={}",
+                        hitMvType == null ? "<未返回>" : hitMvType);
+            }
             return response;
         } catch (CallNotPermittedException e) {
             log.warn("[Protection] [Aloudata] API 熔断拦截（快速失败）: endpoint={}, method={}, costMs={}",
@@ -237,6 +377,28 @@ public class AloudataApiClient {
                     endpointName, method, System.currentTimeMillis() - startMs, e.getMessage());
             throw e;
         }
+    }
+
+    static Object extractHitMvType(Map<?, ?> responseBody) {
+        if (responseBody == null) return null;
+        Object data = responseBody.get("data");
+        return data instanceof Map<?, ?> dataMap ? dataMap.get("hitMvType") : null;
+    }
+
+    /**
+     * 构造完成、待发送的 Aloudata 请求。
+     *
+     * @param endpointName 端点名
+     * @param method       HTTP 方法（来自端点声明）
+     * @param path         端点路径（可被数据源级 apiOverrides 覆盖）
+     * @param url          完整 URL（含 query；host:port 由数据源连接参数决定）
+     * @param queryParams  分发到 QUERY 的参数（Array 参数为集合）
+     * @param body         请求体；既可以是参数 Map，也可以是 {@link #call} 传入的任意 JSON 结构
+     * @param headers      请求头（含认证头）
+     */
+    public record PreparedRequest(String endpointName, HttpMethod method, String path, String url,
+                                  Map<String, Object> queryParams, Object body,
+                                  HttpHeaders headers) {
     }
 
     /**

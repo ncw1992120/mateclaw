@@ -19,11 +19,7 @@ export const useUserStore = defineStore('user', () => {
   /** 可见工作区列表 */
   const workspaces = ref<Workspace[]>([])
   /** 当前工作区 ID */
-  const currentWorkspaceId = ref<number | string | null>(
-    localStorage.getItem('workspaceId')
-      ? JSON.parse(localStorage.getItem('workspaceId')!)
-      : null
-  )
+  const currentWorkspaceId = ref<number | string | null>(readWorkspaceId())
 
   /** 是否已登录 */
   const isLoggedIn = computed(() => !!token.value)
@@ -40,7 +36,9 @@ export const useUserStore = defineStore('user', () => {
    * 应用登录响应数据到状态
    */
   function applyLoginResponse(data: LoginResponse | CurrentUserInfo): void {
-    token.value = data.token
+    // `/auth/me` intentionally does not return the JWT；恢复用户资料时必须保留
+    // 页面初始化前已存在的 token，否则后续编辑器加载会被误判成未登录。
+    token.value = data.token ?? token.value
     userId.value = data.id
     username.value = data.username
     nickname.value = data.nickname
@@ -171,3 +169,22 @@ export const useUserStore = defineStore('user', () => {
     logout,
   }
 })
+
+function readWorkspaceId(): number | string | null {
+  const savedWorkspaceId = localStorage.getItem('workspaceId')
+  if (!savedWorkspaceId) {
+    return null
+  }
+
+  try {
+    const workspaceId: unknown = JSON.parse(savedWorkspaceId)
+    if (typeof workspaceId === 'string' || typeof workspaceId === 'number') {
+      return workspaceId
+    }
+  } catch {
+    // A malformed persisted workspace must not prevent the app from mounting.
+  }
+
+  localStorage.removeItem('workspaceId')
+  return null
+}

@@ -19,6 +19,9 @@ public class DashboardFilterContextDTO implements Serializable {
     /** 时间范围筛选 */
     private TimeRangeValue timeRange;
 
+    /** Aloudata 指标日期粒度：DAY / WEEK / MONTH / QUARTER / YEAR；缺省 DAY。 */
+    private String timeGranularity;
+
     /** 维度筛选值列表 */
     private List<FilterValue> dimensionFilters;
 

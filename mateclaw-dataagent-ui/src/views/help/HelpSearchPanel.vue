@@ -5,7 +5,7 @@
       <span class="search-count" v-if="results.length > 0">
         {{ t('helpCenter.searchResultCount', { count: results.length }) }}
       </span>
-      <el-button link size="small" @click="$emit('close')">
+      <el-button link size="small" aria-label="关闭搜索结果" @click="emit('close')">
         <el-icon><Close /></el-icon>
       </el-button>
     </div>
@@ -15,7 +15,11 @@
           v-for="item in results"
           :key="item.id"
           class="search-item"
-          @click="$emit('selectDoc', item)"
+          role="button"
+          tabindex="0"
+          :aria-label="`打开搜索结果：${item.title}`"
+          @click="emit('selectDoc', item)"
+          @keydown="handleKeydown($event, item)"
         >
           <div class="search-item-title">
             <el-icon><Document /></el-icon>
@@ -54,10 +58,16 @@ defineProps<{
   loading: boolean
 }>()
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'close'): void
   (e: 'selectDoc', doc: HelpSearchResult): void
 }>()
+
+function handleKeydown(event: KeyboardEvent, item: HelpSearchResult): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  emit('selectDoc', item)
+}
 </script>
 
 <style scoped>

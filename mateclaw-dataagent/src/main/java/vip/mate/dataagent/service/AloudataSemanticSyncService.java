@@ -67,6 +67,9 @@ public interface AloudataSemanticSyncService {
      */
     List<AloudataDimensionSemanticDTO> listSyncedDimensions(Long datasourceId, int pageNumber, int pageSize, String keyword);
 
+    /** Load the live Aloudata metric directory tree for dataset configuration. */
+    List<java.util.Map<String, Object>> listMetricDirectory(Long datasourceId);
+
     /**
      * 按关键词分页查询指标实体
      * <p>
@@ -163,6 +166,18 @@ public interface AloudataSemanticSyncService {
      * @return 分页结果
      */
     IPage<AloudataDimensionSemanticDTO> pageDimensions(Long datasourceId, AloudataDimensionPageQuery query);
+
+    /**
+     * 实时获取单个指标详情（直接打 Aloudata：metric_batch_detail 取同义词等 + metric_dimensions 取关联维度）。
+     *
+     * @param datasourceId 数据源 ID
+     * @param metricName   指标英文名
+     * @return 指标详情（同义词、关联维度已填充）；数据源无配置或调用失败时返回基础对象（字段为空）。
+     */
+    AloudataMetricSemanticDTO getMetricDetail(Long datasourceId, String metricName);
+
+    /** 实时获取单个维度详情（直接调用 Aloudata dimension_detail）。 */
+    AloudataDimensionSemanticDTO getDimensionDetail(Long datasourceId, String dimName);
 
     /**
      * 按指标类目分组查询指标列表

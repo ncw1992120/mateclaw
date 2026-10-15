@@ -1,0 +1,8 @@
+{
+  "request": {"method": "GET", "urlPath": "/anymetrics/api/v1/dimension/detail"},
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {"code":"200","success":true,"data":{"dimName":"region","dimDisplayName":"区域","originDataType":"STRING","synonyms":["地区"],"config":{"type":"COLUMN_BIND","value":"region"}}}
+  }
+}

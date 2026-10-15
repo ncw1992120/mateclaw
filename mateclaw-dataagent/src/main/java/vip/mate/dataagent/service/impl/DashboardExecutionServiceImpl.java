@@ -1,0 +1,664 @@
+package vip.mate.dataagent.service.impl;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Service;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
+import vip.mate.dataagent.dto.DashboardExecutionRequest;
+import vip.mate.dataagent.dto.InsightDashboardVO;
+import vip.mate.dataagent.model.DashboardExecutionEntity;
+import vip.mate.dataagent.repository.DashboardExecutionMapper;
+import vip.mate.dataagent.dataset.DatasetAccessContext;
+import vip.mate.dataagent.dataset.ObjectRef;
+import vip.mate.dataagent.objectref.DatasetBatchCodec;
+import vip.mate.dataagent.objectref.ObjectRefService;
+import vip.mate.dataagent.service.DashboardExecutionService;
+import vip.mate.dataagent.service.InsightDashboardService;
+import vip.mate.dataagent.service.code.ScriptTaskPreparationService;
+import vip.mate.dataagent.service.code.PythonExecutionService;
+import vip.mate.dataagent.service.code.PythonWorkerCompletedEvent;
+import vip.mate.dataagent.service.code.ScriptResultContractException;
+import vip.mate.dataagent.service.code.ScriptResultContractService;
+
+import java.util.*;
+
+/**
+ * 仪表盘 Python 执行编排。
+ * <p>
+ * execution 元数据和最近一次 Python Worker 状态持久化到 DataAgent；运行中的实时状态
+ * 通过本地进程监督器查询并回写。
+ */
+@Service
+public class DashboardExecutionServiceImpl implements DashboardExecutionService {
+    private static final org.slf4j.Logger LOGGER = org.slf4j.LoggerFactory.getLogger(DashboardExecutionServiceImpl.class);
+    private static final String DEFAULT_TIMEOUT_SECONDS = "60";
+    private static final String DEFAULT_MAX_OUTPUT_BYTES = "50000";
+    private static final int RESULT_PREVIEW_MAX_ROWS = 10;
+    private final InsightDashboardService dashboards;
+    private final ScriptTaskPreparationService preparation;
+    private final PythonExecutionService runner;
+    private final WorkspaceGuard workspaceGuard;
+    private final ObjectMapper mapper;
+    private final DashboardExecutionMapper executionMapper;
+    private final ObjectRefService objectRefs;
+    private final ScriptResultContractService resultContract;
+    private final String datasetReadBaseUrl;
+    private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DashboardExecutionServiceImpl(
+            InsightDashboardService dashboards,
+            ScriptTaskPreparationService preparation,
+            PythonExecutionService runner,
+            WorkspaceGuard workspaceGuard,
+            ObjectMapper mapper,
+            DashboardExecutionMapper executionMapper,
+            ObjectRefService objectRefs,
+            ScriptResultContractService resultContract,
+            @Value("${mateclaw.runner.dataset-read-base-url:http://mateclaw-dataagent:18089/dataagent/api}") String datasetReadBaseUrl,
+            vip.mate.dataagent.service.QueryPlanner queryPlanner) {
+        this.dashboards = dashboards;
+        this.preparation = preparation;
+        this.runner = runner;
+        this.workspaceGuard = workspaceGuard;
+        this.mapper = mapper;
+        this.executionMapper = executionMapper;
+        this.objectRefs = objectRefs;
+        this.resultContract = resultContract;
+        this.datasetReadBaseUrl = datasetReadBaseUrl.replaceAll("/$", "");
+        this.queryPlanner = queryPlanner;
+    }
+
+    /** 旧签名便利构造器：无 Planner（存量测试/调用方使用）。 */
+    public DashboardExecutionServiceImpl(
+            InsightDashboardService dashboards,
+            ScriptTaskPreparationService preparation,
+            PythonExecutionService runner,
+            WorkspaceGuard workspaceGuard,
+            ObjectMapper mapper,
+            DashboardExecutionMapper executionMapper,
+            ObjectRefService objectRefs,
+            ScriptResultContractService resultContract,
+            String datasetReadBaseUrl) {
+        this(dashboards, preparation, runner, workspaceGuard, mapper, executionMapper, objectRefs,
+                resultContract, datasetReadBaseUrl, null);
+    }
+
+    @Override
+    public Map<String, Object> submit(long dashboardId, DashboardExecutionRequest request) {
+        long submitStarted = System.nanoTime();
+        long dashboardLookupStarted = System.nanoTime();
+        InsightDashboardVO dashboard = dashboards.getDashboard(dashboardId);
+        long dashboardLookupMillis = elapsedMillis(dashboardLookupStarted);
+        long configurationStarted = System.nanoTime();
+        // 预览可携带临时 Schema；不落库、不改变仪表盘，只复用其权限与执行上下文。
+        JsonNode schema = parseSchema(request != null && request.schemaJson() != null
+                ? request.schemaJson() : dashboard.getSchemaJson());
+        JsonNode pipeline = request == null ? null : findComponentPipeline(schema, request.componentId());
+        JsonNode executionSchema = pipeline == null ? schema : pipeline;
+        String script = text(executionSchema, "script");
+        if (script == null || script.isBlank()) {
+            throw new IllegalArgumentException("dashboard script is required");
+        }
+        Map<String, Long> inputs = parseInputs(executionSchema.path("datasetInputs"));
+        validateFilterBindings(executionSchema.path("scriptFilterBindings"), inputs.keySet());
+        Map<String, Object> parameters = resolveParameters(
+                executionSchema.path("parameters"), request == null ? Map.of() : request.parameters());
+        long configurationMillis = elapsedMillis(configurationStarted);
+        // 新链路：queryContext 只用于 Planner 生成查询计划，不进入 Runner 的 parameters/datasets.params
+        long planningStarted = System.nanoTime();
+        Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> plans =
+                buildPlans(request == null ? null : request.queryContext(), schema, pipeline, inputs,
+                        script != null && !script.isBlank());
+        long planningMillis = elapsedMillis(planningStarted);
+        String taskId = "dashboard-" + dashboardId + "-" + UUID.randomUUID();
+        // 存量契约（无 queryContext）保持原 prepare 调用；新链路才物化 prepared inputs
+        long preparationStarted = System.nanoTime();
+        ScriptTaskPreparationService.PreparedTask prepared = plans.isEmpty()
+                ? preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
+                        inputs, script, parameters)
+                : preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
+                        inputs, script, parameters, plans);
+        long preparationMillis = elapsedMillis(preparationStarted);
+
+        // 新版组件编排把执行策略随 pipeline 持久化；旧版仪表盘仍放在根级。
+        // 根级为空时回退到实际执行的 pipeline，避免编辑器保存后丢失超时/输出限制。
+        JsonNode policy = schema.path("executionPolicy");
+        if ((!policy.isObject() || policy.size() == 0) && executionSchema != schema) {
+            policy = executionSchema.path("executionPolicy");
+        }
+        Map<String, Object> limits = new LinkedHashMap<>();
+        limits.put("timeout_seconds", boundedInt(policy, "timeoutSeconds", Integer.parseInt(DEFAULT_TIMEOUT_SECONDS), 1, 900));
+        limits.put("max_stdout_bytes", boundedInt(policy, "maxOutputBytes", Integer.parseInt(DEFAULT_MAX_OUTPUT_BYTES), 1, 5_000_000));
+        Map<String, Object> runnerRequest = new LinkedHashMap<>();
+        runnerRequest.put("taskId", taskId);
+        runnerRequest.put("script", prepared.script());
+        runnerRequest.put("inputCatalog", prepared.inputCatalog());
+        runnerRequest.put("parameters", prepared.parameters());
+        runnerRequest.put("limits", limits);
+        runnerRequest.put("datasetReadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/read");
+        // 新契约：prepared input 只按 inputName 读取；旧 datasetReadEndpoint 保留供旧脚本兼容
+        runnerRequest.put("datasetInputEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/datasets/input");
+        runnerRequest.put("preferPreparedInputs", !plans.isEmpty());
+        runnerRequest.put("resultUploadEndpoint", datasetReadBaseUrl + "/internal/v1/script-tasks/" + taskId + "/result");
+        runnerRequest.put("readToken", prepared.readToken());
+        DashboardExecutionEntity execution = new DashboardExecutionEntity();
+        execution.setExecutionId(taskId);
+        execution.setDashboardId(dashboardId);
+        execution.setWorkspaceId(workspaceGuard.currentWorkspaceId());
+        execution.setUserId(workspaceGuard.currentUserId());
+        execution.setStatus("SUBMITTING");
+        execution.setParametersJson(writeJson(prepared.parameters()));
+        long executionInsertStarted = System.nanoTime();
+        executionMapper.insert(execution);
+        long executionInsertMillis = elapsedMillis(executionInsertStarted);
+        Map<String, Object> result;
+        try {
+            long runnerSubmitStarted = System.nanoTime();
+            result = runner.submit(runnerRequest);
+            long runnerSubmitMillis = elapsedMillis(runnerSubmitStarted);
+            long executionUpdateStarted = System.nanoTime();
+            updateFromRunner(execution, result);
+            long executionUpdateMillis = elapsedMillis(executionUpdateStarted);
+            LOGGER.info("[dashboard-perf] stage=submit dashboardId={} componentId={} taskId={} dashboardLookupMs={} configurationMs={} planningMs={} preparationMs={} executionInsertMs={} runnerSubmitMs={} executionUpdateMs={} totalSubmitMs={} inputs={} status={}",
+                    dashboardId, request == null ? null : request.componentId(), taskId,
+                    dashboardLookupMillis, configurationMillis, planningMillis, preparationMillis,
+                    executionInsertMillis, runnerSubmitMillis, executionUpdateMillis,
+                    elapsedMillis(submitStarted), inputs.size(), result.getOrDefault("status", "RUNNING"));
+        } catch (RuntimeException e) {
+            execution.setStatus("FAILED");
+            execution.setErrorMessage(e.getMessage());
+            executionMapper.updateById(execution);
+            throw e;
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("executionId", taskId);
+        response.put("dashboardId", dashboardId);
+        response.put("status", result.getOrDefault("status", "RUNNING"));
+        return response;
+    }
+
+    private static long elapsedMillis(long startedAtNanos) {
+        return (System.nanoTime() - startedAtNanos) / 1_000_000L;
+    }
+
+    /** 组件级数据集编排优先，旧仪表盘继续从根级 Schema 执行。 */
+    private JsonNode findComponentPipeline(JsonNode schema, String componentId) {
+        JsonNode component = findComponent(schema, componentId);
+        if (component == null) return null;
+        JsonNode pipeline = component.path("config").path("datasetPipeline");
+        return pipeline.isObject() ? pipeline : null;
+    }
+
+    private JsonNode findComponent(JsonNode schema, String componentId) {
+        if (componentId == null || componentId.isBlank()) return null;
+        JsonNode pages = schema.path("pages");
+        if (!pages.isArray()) return null;
+        for (JsonNode page : pages) {
+            JsonNode match = findComponentInChildren(page.path("components"), componentId);
+            if (match != null) return match;
+        }
+        return null;
+    }
+
+    /** Find a component in the dashboard tree, including combination-card children and tab children. */
+    private JsonNode findComponentInChildren(JsonNode children, String componentId) {
+        if (!children.isArray()) return null;
+        for (JsonNode component : children) {
+            if (componentId.equals(text(component, "id"))) return component;
+            JsonNode nested = findComponentInChildren(component.path("children"), componentId);
+            if (nested != null) return nested;
+            nested = findComponentInTabs(component.path("containerConfig").path("tabs"), componentId);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    private JsonNode findComponentInTabs(JsonNode tabs, String componentId) {
+        if (!tabs.isArray()) return null;
+        for (JsonNode tab : tabs) {
+            JsonNode nested = findComponentInChildren(tab.path("children"), componentId);
+            if (nested != null) return nested;
+        }
+        return null;
+    }
+
+    /**
+     * 执行顺序：权限校验（入口）→ Schema/组件/绑定校验（上方）→ Planner → Adapter（在
+     * preparation 物化中）→ prepared input → Python Worker。queryContext 缺省时 plans 为空（存量契约）。
+     */
+    private Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> buildPlans(
+            vip.mate.dataagent.dto.QueryContextDTO context, JsonNode schema, JsonNode pipeline,
+            Map<String, Long> inputs, boolean hasPython) {
+        Map<String, vip.mate.dataagent.dto.DatasetQueryPlanDTO> plans = new LinkedHashMap<>();
+        if (context == null || pipeline == null || queryPlanner == null) return plans;
+        JsonNode component = findComponent(schema, context.componentId());
+        if (component == null) {
+            // 找不到组件节点（预览 schema 变体）时以 pipeline 构造最小容器供 Planner 读取
+            com.fasterxml.jackson.databind.node.ObjectNode container = mapper.createObjectNode();
+            container.putObject("config").set("datasetPipeline", pipeline);
+            component = container;
+        }
+        JsonNode declaredInputs = pipeline.path("datasetInputs");
+        for (JsonNode input : declaredInputs) {
+            String alias = text(input, "inputName");
+            if (alias == null || !inputs.containsKey(alias)) continue;
+            plans.put(alias, queryPlanner.plan(component, input, context, hasPython));
+        }
+        if (!plans.isEmpty()) {
+            // 审计日志：只记录字段名与数量，不记录凭据或完整参数值
+            org.slf4j.LoggerFactory.getLogger(DashboardExecutionServiceImpl.class)
+                    .info("[query-plan] component={} requestId={} inputs={} firstFilters={} firstOrders={} "
+                            + "residual={}", context.componentId(), context.requestId(), plans.size(),
+                            plans.values().iterator().next().filters().size(),
+                            plans.values().iterator().next().orders().size(),
+                            plans.values().iterator().next().residualOperations());
+        }
+        return plans;
+    }
+
+    @Override
+    public Map<String, Object> status(String executionId) {
+        DashboardExecutionEntity execution = requireKnown(executionId);
+        try {
+            Map<String, Object> result = runner.getStatus(executionId);
+            updateFromRunner(execution, result);
+            return response(execution, result);
+        } catch (RuntimeException e) {
+            LOGGER.error("[python-execution] stage=status-poll-failed dashboardId={} executionId={} error={}",
+                    execution.getDashboardId(), executionId, e.getMessage());
+            throw e;
+        }
+    }
+
+    /** Persist a completed local Worker even if the browser has stopped polling. */
+    @EventListener
+    public void onPythonWorkerCompleted(PythonWorkerCompletedEvent event) {
+        Map<String, Object> snapshot = event.taskSnapshot();
+        String executionId = stringValue(snapshot.get("taskId"));
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("Python Worker completion event is missing taskId");
+        }
+        DashboardExecutionEntity execution = executionMapper.selectOne(new LambdaQueryWrapper<DashboardExecutionEntity>()
+                .eq(DashboardExecutionEntity::getExecutionId, executionId));
+        if (execution == null) {
+            throw new IllegalStateException("dashboard execution record not found for completed task " + executionId);
+        }
+        updateFromRunner(execution, snapshot);
+    }
+
+    @Override
+    public Map<String, Object> cancel(String executionId) {
+        DashboardExecutionEntity execution = requireKnown(executionId);
+        Map<String, Object> result = runner.cancel(executionId);
+        updateFromRunner(execution, result);
+        return response(execution, result);
+    }
+
+    @Override
+    public Map<String, Object> logs(String executionId) {
+        DashboardExecutionEntity execution = requireKnown(executionId);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("executionId", execution.getExecutionId());
+        response.put("status", execution.getStatus());
+        response.put("output", execution.getLogs());
+        response.put("error", execution.getErrorMessage());
+        return response;
+    }
+
+    @Override
+    public Map<String, Object> result(String executionId) {
+        DashboardExecutionEntity execution = requireKnown(executionId);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("executionId", execution.getExecutionId());
+        response.put("status", execution.getStatus());
+        try {
+            if (execution.getOutputJson() != null && !execution.getOutputJson().isBlank()) {
+                // 内联结果：校验 + 受控预览（真实 rowCount 保留在 meta）
+                Object envelope = mapper.readValue(execution.getOutputJson(), Object.class);
+                response.put("envelope", previewEnvelope(envelope));
+                response.put("inline", true);
+                return response;
+            }
+            if (execution.getOutputRefJson() == null || "null".equals(execution.getOutputRefJson())) {
+                response.put("envelope", null);
+                response.put("inline", true);
+                return response;
+            }
+            ObjectRef reference = mapper.readValue(execution.getOutputRefJson(), ObjectRef.class);
+            Map<String, Object> refMeta = mapper.readValue(execution.getOutputRefJson(), new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+            DatasetAccessContext context = new DatasetAccessContext(execution.getWorkspaceId(), 0L, execution.getExecutionId(), Set.of());
+            List<Map<String, Object>> rows = DatasetBatchCodec.readRows(context, reference, objectRefs, RESULT_PREVIEW_MAX_ROWS);
+            ScriptResultContractService.ValidatedEnvelope rebuilt = resultContract.rebuildTable(refMeta, rows);
+            response.put("envelope", mapper.convertValue(
+                    resultContract.preview(rebuilt, RESULT_PREVIEW_MAX_ROWS).toEnvelope(), Map.class));
+            response.put("inline", false);
+            response.put("outputRef", reference);
+            return response;
+        } catch (Exception e) {
+            throw new IllegalStateException("dashboard execution result unavailable", e);
+        }
+    }
+
+    /** 校验 + 截断到受控预览行数，meta 保留真实 rowCount 与 truncated 标记。 */
+    private Map<String, Object> previewEnvelope(Object envelope) {
+        ScriptResultContractService.ValidatedEnvelope validated = resultContract.validate(envelope);
+        return mapper.convertValue(resultContract.preview(validated, RESULT_PREVIEW_MAX_ROWS).toEnvelope(), Map.class);
+    }
+
+    private DashboardExecutionEntity requireKnown(String executionId) {
+        if (executionId == null || executionId.isBlank()) {
+            throw new IllegalArgumentException("unknown dashboard execution");
+        }
+        DashboardExecutionEntity execution = executionMapper.selectOne(new LambdaQueryWrapper<DashboardExecutionEntity>()
+                .eq(DashboardExecutionEntity::getExecutionId, executionId)
+                .eq(DashboardExecutionEntity::getWorkspaceId, workspaceGuard.currentWorkspaceId()));
+        if (execution == null) throw new IllegalArgumentException("unknown dashboard execution");
+        return execution;
+    }
+
+    private void updateFromRunner(DashboardExecutionEntity execution, Map<String, Object> result) {
+        if (result == null) return;
+        PersistedExecutionState previous = persistedState(execution);
+        Object status = result.get("status");
+        if (status != null) execution.setStatus(String.valueOf(status));
+        execution.setLogs(stringValue(result.get("output")));
+        Object rawResult = result.get("result");
+        if (rawResult instanceof Map<?, ?> envelope) {
+            // 结构化结果：校验通过才持久化；契约失败保持 OUTPUT_CONTRACT_ERROR 且不写结果
+            try {
+                ScriptResultContractService.ValidatedEnvelope validated = resultContract.validate(envelope);
+                execution.setOutputJson(writeJson(validated.toEnvelope()));
+            } catch (ScriptResultContractException e) {
+                execution.setStatus("OUTPUT_CONTRACT_ERROR");
+                execution.setOutputJson(null);
+                execution.setOutputRefJson(null);
+                execution.setErrorMessage(writeJson(e.asMap()));
+                persistIfChanged(execution, previous);
+                logExecutionFailure(execution, previous);
+                return;
+            }
+        } else {
+            // 兼容旧 Runner 字符串结果
+            execution.setOutputJson(stringValue(rawResult));
+        }
+        execution.setOutputRefJson(writeJson(result.get("outputRef")));
+        Object error = result.get("error");
+        execution.setErrorMessage(error instanceof Map<?, ?> ? writeJson(error) : stringValue(error));
+        Object returnCode = result.get("stats") instanceof Map<?, ?> stats ? stats.get("returncode") : result.get("returncode");
+        if (returnCode instanceof Number number) execution.setReturnCode(number.intValue());
+        persistIfChanged(execution, previous);
+        logExecutionFailure(execution, previous);
+    }
+
+    /** 记录执行失败的诊断信息，但绝不记录脚本、查询参数、输入数据或完整 Runner 请求。 */
+    private void logExecutionFailure(DashboardExecutionEntity execution, PersistedExecutionState previous) {
+        String status = execution.getStatus();
+        boolean failed = status != null && (status.equalsIgnoreCase("FAILED")
+                || status.equalsIgnoreCase("OUTPUT_CONTRACT_ERROR")
+                || status.equalsIgnoreCase("TIMEOUT")
+                || status.equalsIgnoreCase("CANCELLED")
+                || status.equalsIgnoreCase("OUTPUT_LIMIT")
+                || status.equalsIgnoreCase("RESULT_LIMIT"));
+        if (!failed) return;
+
+        PersistedExecutionState current = persistedState(execution);
+        if (previous.equals(current)) return;
+        PythonFailureLogDetails details = pythonFailureLogDetails(execution.getErrorMessage());
+        LOGGER.error("[python-execution] stage=python-execution-failed dashboardId={} executionId={} status={} returnCode={} scriptLine={} error={}",
+                execution.getDashboardId(), execution.getExecutionId(), status,
+                execution.getReturnCode(), details.scriptLine(), details.summary());
+    }
+
+    /** 从 traceback 提取用户脚本行号和异常摘要；不将 traceback 中的脚本源码写入服务日志。 */
+    private PythonFailureLogDetails pythonFailureLogDetails(String error) {
+        if (error == null || error.isBlank()) return new PythonFailureLogDetails("unknown", "(no error detail)");
+        if (error.stripLeading().startsWith("{")) {
+            try {
+                var payload = mapper.readTree(error);
+                if ("PYTHON_EXECUTION_ERROR".equals(payload.path("code").asText())) {
+                    var context = payload.path("errorContext");
+                    int line = context.path("scriptLine").asInt(0);
+                    String summary = "region=" + safeDiagnosticLabel(context.path("region").asText("unknown"))
+                            + (context.hasNonNull("userLine") ? " userLine=" + context.path("userLine").asInt() : "")
+                            + (context.hasNonNull("inputName") ? " inputName=" + safeDiagnosticLabel(context.path("inputName").asText()) : "")
+                            + (context.hasNonNull("conversion") ? " conversion=" + safeDiagnosticLabel(context.path("conversion").asText()) : "")
+                            + " " + safeDiagnosticLabel(payload.path("exceptionType").asText("PythonError"))
+                            + ": " + safeDiagnosticLabel(payload.path("message").asText());
+                    return new PythonFailureLogDetails(line > 0 ? Integer.toString(line) : "unknown", summary);
+                }
+                if ("DATA_VALIDATION_ERROR".equals(payload.path("code").asText())) {
+                    var detail = payload.path("errorDetails");
+                    String summary = "dataset=" + safeDiagnosticLabel(detail.path("dataset").asText())
+                            + " field=" + safeDiagnosticLabel(detail.path("field").asText())
+                            + " errorCount=" + detail.path("errorCount").asInt();
+                    int count = 0;
+                    for (var issue : detail.path("issues")) {
+                        if (count++ >= 10) break;
+                        summary += (issue.hasNonNull("field") ? " issueField=" + safeDiagnosticLabel(issue.path("field").asText()) : "")
+                                + (issue.path("rowNumber").isIntegralNumber() ? " row=" + issue.path("rowNumber").asInt() : " scope=field")
+                                + " reason=" + safeDiagnosticLabel(issue.path("reason").asText());
+                    }
+                    // 业务 ID、问题值及 traceback 源码只在授权查询响应中返回，不写日志。
+                    int scriptLineNumber = detail.path("scriptLine").asInt(0);
+                    return new PythonFailureLogDetails(scriptLineNumber > 0 ? Integer.toString(scriptLineNumber) : "unknown", summary);
+                }
+            } catch (Exception ignored) {
+                // 兼容旧 Worker 的普通 traceback。
+            }
+        }
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("user_script\\.py[\"'], line (\\d+)")
+                .matcher(error);
+        String scriptLine = "unknown";
+        while (matcher.find()) scriptLine = matcher.group(1);
+        String[] lines = error.split("\\R");
+        int lastFrame = -1;
+        for (int index = 0; index < lines.length; index++) {
+            if (lines[index].stripLeading().startsWith("File ")) lastFrame = index;
+        }
+        String summary = Arrays.stream(lines).skip(lastFrame + 1L)
+                .filter(line -> line.matches("^[A-Za-z_][\\w.]*:.*"))
+                .findFirst()
+                .orElseGet(() -> Arrays.stream(lines)
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .reduce((first, last) -> last)
+                .orElse("(no error detail)"));
+        return new PythonFailureLogDetails(scriptLine, summary);
+    }
+
+    private record PythonFailureLogDetails(String scriptLine, String summary) { }
+
+    private String safeDiagnosticLabel(String value) {
+        String clean = value.replace('\n', ' ').replace('\r', ' ');
+        return clean.substring(0, Math.min(clean.length(), 240));
+    }
+
+    private PersistedExecutionState persistedState(DashboardExecutionEntity execution) {
+        return new PersistedExecutionState(execution.getStatus(), execution.getLogs(), execution.getOutputJson(),
+                execution.getOutputRefJson(), execution.getErrorMessage(), execution.getReturnCode());
+    }
+
+    private void persistIfChanged(DashboardExecutionEntity execution, PersistedExecutionState previous) {
+        if (!previous.equals(persistedState(execution))) executionMapper.updateById(execution);
+    }
+
+    private record PersistedExecutionState(String status, String logs, String outputJson, String outputRefJson,
+                                           String errorMessage, Integer returnCode) { }
+
+    private Map<String, Object> response(DashboardExecutionEntity execution, Map<String, Object> result) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("executionId", execution.getExecutionId());
+        response.put("dashboardId", execution.getDashboardId());
+        response.put("status", execution.getStatus());
+        response.put("result", execution.getOutputJson());
+        if (execution.getOutputRefJson() != null && !"null".equals(execution.getOutputRefJson())) {
+            try { response.put("outputRef", mapper.readValue(execution.getOutputRefJson(), Object.class)); }
+            catch (Exception ignored) { response.put("outputRef", execution.getOutputRefJson()); }
+        }
+        response.put("output", execution.getLogs());
+        response.put("error", execution.getErrorMessage());
+        response.put("returnCode", execution.getReturnCode());
+        if (result != null && !result.isEmpty()) response.put("runner", result);
+        return response;
+    }
+
+    private String writeJson(Object value) {
+        try {
+            return mapper.writeValueAsString(value == null ? Map.of() : value);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid execution parameters", e);
+        }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? null : String.valueOf(value);
+    }
+
+    private JsonNode parseSchema(String schemaJson) {
+        try {
+            return mapper.readTree(schemaJson == null || schemaJson.isBlank() ? "{}" : schemaJson);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("invalid dashboard schema", e);
+        }
+    }
+
+    private Map<String, Long> parseInputs(JsonNode node) {
+        if (!node.isArray() || node.isEmpty()) {
+            throw new IllegalArgumentException("dashboard datasetInputs are required");
+        }
+        Map<String, Long> result = new LinkedHashMap<>();
+        for (JsonNode input : node) {
+            String alias = text(input, "inputName");
+            if (alias == null || !alias.matches("[A-Za-z][A-Za-z0-9_]{0,63}") || result.containsKey(alias)) {
+                throw new IllegalArgumentException("invalid or duplicate dataset input alias");
+            }
+            JsonNode id = input.get("datasetId");
+            Long datasetId = parsePositiveLong(id);
+            if (datasetId == null) {
+                throw new IllegalArgumentException("dataset input datasetId is required");
+            }
+            result.put(alias, datasetId);
+        }
+        return result;
+    }
+
+    private void validateFilterBindings(JsonNode node, Set<String> inputNames) {
+        if (node == null || !node.isArray()) return;
+        for (JsonNode binding : node) {
+            JsonNode names = binding.path("inputNames");
+            if (!names.isArray()) throw new IllegalArgumentException("script filter binding inputNames are required");
+            for (JsonNode name : names) {
+                if (!name.isTextual() || !inputNames.contains(name.asText()))
+                    throw new IllegalArgumentException("script filter binding references an unknown input");
+            }
+            // fieldMappings: 别名 → 字段名（技术主键）；此处只校验 key 是已知输入别名，
+            // 不校验 value —— 展示名不进下推链路（契约见 docs/策略解读/字段名与展示名契约-实施计划.md §4.3）。
+            JsonNode mappings = binding.path("fieldMappings");
+            if (mappings.isObject()) {
+                var fields = mappings.fieldNames();
+                while (fields.hasNext()) {
+                    if (!inputNames.contains(fields.next())) throw new IllegalArgumentException("script filter field mapping references an unknown input");
+                }
+            }
+        }
+    }
+
+    /**
+     * 当 Schema 声明了参数时，执行入口采用严格契约；旧 Schema 没有参数定义时保留透传兼容。
+     */
+    private Map<String, Object> resolveParameters(JsonNode definitions, Map<String, Object> provided) {
+        Map<String, Object> values = provided == null ? Map.of() : provided;
+        if (!definitions.isArray() || definitions.isEmpty()) {
+            return new LinkedHashMap<>(values);
+        }
+        Map<String, JsonNode> declared = new LinkedHashMap<>();
+        for (JsonNode definition : definitions) {
+            String name = text(definition, "name");
+            if (name == null || !name.matches("[A-Za-z][A-Za-z0-9_]{0,63}") || declared.containsKey(name)) {
+                throw new IllegalArgumentException("invalid or duplicate dashboard parameter name");
+            }
+            String type = text(definition, "type");
+            if (!Set.of("string", "number", "boolean", "date", "datetime", "enum", "date_range", "string[]", "number[]").contains(type)) {
+                throw new IllegalArgumentException("unsupported dashboard parameter type: " + type);
+            }
+            declared.put(name, definition);
+        }
+        for (String name : values.keySet()) {
+            if (!declared.containsKey(name)) {
+                throw new IllegalArgumentException("unknown dashboard execution parameter: " + name);
+            }
+        }
+        Map<String, Object> resolved = new LinkedHashMap<>();
+        for (Map.Entry<String, JsonNode> entry : declared.entrySet()) {
+            String name = entry.getKey();
+            JsonNode definition = entry.getValue();
+            if (values.containsKey(name)) {
+                Object value = values.get(name);
+                if (!matchesParameterType(value, text(definition, "type"))) {
+                    throw new IllegalArgumentException("invalid dashboard execution parameter type: " + name);
+                }
+                resolved.put(name, value);
+            } else if (definition.has("defaultValue")) {
+                resolved.put(name, mapper.convertValue(definition.get("defaultValue"), Object.class));
+            } else if (definition.path("required").asBoolean(false)) {
+                throw new IllegalArgumentException("missing required dashboard execution parameter: " + name);
+            }
+        }
+        return resolved;
+    }
+
+    private boolean matchesParameterType(Object value, String type) {
+        if (value == null) return false;
+        return switch (type) {
+            case "string", "date", "datetime", "enum" -> value instanceof CharSequence;
+            case "date_range" -> (isListOf(value, CharSequence.class) && ((Collection<?>) value).size() == 2)
+                    || isDateRangeObject(value);
+            case "number" -> value instanceof Number;
+            case "boolean" -> value instanceof Boolean;
+            case "string[]" -> isListOf(value, CharSequence.class);
+            case "number[]" -> isListOf(value, Number.class);
+            default -> false;
+        };
+    }
+
+    private boolean isListOf(Object value, Class<?> elementType) {
+        if (!(value instanceof Collection<?> collection)) return false;
+        return collection.stream().allMatch(element -> element != null && elementType.isInstance(element));
+    }
+
+    private boolean isDateRangeObject(Object value) {
+        if (!(value instanceof Map<?, ?> map)) return false;
+        Object preset = map.get("preset");
+        if (!(preset instanceof CharSequence) || preset.toString().isBlank()) return false;
+        Object start = map.get("start");
+        Object end = map.get("end");
+        return (start == null || start instanceof CharSequence)
+                && (end == null || end instanceof CharSequence);
+    }
+
+    private String text(JsonNode node, String name) {
+        JsonNode value = node.get(name);
+        return value != null && value.isTextual() ? value.asText() : null;
+    }
+
+    private Long parsePositiveLong(JsonNode value) {
+        if (value == null) return null;
+        try {
+            long parsed = value.isTextual() ? Long.parseLong(value.asText()) : value.asLong();
+            return parsed > 0 ? parsed : null;
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private int boundedInt(JsonNode node, String name, int fallback, int min, int max) {
+        JsonNode value = node.get(name);
+        if (value == null || !value.canConvertToInt()) return fallback;
+        return Math.max(min, Math.min(max, value.asInt()));
+    }
+}

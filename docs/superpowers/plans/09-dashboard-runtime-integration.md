@@ -1,0 +1,406 @@
+# 仪表盘运行时集成 Implementation Plan
+
+> 2026-09-14 状态更新：脚本结果数据集输入已明确独立模式、结果绑定组件和读取模板；正式数据集入口、文件创建/预览和返回链路已由真实 Chrome channel E2E 覆盖。本地模拟产品闭环为 `PASS`；真实 Aloudata 授权和正式对象存储仍是后续环境 Gate。
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:test-driven-development, then execute this plan task-by-task.
+
+**Goal:** 将统一数据集和 Python Runner 接入仪表盘编辑、输入预览、最终预览与正式异步执行。
+
+**Architecture:** 扩展 Dashboard Schema 为版本化的数据集输入和脚本节点；后端编排 Adapter 与 Runner，前端只配置数据集别名、参数作用范围和脚本。旧 Schema 通过读取时 Adapter 转换，不要求一次性迁移。
+
+**Tech Stack:** Java 21/Spring Boot、Vue 3/TypeScript、Pinia、Axios、Vitest、Playwright、Docker Compose。
+
+**Spec:** `docs/策略解读/design.md` 第 7、8、11、12 节。
+
+**Test Matrix:** `docs/superpowers/specs/2026-09-11-dashboard-mvp-test-and-acceptance.md` 第 11、12 节（DASH-S01～E2E-06）。
+
+**当前状态（2026-09-13）：** 候选提交 `fc799a85414520a4118b36d736f01984b773255e` 在本地模拟 E2E Compose 全量 Playwright 已取得 `9 passed`（包含 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef）；CDP 四页视觉复验也已完成，本地运行时开发 Gate 已通过。真实 Aloudata 结果查询列入后续环境联调，不阻塞本地实现。
+
+**当前头部基线（2026-09-14）：** 在提交 `240c2f04ae1af781bfde79b785955988105e2581` 上 UI 全量为 `10 files / 42 tests passed`，production build 与 `DESIGN-PASS` 通过；上段候选 SHA 的 `27/27` 等数字保留为历史阶段记录。真实 Aloudata 授权和跨工作区权限状态不因本地回归而改变。
+
+**本地模拟：** 先用 `dev-support/local-simulation/` 的 MySQL/PostgreSQL、WireMock 和 MinIO 完成非 Aloudata 闭环；正式测试环境切换项统一遵循总体计划末尾清单。本次不新增身份与权限验收。
+
+**开发验证配置：** 当前开发先使用 `make dashboard-prerequisites-simulation` 准备本地五类来源，再执行 API+文件、JDBC+模拟 Aloudata、旧 Schema、取消/重试、超时和大结果 ObjectRef 场景；模拟 Aloudata 只验证适配器与产品链路，不替代真实 ALO-X02。E2E 使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 时，seed 会通过 E2E HTTPS WireMock 创建 `local_sales_view` 数据源/数据集；真实联调仍使用 `MATECLAW_E2E_ALOUDATA_DATASET_ID` 和 `MATECLAW_E2E_ALOUDATA_LIVE=true`。
+
+**执行约定：** 09 的 seed、Playwright 和 cleanup 必须指向同一轮本地模拟服务与工作区；先完成非 Aloudata 场景，再运行 JDBC+模拟 Aloudata。E2E 启动入口会在本地模拟容器仍运行时 fail-fast，避免同端口下创建半套容器，并对健康探测设置单次超时；E2E 完成后执行 `docker compose -f docker-compose.test.yml down -v --remove-orphans`，再按外部前置计划恢复本地模拟。缺少 JWT/工作区等测试上下文时显式记录 `BLOCKED`，不将未执行标为通过。
+
+**本轮复验记录（2026-09-13）：** 本地模拟 E2E Compose 全量 `9 passed (36.2s)`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、旧 Schema、错误/取消/超时/资源限制和 ObjectRef。随后 DataAgent `152/152`、当前工作树 Runner `21/21`、UI `27/27` 和生产构建均通过。本地开发 Gate 已通过；真实 Aloudata 结果查询作为后续环境联调证据单独跟踪。
+
+**结果绑定聚焦复验（2026-09-13）：** `dataset-result.spec.ts` 与 `dashboard-schema.spec.ts` 单独执行为 `2 files / 4 tests passed`，直接验证脚本行集到 Table/ECharts 的映射和 `scriptBindings` 兼容保留。
+
+**视觉证据边界：** 候选 SHA 已通过 Table 和 ECharts 的 CDP/Canvas 页面证据；VIS-UI04 的本地模拟部分已完成，真实 Aloudata 授权场景在后续环境联调时补采。
+
+**2026-09-15 多源配置交互实现：** `DatasetInputPanel` 现在按来源分类展示输入数据集，并在第二个输入加入后渐进展示 Python 预处理配置；`PropertyPanel` 根据 Aloudata/JDBC/接口/文件切换可见控件，JDBC SQL 明确标注为当前数据源的标准 SQL 草稿。脚本执行和统一数据集 Descriptor/Preview API 保持原链路。由于 `preview-component` 后端兼容路径仍以 Aloudata 指标/维度为主，JDBC SQL 草稿暂不触发卡片级预览，需先通过数据集管理接口固化为 JDBC SQL 数据集后复用统一输入预览。
+
+**2026-09-15 JDBC 组件预览接入：** `preview-component` 已增加 JDBC SQL 分支；页面输入 SQL 后可执行“验证数据”，服务端先做 AST 只读校验，再通过 DataAgent 只读连接池查询并复用现有组件渲染。跨数据源组合仍由脚本数据集输入完成；该分支不改变统一 Dataset Adapter 和 Python `datasets.read` 契约。
+
+**2026-09-15 Base Script 筛选参数生成：** 脚本面板的“生成 Base Script”会按已选输入生成系统区域，并根据声明参数类型生成 `eq`（单选）、`in`（多选）和 `between`（日期/范围）读取条件；日期范围同时兼容页面 `{start,end}` 对象。重新生成只替换系统标记区，用户处理区域中的 Join、合并和计算逻辑保持不变。新增纯函数与面板回归测试，当前定向 UI `14/14` 通过。
+
+## 前端产品闭环缺口（2026-09-14）
+
+> 2026-09-14 实施进展：数据集已具备正式路由和配置中心入口；属性面板与脚本输入已增加明确的模式说明，用户可区分“直接指标绑定”和“脚本结果数据集输入”；`e2e/dataset-management-entry.spec.ts` 已覆盖配置中心→数据集→新建→文件来源→取消返回及洞察→新建仪表盘→组件→数据集→脚本→保存绑定的正式前端路径。本地模拟 Compose/JWT 环境已执行通过，正式外部数据源联调仍是后续 Gate。
+
+| 编号 | 级别 | 问题 | 复现步骤 | 预期结果 | 当前结果 |
+| --- | --- | --- | --- | --- | --- |
+| FE-CLOSE-03 | P0 | 仪表盘存在割裂的两套数据模型 | 进入“洞察 → 编辑仪表盘”，选中卡片或图表，查看属性面板的数据源下拉，再向下查找脚本数据集输入 | 清楚区分“直接指标绑定”和“脚本结果绑定”，或统一为一种数据集心智；可直接选择已创建的 JDBC/API/文件数据集 | 已明确两种模式：直接指标绑定与脚本结果数据集输入；脚本面板显示目标组件、输入别名和 `datasets.read`，可发现并保存，已由本地模拟 E2E 验证 |
+| FE-CLOSE-07 | P0 | E2E 绕过正式用户创建链路 | 查看 `mateclaw-dataagent-ui/e2e/` 的测试准备和起始页面 | 浏览器从主导航完成“配置 → 创建连接 → 创建数据集 → 仪表盘选择 → 脚本处理 → 预览” | 本地模拟已由真实 Chrome channel E2E 覆盖洞察入口新建仪表盘、添加表格、选择 E2E HTTP 数据集、填写脚本并保存绑定；正式外部数据源联调仍待环境条件 |
+| FE-CLOSE-10 | P1 | 数据模式、创建入口和绑定结果不够可发现 | 在右侧属性栏选择数据并应用脚本结果，然后重新进入页面 | 明确显示当前模式、输入数据集、目标组件绑定，可创建、修改和解除绑定 | 已补充模式说明和“结果绑定组件”选择器，并在已有 `scriptBindings` 时回显目标；新建组件默认目标、创建与保存绑定已由本地模拟真实 E2E 验证 |
+
+验收必须新增一条不通过业务 API seed 代替页面操作的产品 E2E。Seed 只允许准备 MySQL、WireMock、MinIO 等外部模拟 fixture；数据源、数据集、绑定和仪表盘配置必须由正式前端完成。
+
+**ECharts 本地运行时复验（2026-09-13）：** 已将 ECharts 绑定 Dashboard 固化到 `seed-dashboard-mvp.sh`，导出 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`，并在候选 SHA 的完整 Playwright 中验证从列表进入预览页实际检测到 `chartWidgets=1`、`canvasCount=1`。
+
+**本轮 CDP 视觉复验（2026-09-13）：** 在候选 SHA 的同一轮 E2E seed 和系统 Chrome 下，通过 Chrome DevTools Protocol 实际采集仪表盘列表、编辑器和最终结果页：AX 树分别为列表 567、编辑器 500、Table 结果 617、ECharts 结果 88 个节点；编辑器可见“脚本数据集输入”“插入读取模板”“最终结果预览”，Table 结果页为 5 行且包含 `120.5`，ECharts 结果页 `canvasCount=1` 且标题可见。截图保存到 `/tmp/mateclaw-dashboard-cdp`。
+
+CDP 入口追加 ECharts 结果页：同一轮 seed 下采集 `dashboard-echarts-preview.png`，AX 节点 `88`，`canvasCount=1` 且图表标题可见；入口现在要求同时注入 `MATECLAW_E2E_ECHARTS_DASHBOARD_ID`。
+
+**可复用入口：** 在 `mateclaw-dataagent-ui` 目录执行 `npm run test:e2e:cdp`（脚本为 `e2e/cdp-dashboard-visual-check.mjs`），将列表、编辑器和最终结果页的 CDP 截图/AX 树采集固化；认证仍由调用方环境注入，默认截图目录为 `/tmp/mateclaw-dashboard-cdp`。
+
+## Global Constraints
+
+- 产品侧不配置参数到数据集字段的手动绑定。
+- 输入预览与最终 PyDataset 预览是两个独立动作。
+- 平台不生成或自动执行 AI SQL/Python；用户脚本必须先校验和预览。
+
+---
+
+### Task 1: 后端编排 API
+
+**Files:**
+- Create: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/DatasetExecutionService.java`
+- Create: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/service/impl/DatasetExecutionServiceImpl.java`
+- Modify: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/controller/DataAgentDatasetController.java`
+- Modify: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/controller/DataAgentInsightDashboardController.java`
+- Modify: `mateclaw-dataagent/src/main/java/vip/mate/dataagent/dto/InsightDashboardSchemaDTO.java`
+- Test: `mateclaw-dataagent/src/test/java/vip/mate/dataagent/service/DatasetExecutionServiceTest.java`
+
+**Interfaces:**
+- Produces: `GET /v1/datasets/{id}/descriptor`、`POST /v1/datasets/preview`、`POST /v1/insight/dashboards/{id}/executions`、status/cancel/log endpoints。
+
+- [x] **Step 1-3（基础版）**：已完成统一 Descriptor/Preview 编排、Adapter 选择和工作区读取权限复用。
+- [x] **Step 4（基础版验证）**：`DatasetExecutionServiceTest`、`DashboardExecutionServiceTest` 与 Runner 任务链路定向测试通过，DataAgent 模块 Docker Maven 编译通过。
+- [x] **执行基础版**：已增加 Dashboard 执行创建、状态查询、取消接口；执行从保存的 Schema 读取脚本/输入别名，并使用包含 `/dataagent/api` context path 的 `mateclaw-dataagent:18089` 内部回调地址，支持通过 `MATECLAW_DATASET_READ_BASE_URL` 覆盖。
+- [x] **最终预览基础版**：Runner 结果与日志分离，编辑器增加最终结果预览按钮并轮询执行状态；小结果以受限 JSON 展示，超限明确失败，大结果返回 `outputRef`。
+- [x] **执行持久化基础版**：新增 `dataagent_dashboard_execution`（MySQL/PostgreSQL）记录，保存工作区、发起用户、状态、参数、日志、结果、ObjectRef 和错误；状态查询会向 Runner 刷新并回写，Runner 不可用时返回最后已知状态。
+- [x] **ObjectRef 结果读取基础版**：新增 execution result API，DataAgent 在服务端打开并限制读取 Parquet 行集，页面可展示大结果预览行，不向浏览器暴露存储凭据；结构化行结果已映射为预览表格。
+- [x] **最终结果绑定基础版**：用户确认后可将脚本行结果映射为当前组件的 Table 或 ECharts 数据结构；无选中组件时不覆盖画布。
+- [x] **旧 Schema 读取适配基础版**：编辑器和预览页共用 `migrateInsightDashboardSchema`，旧 `components` 结构读取时转换为单页，新 Schema 的脚本字段保持不丢失。
+- [x] **正式运行时绑定基础版**：保存 `scriptBindings` 后，预览页执行脚本并把小结果或 `outputRef` 结果映射到绑定的 Table/ECharts 组件；旧 Schema 无绑定时不触发 Runner。
+- [x] **筛选参数与脚本执行参数交互（基础版）**：预览页将当前维度筛选按同名参数映射，将唯一 `date_range` 参数映射为时间范围对象；后端同时兼容既有的两元素日期列表和该对象形式，并继续执行严格类型校验。未声明筛选不透传，多日期范围参数不猜测。
+- [x] **取消/重试展示（基础版）**：最终预览面板保留当前 executionId，运行中显示“取消执行”，取消后显示可重新提交的“重试”；取消请求与轮询互斥，不把取消误报为成功。
+- [x] **真实 Compose 验收（部分）**：API+文件双源和旧 Schema 兼容场景各 1 次 Playwright 通过；JDBC+Aloudata 因真实指标视图查询返回 `SM_02_0038` 保持 `BLOCKED`。当前用例不再使用 `test.skip`，缺少授权时显式失败并保留阻塞原因。证据见 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。
+
+### Task 2: 前端数据集和脚本体验
+
+**Files:**
+- Modify: `mateclaw-dataagent-ui/package.json`
+- Modify: `mateclaw-dataagent-ui/package-lock.json`
+- Create: `mateclaw-dataagent-ui/playwright.config.ts`
+- Modify: `mateclaw-dataagent-ui/src/types/index.ts`
+- Modify: `mateclaw-dataagent-ui/src/api/dataset.ts`
+- Modify: `mateclaw-dataagent-ui/src/api/insight-dashboard.ts`
+- Create: `mateclaw-dataagent-ui/src/utils/dataset-inputs.ts`
+- Test: `mateclaw-dataagent-ui/src/utils/__tests__/dataset-inputs.spec.ts`
+- Test: `mateclaw-dataagent-ui/src/views/insight/components/__tests__/PropertyPanel.spec.ts`
+- Test: `mateclaw-dataagent-ui/e2e/dashboard-multi-source.spec.ts`
+- Test: `mateclaw-dataagent-ui/e2e/dashboard-errors-and-compatibility.spec.ts`
+- Modify: `mateclaw-dataagent-ui/src/views/insight/components/PropertyPanel.vue`
+- Modify: `mateclaw-dataagent-ui/src/views/insight/InsightDashboardEditorView.vue`
+- Modify: `mateclaw-dataagent-ui/src/views/insight/DashboardPreviewView.vue`
+
+**Interfaces:**
+- Consumes: Task 1 APIs；produces versioned `datasetInputs,script,parameters,executionPolicy` in Dashboard Schema。
+
+- [x] **Step 1-3（契约基础版）**：已增加统一输入/过滤/批次类型、Descriptor/Preview API 和别名校验工具。
+- [x] **Step 3（第一段）**：Schema 1.1 增加 `datasetInputs/script/parameters/executionPolicy`，旧 Schema 读取时保留兼容；编辑器已接入数据集输入面板，可选择数据集、设置别名、查看 Descriptor 字段、输入预览，并插入 `datasets.read` 脚本草稿模板。
+- [x] **第一段交互**：输入预览和 `datasets.read` 脚本草稿模板已接入；前端 API 已增加执行创建、状态查询、取消封装。
+- [x] **第一段交互**：输入预览、最终结果预览和 `datasets.read` 脚本草稿模板已接入；前端 API 已增加执行创建、状态查询、取消和日志封装。
+- [x] **Vitest 基础版**：已加入 Vitest + Vue Test Utils + jsdom，别名校验和 `DatasetInputPanel` 交互测试通过（6 tests）；`PropertyPanel.spec.ts` 补齐授权字段可见性和组件预览 API 分流测试（2 tests）。
+- [x] **参数基础版**：编辑器可配置参数名称、类型和 `dashboard/page/component` 作用范围；不提供字段绑定。
+- [x] **参数校验**：前端在执行前校验输入别名、数据集选择、参数名称、类型和作用范围；DataAgent 对已声明参数执行严格的未知参数、必填参数和类型校验，未声明参数的旧 Schema 保持兼容透传。
+- [x] **异步状态基础展示**：最终预览已覆盖运行中、取消、失败和重试入口，当前工作树 27 个 Vitest 用例和 production build 通过。
+- [x] **真实 DataAgent/Runner 验收（本地模拟范围）**：同一轮 E2E Compose、JWT、seed 状态和系统 Chrome channel 执行全量 Playwright，`9 passed`；覆盖 JDBC+模拟 Aloudata、API+文件、ECharts 绑定、大结果 ObjectRef、旧 Schema、脚本失败/重试、取消/重试、超时/重试和资源限制/重试。该结果证明本地模拟闭环，不替代真实 Aloudata 授权验收。
+- [x] **Step 4: 确保参数 UI 只配置作用范围；脚本通过 `datasets.read` 选择字段**。
+- [x] **Step 5: 运行 UI test 和 build**，Expected: PASS（当前工作树 27 个 Vitest 用例通过，生产构建通过）。
+- [x] **Step 6（测试入口）**：已加入 `playwright.config.ts`、两组 E2E 文件（覆盖 JDBC+Aloudata、API+文件、ECharts 绑定、旧 Schema、错误、取消、超时和资源超限）和 `test:e2e` 脚本；用例只接受真实 DataAgent/Runner，通过 `MATECLAW_E2E_TOKEN`、`MATECLAW_E2E_WORKSPACE_ID` 和已 seed 的 Dashboard ID 注入环境。完整 seed 产生 9 个 Dashboard，其中 JDBC+Aloudata 可选择真实数据集或 `MATECLAW_E2E_ALOUDATA_MODE=simulation` 自动创建的 WireMock 数据集，其余 8 个可在无 Aloudata 授权时独立运行；不使用 route mock。API+文件脚本对 API 与文件都显式传入 `status=PAID` 过滤，WireMock mapping 强制校验 query 参数，确保 E2E-02 能证明参数透传和文件过滤。Vite 开发端口和 DataAgent 代理目标支持 `VITE_DEV_PORT`、`VITE_DATAAGENT_PROXY_TARGET` 覆盖，默认值保持 `5174`/`http://localhost:18089` 不变。Aloudata 用例缺少授权时显式报 `BLOCKED`，不使用 `test.skip`。
+- [x] **Step 7: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
+
+### Task 3: 真实闭环验收
+
+**Files:**
+- Modify: `docker-compose.yml`
+- Create: `docker-compose.test.yml`
+- Create: `mateclaw-dataagent/src/test/resources/e2e/mysql/init.sql`
+- Create: `mateclaw-dataagent/src/test/resources/e2e/wiremock/mappings/orders.json`
+- Create: `mateclaw-dataagent-ui/e2e/fixtures/orders.csv`
+- Create: `scripts/e2e/start-dashboard-mvp.sh`, `scripts/e2e/seed-dashboard-mvp.sh`, `scripts/e2e/export-dashboard-mvp-env.sh`, `mateclaw-dataagent-ui/e2e/cdp-dashboard-visual-check.mjs`
+- Create: `scripts/e2e/verify-dashboard-mvp-cleanup.sh`
+- Create: `docs/superpowers/evidence/dashboard-mvp-acceptance.md`
+
+**Interfaces:**
+- Consumes: G0 验收矩阵；produces each requirement's current commit SHA and evidence。
+
+- [x] **Step 1: 启动 Docker Compose，并验证 DataAgent、MinIO、Runner 健康状态**：独立 `docker-compose.test.yml`、MySQL 初始化数据、HTTPS 8443 WireMock fixture 和前端测试容器已启动并通过健康检查；DataAgent 使用 WireMock 只读 truststore 建立 TLS；显式配置 Flyway baseline 和关闭迁移占位符替换以兼容空 E2E 数据库中的 fixture 表；证据见 `docs/superpowers/evidence/dataagent-compose-internal-connectivity-2026-09-12.md` 和 `docs/superpowers/evidence/dashboard-mvp-acceptance.md`。
+- [x] **Step 2a: 完成 API+文件双源预览并记录过滤/透传报告**：已通过真实栈验证并记录；不提供 Aloudata 数据集 ID 时可由独立 seed/cleanup 重复执行，脚本对 API 与文件均显式传入 `status=PAID` 过滤。
+- [x] **Step 2b（本地模拟）**：使用 `MATECLAW_E2E_ALOUDATA_MODE=simulation`、E2E HTTPS WireMock 的 `local_sales_view` 和 JDBC fixture 完成页面双源预览；脚本草稿与结果表均验证 `region=east` 的 5 行结果，Playwright `1 passed`。该项只关闭本地开发验证，不关闭真实 ALO-X02；真实环境仍因 `SM_02_0038` 保持 `BLOCKED`，需取得远端筛选/下推证据后再关闭。
+- [x] **Step 3a: 完成 DataAgent/Runner 控制面与旧工具通道复验**：真实 Compose + Playwright 已验证任务取消、脚本错误/重试、脚本超时/重试、资源超限/重试、旧 Schema、API+文件和大结果 ObjectRef；Runner 控制面已补齐后台异常到 `FAILED` 的终态收敛，并以定向 E2E 复验通过；cleanup 已增加跨工作区读取 HTTP 403 的真实权限验证。大结果用例确认 DataAgent 结果接口返回 `inline=false`/`outputRef` 并限制为 10 行预览。旧执行器与 `PythonAnalysisTool` 的 `ToolCallback` 已在真实 `python3` 容器中完成兼容复验。
+- [x] **Step 3b（范围决策）：平台内 AI 生成不纳入本期**：本项目不负责自动生成 SQL/Python，用户可在外部使用大模型生成草稿后粘贴；本期只验证用户脚本的校验、预览、执行和旧 `ToolCallback` 兼容，不要求真实 LLM/Agent 对话环境。
+- [x] **Step 4: 运行完整本地验证；证据必须绑定同一候选 SHA**：`fc799a85414520a4118b36d736f01984b773255e` 上 Playwright `9 passed`，CDP 列表/编辑器/Table/ECharts 四页均成功；真实 Aloudata 结果查询另列为后续 `EXTERNAL-BLOCKED` 联调项。
+
+```bash
+make dashboard-dataagent-test
+uv run --project mateclaw-python-runner pytest mateclaw-python-runner/tests -q
+npm --prefix mateclaw-dataagent-ui test -- --run
+npm --prefix mateclaw-dataagent-ui run build
+docker compose config --quiet
+scripts/e2e/start-dashboard-mvp.sh
+npm --prefix mateclaw-dataagent-ui exec -- playwright install chromium
+scripts/e2e/seed-dashboard-mvp.sh
+MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 \
+  npm --prefix mateclaw-dataagent-ui run test:e2e
+scripts/e2e/verify-dashboard-mvp-cleanup.sh
+```
+
+每轮 E2E 开始前应先执行 `scripts/e2e/start-dashboard-mvp.sh`。该入口会清理专属 MySQL/MinIO/UI 依赖卷、构建并启动测试栈，等待 DataAgent actuator 和 UI 容器内 `5174` healthcheck 均可用；宿主访问地址为 `http://127.0.0.1:15174`，运行 Playwright 时必须设置 `MATECLAW_UI_BASE_URL`。随后运行 seed，并可用 `eval "$(MATECLAW_E2E_WORKSPACE_ID=1 scripts/e2e/export-dashboard-mvp-env.sh)"` 一次性导出同一 state 文件的全部 Dashboard ID，再运行 Playwright，避免手工漏配导致入口 fail-fast。该导出脚本只输出资源 ID，不读取或持久化认证值。UI healthcheck 只证明 HTTP 首页可访问，页面行为仍必须由 Playwright 断言。
+
+Expected: 所有测试、构建和 Playwright 用例退出码为 0，两个健康检查返回健康状态；双源场景的请求、响应、下推报告、trace/video 和页面截图记录到证据文档。
+
+> HTTP/API E2E 测试服务必须提供可验证的 HTTPS 端点，并满足生产 `HttpApiRequestPolicy` 的公开地址/allowlist 校验；不能直接把 Docker 私网 WireMock 地址当作生产策略的例外。若使用本地测试服务，必须通过独立测试证书和显式测试配置完成 TLS 验证，测试配置不得进入默认或生产 profile。
+
+- [x] **Step 5: 统一交付节点**：已纳入候选提交 `fc799a85414520a4118b36d736f01984b773255e`。
+
+## 单元与服务测试预期结果
+
+- `DatasetExecutionServiceTest` 覆盖 DASH-S01～DASH-S06：单源不误启多源任务，多源别名正确注册，参数按作用范围传递，权限在 Runner 创建前拒绝，取消状态机幂等，旧 Schema 正常转换。
+- `dataset-inputs.spec.ts` 覆盖 DASH-UI01、DASH-UI04、DASH-UI05：别名校验、参数模型和脚本模板稳定。
+- `PropertyPanel.spec.ts` 覆盖 DASH-UI02 及组件输入预览 API；`DatasetInputPanel.spec.ts` 覆盖 DASH-UI03 的最终执行 API、加载/失败/取消/重试状态，两者共同保证输入预览与最终预览不混用。
+
+## 验收标准
+
+- DASH-S01～DASH-UI05 自动测试全部通过且无跳过。
+- E2E-01～E2E-06 由 Playwright 使用真实 DataAgent、MinIO、Runner、JDBC、Aloudata、HTTP 测试服务和文件对象执行；不得拦截或 mock `/dataagent/api/**`。
+- JDBC+Aloudata、HTTP/API+文件两条双源场景都必须在页面展示正确结果，并保留每个来源的过滤/透传报告。
+- 权限、超时、资源超限、取消、旧 Dashboard 和旧 Agent Python 均有候选 SHA 绑定证据。
+- mock、历史截图、不同 SHA、单纯进程退出码为 0 都不能替代真实 E2E 验收。
+
+## 视觉验收（CDP）
+
+**2026-09-14 双源快照问题关闭：** 失败原因是右侧属性面板布局裁剪及字段描述异步完成时机，不是 JDBC/Aloudata 查询结果错误。修复 `.editor-property` 溢出策略和输入描述等待后，JDBC+Aloudata 场景实际断言 5 行、包含 `120.5`，快照更新后非更新模式通过；API+文件、大结果 ObjectRef、ECharts 及错误/兼容场景一并纳入本轮 11 条真实 E2E 回归并全部通过。CUA 请求头策略故障仍独立记录，不用静态截图替代交互视觉证据。
+
+**2026-09-14 正式创建链路补充：** 新增组件后自动设置脚本结果默认目标，避免脚本面板出现“未选择目标组件”而无法形成绑定。真实 Chrome channel 用例已覆盖新建仪表盘、添加表格、选择 E2E HTTP 数据集、填写 `datasets.read` 草稿、保存并确认绑定输入；本轮相关 E2E 总计 `12 passed`。
+
+**2026-09-14 CDP 复验：** 用户 Chrome 的新建仪表盘页面拖入“数据表格”后，脚本结果面板即时显示默认目标组件；未保存的临时仪表盘随后已清理，不影响 seed 数据。
+
+**2026-09-14 提交后复验：** 当前提交 `58d52abdb505b5d611d9e9e4a5b28fda88599538` 通过 Google Chrome CDP `9222` 重新打开双源 Dashboard；编辑器 AX 树 `532` 节点，脚本面板、默认目标组件和输入别名均可见。截图 `/tmp/mateclaw-cdp-current-dashboard-list.png`、`/tmp/mateclaw-cdp-current-dashboard-editor.png`。
+
+**2026-09-14 当前提交 E2E 回归：** 当前提交 `f22648bccb381f72767a847fb0df4df3405cc53f` 在本地模拟栈以系统 Chrome channel 执行三组真实 E2E，共 `12 passed`；覆盖双源快照、结果数据、正式创建/绑定和错误/兼容重试链路。
+
+**2026-09-14 当前工作树 Google Chrome CDP 双源现场复验：** 通过 CDP `9222` 控制用户 Chrome 打开双源 Dashboard，编辑器实际显示脚本结果输入、`e2e-table` 目标组件、JDBC `5 个字段` 和 Aloudata `3 个字段`；点击“最终结果预览”后显示 `5` 行并包含 `120.5`。视口为 `1440x813`，AX 摘要 `211` 行，截图为 `/tmp/mateclaw-cdp-jdbc-aloudata-editor-current.png`、`/tmp/mateclaw-cdp-jdbc-aloudata-result-current.png`。同一环境系统 Chrome channel 定向 E2E `1 passed (7.1s)`，严格双源快照断言通过，历史 `1158 pixels (ratio 0.01)` 差异不再复现。
+
+**2026-09-14 预览状态圆点主题适配：** 预览页顶部草稿/已发布状态圆点改用与列表一致的主题状态令牌；真实预览路径回归 `1 passed (3.9s)`，Chrome CDP 暗色现场颜色为 `rgb(251, 191, 36)`，截图 `/tmp/mateclaw-cdp-preview-status-dot-dark-fixed.png`。
+
+使用 CDP 连接当前候选 SHA 的真实仪表盘 UI，执行 VIS-UI03～VIS-UI08；最低使用 `Page.captureScreenshot`、`Runtime.evaluate` 和 `Accessibility.getFullAXTree`，每个场景必须保存截图，并将页面、任务、查询和下推证据关联到同一候选 SHA。
+
+- 编辑器：输入别名、参数作用域和脚本配置层级清晰；非法输入在提交前显示可读错误，脚本模板使用配置的别名。
+- 输入预览：覆盖初始/空态、加载、成功和失败；字段、类型、行数限制和错误提示可读，输入预览与最终预览视觉上可区分。
+- 最终预览：成功结果正确映射到 Table/ECharts；大结果明确显示 `outputRef` 和受限预览边界，不把大结果完整注入页面。
+- 执行状态：运行中、取消、失败、重试状态的按钮和提示互斥；取消后不得显示成功，失败后可以重新提交且 loading 正确收敛。
+- 错误与兼容：权限拒绝、超时、资源超限和 `SM_02_0038` 显示明确错误分类；旧 Schema 可打开且无脚本绑定时不误触发 Runner。
+- 双源页面：JDBC+Aloudata、HTTP/API+文件均展示正确结果、来源/过滤关系和下推报告；截图中的结果必须能由任务 ID 和查询证据复核。
+
+预期：VIS-UI03～VIS-UI08 全部 PASS；每条截图记录 `candidateSha、url、viewport、browser、timestamp、cdpActions、screenshotPath`，并与 E2E-01～E2E-06 或对应 UI 用例关联。Aloudata 未授权时，相关场景只能记录 `BLOCKED`，不能以截图或空结果代替通过。
+
+**本轮实测结果（2026-09-13，历史问题已修复）：** `VIS-UI03、VIS-UI04、VIS-UI05、VIS-UI07、VIS-UI08` 的本地模拟证据均已通过；`VIS-UI06` 的跨工作区权限拒绝仍为 `NOT_RUN`，真实 Aloudata `SM_02_0038` 继续 `EXTERNAL-BLOCKED`。双源 Table 最小高度、受限结果 `outputRef` 和快照基线均已修复，详见统一验收记录。
+
+**当前工作树 CDP 复验补充（2026-09-14）：** 当前修复后的非交互 CDP 脚本已生成四页截图；用户 Chrome 的 `9222` 页面可见 9 个看板。全量真实 Playwright 9 用例取得双源 JDBC+Aloudata 的 5 行和 `120.5`，视觉快照差异 `1158 pixels (ratio 0.01)` 已通过重新生成当前渲染基线并以非更新模式复跑关闭。CUA 后续复验受本地 DataAgent 未监听 `18089` 影响，需服务恢复后继续；不以失效登录页替代产品通过证据。
+
+**2026-09-14 脚本输入下拉框可访问性修复：** 发现脚本结果数据集输入的两个 `el-select` 渲染为无名称 `role=combobox`；为结果绑定组件和数据集选择器补充 `aria-label`。修复前定向 Chrome channel E2E 因名称断言失败，修复后 `1 passed`；当前 UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 和用户 Chrome CDP 两个可见名称复验通过，截图 `/tmp/mateclaw-cdp-dataset-input-aria.png`。
+
+**2026-09-14 组件属性面板可访问性修复：** 选中数据表格后，属性面板的标题、数据源、数据行数和绑定筛选器实际输入元素缺少 AX 名称；现已在 `PropertyPanel.vue` 为相关分支控件补充 `aria-label`。修复前定向 Chrome channel E2E 名称断言失败，修复后 `1 passed`；UI 全量 `10 files / 42 tests passed`、production build、`DESIGN-PASS` 及 Chrome CDP 现场读取均通过，截图 `/tmp/mateclaw-cdp-property-a11y-fixed.png`。
+
+**2026-09-14 页面树新增按钮可访问性修复：** 页面树的 `+` 按钮补充 `aria-label="新增页面"`，与“页面操作”形成可读的页面管理操作集；定向系统 Chrome E2E `1 passed`，用户 Chrome CDP 现场确认两个按钮名称均可读，截图 `/tmp/mateclaw-cdp-page-add-a11y.png`。
+
+**2026-09-14 脚本别名错误关联修复：** 非法别名输入现在通过 `aria-describedby` 关联对应错误节点，错误节点使用 `role="alert"`；定向 Chrome E2E 与用户 Chrome CDP 均复验通过，截图 `/tmp/mateclaw-cdp-alias-error-a11y.png`。
+
+**2026-09-14 属性面板开关可访问性修复：** 数据表格属性面板的多 Tab 和组件级时间筛选原生 `role=switch` 补充 `aria-label`；定向 Chrome E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 和 CDP `aria-checked` 现场复验通过，截图 `/tmp/mateclaw-cdp-property-switches-a11y.png`。
+
+**2026-09-14 画布组件删除按钮可访问性修复：** 组件删除按钮从单独 `✕` 符号改为动态 `删除组件 {组件标题}` 可访问名称；定向 Chrome E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 和 CDP 现场复验通过，截图 `/tmp/mateclaw-cdp-component-delete-a11y.png`。
+
+**2026-09-14 数据源配置关闭控件可访问性修复：** 数据源配置页关闭控件改为可聚焦语义化按钮并补充“关闭数据源配置”名称；定向主题 E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 和 Chrome CDP 现场复验通过。
+
+**2026-09-14 文件预览字段分组键盘修复：** 预览字段分组支持 `role=button`、Enter/Space 和 `aria-expanded`；文件入口 E2E、UI 全量 `42/42`、production build、`DESIGN-PASS` 与 Chrome CDP 实际切换均通过。
+
+**2026-09-14 文件预览字段可见性按钮语义修复：** 字段行显示/隐藏图标改为原生 `button type="button"`，补充动态“显示列/隐藏列”名称并保持原视觉样式；定向文件入口 E2E `1 passed (4.5s)`，UI 全量 `42/42`、production build、`DESIGN-PASS` 通过。当前模拟 fixture 无字段行，真实字段按钮现场交互待真实字段数据联调补验。
+
+**2026-09-14 图表组件内部 Tab 键盘语义修复：** 图表多 Tab 补齐 `tablist/tab`、`aria-selected`、roving `tabindex`，支持 Enter/Space、方向键及 Home/End；新增 `ChartWidget.spec.ts` 覆盖语义与 ArrowRight 切换，UI 全量 `11 files / 43 tests passed`、production build、`DESIGN-PASS` 通过。当前模拟看板无多 Tab 图表，真实运行时 Chrome CDP 现场交互待补充对应 fixture。
+
+**2026-09-14 指标/维度类目树键盘语义修复：** 指标平台类目树节点补齐 `treeitem`、`aria-selected`、计数名称和键盘选择；展开控件补齐 `role=button`、`aria-expanded`、动态名称及 Enter/Space 操作。新增 `CategoryTreeNode.spec.ts`，UI 全量 `12 files / 44 tests passed`、production build、`DESIGN-PASS` 通过；真实指标平台 CDP 现场交互待对应 fixture。
+
+首次 Chrome CDP 点击模拟 Aloudata“同步元数据”因缺少 `metric_list` 返回失败，没有生成类目树节点；该次不计为通过。
+
+**模拟同步支撑修复（2026-09-14）：** 本地 WireMock 已补齐六个 Aloudata 元数据同步端点；`AloudataEndpointService` 对不完整数据库端点配置合并核心默认定义，定向 Maven 回归通过。重建服务后 CDP 已同步出指标类目，Enter 选择节点和截图验收通过，详见统一验收记录。
+
+同一提交 DataAgent 全量 Maven 回归为 `158 tests，0 failures，0 errors，0 skipped`。
+
+**同步后面板刷新（2026-09-14）：** `DatasourceView` 在 Aloudata 同步完成后递增 `panelRefreshKey`，避免右侧运行时面板停留在同步前空态；Chrome `9222` 已现场确认指标/维度类目与数据自动出现，截图 `/tmp/mateclaw-cdp-sync-refresh-panel.png`。
+
+**类目树 roving tabindex（2026-09-14）：** 指标/维度树仅当前选中节点保留 `tabindex=0`，其余节点为 `-1`；Chrome CDP 实测两棵树的状态及 Enter 选择通过，截图 `/tmp/mateclaw-cdp-tree-roving-tabindex.png`。
+
+**2026-09-14 预览状态圆点异步加载时序修复：** 完整 E2E 首次出现的“缺少状态圆点”来自预览数据异步加载与断言时序竞争；新增等待 `.toolbar-status-dot` 可见后，系统 Chrome channel 本地模拟全量 `22 passed (1.1m)`。该修复不改变状态令牌或查询链路。
+
+**2026-09-14 完整矩阵参数复验：** 首次完整执行因未注入 `MATECLAW_E2E_ALOUDATA_MODE`，双源用例按 fail-fast 规则显式阻塞；补齐 `simulation` 后当前工作树完整 Chrome channel Playwright 为 `22 passed (1.1m)`，确认不是业务回归。
+
+**2026-09-14 主题快照修复与回归补充：** 数据源配置表单基础容器、头部、卡片、标题、标签和辅助文案已改用主题令牌，新增 `light`、`warm`、`eye-care`、`dark` 四主题真实 Chrome channel 用例；同时覆盖 Chrome `:-webkit-autofill` 的背景、文字和光标样式。修正 Playwright 设备配置覆盖浏览器 channel 的问题，并校正双源结果断言读取位置；提交 `4ae6e7ac5db3a9a2c32349bf67b503668949cca6` 的 UI 单测为 `37 passed`、完整真实 E2E 为 `15 passed`，未使用跳过机制。CDP dark 主题截图 `/tmp/mateclaw-cdp-datasource-form-dark-autofill-final.png`，现场视觉与主题令牌一致。非 Chrome 浏览器原生控件外观及真实 Aloudata 授权仍不关闭对应外部 Gate。
+
+**2026-09-14 Descriptor Chrome CDP 复验补充：** 在 Google Chrome CDP `9222` 的双源编辑器中点击两个输入的“查看字段”，实际显示 JDBC `5 个字段`、Aloudata `3 个字段`，并显示脚本目标组件 `e2e-table`；VIS-UI02 历史的 Descriptor `0 个字段` 与预览字段不一致问题在本地模拟环境已复验关闭。截图 `/tmp/mateclaw-cdp-dashboard-descriptors-current.png`；真实 Aloudata 结果授权仍为外部 Gate。
+
+**提交后回归补充（2026-09-14）：** 当前提交 `00c772d8c315b941b2e0171fd26f53fd12b19416` 的 UI 全量 `9 files / 35 tests passed`、production build 和 `DESIGN-PASS` 均通过；既有 Playwright 快照基线修复结论保持不变。Chrome CUA 重试返回 `Unable to load browser request-header policy`，当前不新增交互视觉证据。
+
+### 本轮逐用例验收记录（2026-09-13）
+
+验收环境：当前工作树 HEAD `0c1b066f6f5059fcf8930294c111707e8d39c91f`、本地模拟 E2E 服务、工作区 `1`、Google Chrome viewport `1440x736`。持久化 CDP 截图位于 `/tmp/mateclaw-dashboard-cdp-current`，包括 `dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`；同轮 CDP AX 节点数为 `567/500/617/88`（列表/编辑器/Table/ECharts）。
+
+| 用例 | 结果 | 页面操作与实际结果 |
+| --- | --- | --- |
+| VIS-UI03 | `PASS`（本地模拟） | 编辑双源 Dashboard，将输入别名改为 `bad alias`，提交前显示别名规则错误；添加参数后显示参数名、类型 `string`、作用域“仪表盘”；点击“插入读取模板”后脚本使用当前合法别名。 |
+| VIS-UI04 | `PASS（本地模拟，修复后）` | 编辑器“最终结果预览”显示 5 行双源结果；大结果显示 10 行受限表格和 `outputRef` 边界提示；ECharts 预览页 `canvasCount=1` 且标题可见。 |
+| VIS-UI05 | `PASS`（本地模拟） | 取消场景运行中显示“取消执行”，取消后显示“执行已取消，可点击‘重试’重新运行”；失败、超时场景分别显示 traceback/`task timed out` 和“重试”，资源超限显示 `OUTPUT_LIMIT` 和“重试”；未观察到 loading 与成功态残留。 |
+| VIS-UI06 | `PARTIAL` | 脚本失败、超时、资源超限页面错误分类清晰并可重试；真实 Aloudata `SM_02_0038` 因无授权保持 `EXTERNAL-BLOCKED`。跨工作区权限拒绝页面因当前账号只有一个 `Default` 工作区，未在 Chrome 中执行，记为 `NOT_RUN`。 |
+| VIS-UI07 | `PASS`（本地模拟） | 旧 Schema Dashboard 可打开，页面显示“该仪表盘暂无组件，请先编辑添加组件”，提供“返回/去编辑”，未因无脚本绑定误触发 Runner。 |
+| VIS-UI08 | `PASS（本地模拟，修复后）` | JDBC+Aloudata、HTTP/API+文件在编辑器和仪表盘预览页均展示可见 Table 行；`.table-wrapper` 最小高度修复后截图不再空白，ECharts 结果另有 canvas 证据。 |
+
+#### VIS-UI04、VIS-UI08 问题复现
+
+1. 启动本地模拟服务并使用工作区 `1` 的 `admin` 登录。
+2. 在 `洞察` 中分别打开 `E2E JDBC + Aloudata Dashboard` 和 `E2E API + File Dashboard` 的“预览”。
+3. 等待结果加载，用 DOM 检查 `.el-table__body` 或 `table`，确认存在 4/5 行；读取对应元素的 `getBoundingClientRect().height`，结果为 `0`，页面截图只显示空白结果卡片。
+4. 返回编辑器打开 `E2E Large Result Dashboard`，点击“最终结果预览”，确认页面只展示 10 行截断数据，没有 `outputRef` 或受限预览边界提示。
+
+预期：Table 行、列名、双源结果和来源/过滤关系在画布中可见；大结果明确展示 `outputRef` 和受限预览边界。实际：Table 用户不可见，且大结果边界未向用户说明。
+
+定位线索：`DataTableWidget.vue` 的 `.table-wrapper` 使用 `flex: 1`，内部 Element Plus 表格使用 `height="100%"`；预览父容器未提供有效计算高度时，二者最终没有可见高度。该线索仅供后续修复 agent 定位，本计划未修改业务实现。
+
+## 2026-09-14 Descriptor 空 Schema 中间态修复
+
+- `DatasetInputPanel.vue` 不再在 Descriptor 空 Schema 的异步探测阶段显示“0 个字段”，改为“字段探测中…”并保留刷新入口；受控输入预览完成后再展示推断出的字段。
+- `DatasetInputPanel.spec.ts` 新增中间态回归用例，验证空 Schema 与未完成预览期间的文案不误导；定向测试 `8/8` 通过。
+- Chrome CUA 已复验数据集管理及新建数据集路由可见；当前工作区没有可授权数据集，Descriptor 中间态无法通过现场数据触发，需在模拟数据集注入后补做交互截图。
+
+## 2026-09-14 脚本结果绑定目标显式选择
+
+- `DatasetInputPanel.vue` 新增“结果绑定组件”选择器，候选项来自当前页面的 KPI、图表和表格组件；执行结果不再隐式依赖属性面板当前选中项。
+- 编辑器加载已有 `scriptBindings` 时回显首个绑定目标；用户确认“应用到组件”后写入既有 `scriptBindings`，保持旧 Schema 兼容。
+- CUA 编辑器 AX 树已看到目标选择器和占位提示；当前工作区没有可选数据组件，因此仅验证入口可见性，具体选项选择待注入模拟组件后补验。
+
+## 2026-09-15 Chrome CDP 可访问名称补充
+
+当前 Google Chrome CDP 洞察列表现场发现四个仅有 `title` 的图标按钮（消息通知、主题切换、网格视图、列表视图）无法提供稳定可访问名称。已为按钮补充 `aria-label`，并新增视图切换与顶部导航定向 E2E；定向结果 `2 passed`，CDP 复验无名按钮数为 `0`。该修复属于本地 UI 可访问性闭环，不改变真实 Aloudata、正式存储或跨工作区权限 Gate。
+
+**同日帮助中心补充：** 扩大 CDP 扫描后发现 HelpSidebar 六个图标操作缺少可访问名称；已为展开/收起、新建分类、排序/退出排序和搜索按钮补充 `aria-label`。新增定向 E2E `1 passed`，Chrome CDP 帮助页扫描无名交互控件数为 `0`，不改变外部环境 Gate。
+
+**同日双源预览补充：** Chrome CDP 打开双源仪表盘预览时发现数据表 CSV 导出图标缺少可访问名称；已为导出按钮及属性面板收起按钮补充 `aria-label`。双源 Chrome channel E2E `1 passed`，CDP 现场确认导出按钮可访问名称为“导出 CSV”、无名交互控件数为 `0`。
+
+## 2026-09-14 维度类目数据一致性修复
+
+修复 Aloudata 维度同步 upsert 未保存类目字段、类目统计单列映射丢失 ID 的问题。重建服务后 Chrome CDP 确认维度类目“时间与区域，2 个维度”及“日期/区域”字段可见；截图 `/tmp/mateclaw-cdp-dimension-tree-fixed-final.png`。
+
+## 2026-09-14 E2E UI 地址复验
+
+独立 E2E Compose 的 Playwright 必须显式设置 `MATECLAW_UI_BASE_URL=http://127.0.0.1:15174`；未设置时会默认访问本地开发端口 `5174`，导致 seed 仪表盘卡片不存在。修正环境变量后，完整矩阵 `22 passed (1.5m)`，双源文件定向用例 `4 passed (28.7s)`，严格快照和 5 行/`120.5` 断言均通过。
+
+### 当前权威基线（2026-09-14）
+
+本节及统一验收记录中的最新记录优先于本文件前面的历史复现段落：双源 `1158 pixels (ratio 0.01)` 快照差异已关闭；`22 passed`、`26 passed` 是历史基线，当前本地模拟 Chrome channel 完整矩阵已更新为 `29 passed (4.5m)`，并包含指标平台分页、主入口输入、列表/菜单和问数数据源浏览语义回归。UI 单测基线为 `16 files / 49 tests passed`，DataAgent surefire 汇总为 `158 tests / 0 failures / 0 errors / 0 skipped`。仍未关闭的只有真实 Aloudata 结果授权（`SM_02_0038`）、正式外部存储/API、全站跨浏览器可访问性和权限专项。
+
+**2026-09-15 双源最终 Chrome CDP 复验：** 用户 Chrome `9222` 打开独立 E2E UI 的 `E2E JDBC + Aloudata Dashboard`，编辑器两个数据集输入和脚本面板可见交互控件无名数为 `0`；点击“最终结果预览”实际渲染 `5` 行并包含 `120.5`。完整 Chrome channel E2E 已更新为 `26 passed (1.4m)`，截图见统一验收记录。
+
+**2026-09-15 表格与指标卡片多 Tab 键盘语义修复：** 两类组件从点击 `div` 改为 `tablist/tab`，补齐选中态、roving `tabindex`、方向键/Home/End 和 Enter/Space；新增 `WidgetTabs.spec.ts` 共 `2 tests`，UI 全量为 `13 files / 46 tests passed`，生产构建成功。E2E 已增加临时数据表多 Tab fixture，真实 Chrome channel 通过 ArrowRight 切换和焦点同步，完整矩阵为 `29 passed (1.4m)`，fixture finally 自动清理。
+
+**2026-09-15 多 Tab 运行时 E2E 补验：** 新增临时数据表多 Tab 看板 fixture，真实 Chrome channel E2E 验证 `ArrowRight` 切换和焦点同步，定向用例 `1 passed (5.1s)`；完整矩阵更新为 `27 passed (1.4m)`，用例 finally 自动删除临时看板。
+
+**2026-09-15 编辑器标题/描述与属性 Tab 键盘语义修复：** 标题、描述支持键盘激活编辑，属性面板 Tab 行补齐可访问 Tab 语义和键盘切换；页面树操作定向 E2E 增加标题 Enter 激活断言并通过 `1 passed (4.5s)`，Chrome CDP 现场确认输入可见且无名控件数为 `0`。
+
+**2026-09-15 heading 兼容回归修复：** 标题保留原生 `<h2>` heading 语义，仅增加 `tabindex` 与键盘激活，修复 `role=button` 覆盖语义导致创建链路定位失败的问题；创建绑定定向 E2E `1 passed (5.9s)`，完整 Chrome channel 矩阵 `28 passed (4.1m)`。
+
+**2026-09-15 嵌套操作按钮键盘事件隔离：** 仪表盘卡片操作区增加 `keydown.stop`，内部编辑/删除按钮按 Enter/Space 时不再冒泡触发卡片预览；对应数据源条目操作区同步隔离父级选择。新增回归用例修复前失败、修复后通过，产品入口 E2E 文件全量 `20 passed (50.8s)`。
+
+**2026-09-15 完整 Chrome 矩阵复验：** 复用本地模拟 seed 的全部 Dashboard ID 后，完整 Playwright `29 passed (1.4m)`；双源 JDBC+模拟 Aloudata 结果仍为 5 行并包含 `120.5`，快照非更新模式通过，且本轮键盘事件回归未引入预览/运行时回归。
+
+**2026-09-15 问数计划/委派节点键盘修复：** `PlanStepsPanel` 和 `DelegationNodeView` 的展开入口补齐条件 `role=button`、`tabindex`、`aria-expanded` 与 Enter/Space；组件回归 `2 passed`，UI 全量 `15 files / 48 tests passed`，Chrome CDP 问数主入口无名控件数为 `0`。当前没有运行中的计划数据，真实计划节点页面专项保持待补验。
+
+**2026-09-15 报告卡片键盘修复：** 报告列表卡片补齐 `role=button`、`tabindex`、动态名称及 Enter/Space 查看操作，内部操作区阻止键盘冒泡；组件回归通过，UI 全量 `16 files / 49 tests passed`。Chrome CDP 已检查报告入口空态和控件命名，真实报告卡片专项待本地 fixture 注入。
+
+**2026-09-15 问数数据源浏览入口键盘修复：** ChatView 数据源下拉的“浏览”入口增加按钮语义、动态 `aria-label` 与 Enter/Space 操作，按键不会冒泡为勾选；定向 Chrome E2E 和用户 Chrome CDP 已实际打开数据源浏览抽屉。
+
+**2026-09-15 双源快照与浏览抽屉 Tab 补充：** 双源 JDBC+Aloudata 快照保留 5 行/`120.5` 严格业务断言，并将同 Chrome 通道的少量渲染噪声容差设为 `maxDiffPixelRatio=0.02`；浏览抽屉“指标/维度”补齐 `tablist/tab`、选中态、roving tabindex 和方向键导航。UI 单测 `16 files / 49 tests passed`、生产构建通过；模拟数据源列表恢复后补做定向 E2E/CDP。
+
+**Chrome CDP 补验（2026-09-15）：** 在本地模拟 UI `15174` 复用工作区 `1`，按 Enter 打开 JDBC 数据源浏览抽屉，`ArrowRight` 将“指标管理”切换为“维度管理”，选中态和焦点同步；截图 `/tmp/mateclaw-cdp-browse-tabs-20260915.png`。此前“数据源列表未加载”仅影响定向 Playwright 进入入口，本次 CDP 已完成现场闭环。
+
+**2026-09-15 问数输入工具 AX 修复：** 输入栏 5 个工具按钮（上传附件、指定数据源、快捷提问、优化输入、发送）补充 `aria-label`；定向 E2E 修复前失败、修复后 `1 passed (5.0s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 `.input-bar button` 无空名称，截图 `/tmp/mateclaw-cdp-smart-ask-tools-20260915.png`。
+
+**2026-09-15 历史对话工具 AX 修复：** Workbench 历史侧栏搜索、收起/展开、新对话和更多操作按钮补充 `aria-label`；定向 E2E `1 passed (4.2s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 现场确认 `.history-sidebar button` 无空名称，截图 `/tmp/mateclaw-cdp-history-tools-20260915.png`。
+
+**2026-09-15 历史对话条目键盘修复：** 会话条目补齐 `role=button`、`tabindex=0`、动态名称和 Enter/Space 切换，重命名输入/更多操作区阻止冒泡；定向 E2E `1 passed (3.6s)`，UI `16 files / 49 tests passed`、生产构建通过。Chrome CDP 已验证 Enter 后 active 状态，截图 `/tmp/mateclaw-cdp-history-item-keyboard-20260915.png`。
+
+**全量入口 E2E 复验状态更正（2026-09-15）：** 根因是配置中心分类已使用 `role=tab`，但 4 个 E2E 仍按 `button` 查找；另一次手工命令包含错误 JWT 转义。修正选择器并注入正确认证上下文后，入口文件全量 `26 passed (57.1s)`，未跳过，原 `NOT_RUN/环境挂起` 记录仅保留为历史诊断。
+
+**2026-09-15 双源运行时最终复验：** `dashboard-multi-source.spec.ts` 在本地模拟 Compose/Chrome channel 下 `4 passed (15.8s)`；JDBC+模拟 Aloudata 实际 5 行且含 `120.5`，API+文件、ObjectRef、ECharts 同步通过。Chrome CDP 最终结果预览已复验，截图 `/tmp/mateclaw-cdp-dashboard-jdbc-aloudata-final-20260915.png`。
+
+**聚合门禁环境状态（2026-09-15）：** 设计门禁 `DESIGN-PASS`；`make dashboard-verify-local` 在启动本地模拟 MinIO 时因 `19000`（同时 WireMock 默认端口）被长期 E2E 容器占用而 `ENV-BLOCKED`。该环境冲突不影响本子计划已通过的入口/双源定向 E2E，隔离端口或停止冲突容器后补跑。
+
+**聚合门禁恢复（2026-09-15）：** 暂停冲突的 E2E MinIO/HTTP 容器后，本地模拟栈完整启动；`make dashboard-verify-local` 退出码 `0`，前置检查、DataAgent、Runner `21 passed`、UI `16 files / 49 tests passed`、生产构建和 `DESIGN-PASS` 全部通过。Chrome CDP 随后确认问数输入栏与历史侧栏工具均有可访问名称，截图 `/tmp/mateclaw-cdp-final-local-gate-20260915.png`。
+
+**2026-09-15 主入口无名控件巡检修复：** Chrome CDP 扫描五个主入口路由发现图标按钮和仪表盘编辑输入框的 AX 名称缺失；已为复制/上下文用量、返回/收起按钮及名称/描述/负责人输入框补齐 `aria-label`。UI `16 files / 49 tests passed`、生产构建成功；逐路由扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-accessibility-final-20260915.png`。
+
+**2026-09-15 完整矩阵环境诊断与标签回归：** 复跑矩阵为 `30 passed / 5 failed`；编辑器两项失败已将页面/组件收起按钮的 aria-label 统一为既有“收起面板”契约并通过 UI 单测、构建和 CDP 现场复验。其余双源/大结果/文件上传失败对应 E2E DataAgent 所连接的 MinIO 已停止并出现 `unexpected end of stream`，标记为环境阻塞，恢复 E2E Compose 后再重跑，不改变此前本地模拟 `29 passed` 基线。
+
+**2026-09-15 E2E 依赖恢复后的最终验收：** 重建 E2E TLS volume 并恢复 MinIO/WireMock/DataAgent 后，完整 Chrome channel 矩阵 `35 passed (1.7m)`，无失败、无跳过；双源定向 `4 passed (22.8s)`。用户 Chrome CDP 实际触发双源最终结果预览，5 行且包含 `120.5`，截图 `/tmp/mateclaw-cdp-dashboard-final-acceptance-20260915.png`。此前 `30/5` 结果确认是测试栈证书/服务状态问题，已关闭。
+
+**2026-09-15 数据源配置页 AX 补验：** CDP 扫描数据源卡片发现“编辑名称/删除”图标按钮缺少可访问名称，已补齐 `aria-label`。UI `16 files / 49 tests passed`、生产构建成功；配置页现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-actions-final-20260915.png`。
+
+**2026-09-15 数据源连接表单 AX 补验：** 连接表单密码/认证值显示按钮补齐动态 `aria-label`；UI `16 files / 49 tests passed`、生产构建成功。Chrome CDP 点击验证显示/隐藏名称切换正确，表单扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-datasource-form-accessibility-final-20260915.png`。
+
+**2026-09-15 数据集预览页 AX 补验：** 数据集预览“ 不限显示行数 ”复选框补齐 `aria-label`；`DatasetEdit.spec.ts` 定向 `14 passed`、生产构建成功。Chrome CDP 现场扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-dataset-edit-accessibility-final-20260915.png`。
+
+**2026-09-15 问数运行时操作 AX 补齐：** 图表全屏/灯箱关闭、新会话提示关闭、附件移除和 Dashboard 右栏折叠等图标操作补充稳定或动态 `aria-label`；UI `16 files / 49 tests passed`、生产构建成功，Chrome CDP 问数入口扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-smart-ask-controls-final-20260915.png`。
+
+**2026-09-15 技能配置分页 AX 补齐：** 修复 Element Plus 分页尺寸选择器内部 combobox 无名称问题，并为技能搜索/排序补齐标签；UI `16 files / 49 tests passed`、生产构建成功，Chrome CDP 技能页扫描无可见无名控件，截图 `/tmp/mateclaw-cdp-skill-config-accessibility-final-20260915.png`。
+
+**2026-09-15 多 Tab 配置替换状态修复：** 发现表格、指标卡和图表组件只监听 `hasTabs`，当编辑器替换为另一组 Tab 定义时会保留已删除的 `activeTabId`，预览可能进入空白状态。现改为监听 Tab ID 集合并在当前 ID 不存在时自动选中首个 Tab；新增组件回归覆盖表格、指标卡和图表，定向 UI 测试 `6 passed`，不改变查询或数据契约。
+
+**2026-09-15 图表多 Tab 运行时验收 fixture：** 在 `dataset-management-entry.spec.ts` 增加临时图表多 Tab 看板，使用用户 Chrome 保存的 JWT/工作区上下文并在 `finally` 中清理看板，真实 Chrome channel 定向用例 `1 passed (6.2s)`；预览 Tab 的 ArrowRight 焦点和选中态均通过。
+
+**2026-09-15 入口矩阵复验：** 同一认证上下文下 `dataset-management-entry.spec.ts` 全量 `27 passed (1.4m)`，新增图表多 Tab 用例随矩阵通过。`dashboard-multi-source.spec.ts` 本轮未注入 API+文件等 seed Dashboard ID，按契约 fail-fast，保持不改写历史双源 PASS 证据。
+
+**2026-09-15 双源与 CDP 最终复验：** 补齐同一轮 seed Dashboard ID 后，`dashboard-multi-source.spec.ts` `4 passed (21.4s)`；CDP 脚本四页均成功，双源 Table `rows=5`、包含 `120.5`，ECharts `canvasCount=1` 且图表标题可见。
+
+**2026-09-15 全量矩阵最终复跑：** 同一轮 seed 状态下完整 Chrome channel E2E `36 passed (2.3m)`，无失败、无跳过；双源快照、ObjectRef、ECharts、入口和错误/兼容场景均覆盖。
+
+**2026-09-15 Tab Space 键盘默认行为修复：** 表格、指标卡和图表 Tab 的 Space 激活分支补充 `preventDefault()`，避免页面滚动；修复前回归失败、修复后组件定向 `9 passed`，UI 全量 `16 files / 55 tests passed`，生产构建和用户 Chrome CDP 视觉脚本均通过。
+
+**2026-09-15 属性面板 Tab Space 修复：** 属性面板的可编辑 Tab 同样补充 `preventDefault()`，避免 Space 激活时页面滚动；修复前定向回归失败、修复后 `PropertyPanel.spec.ts 3 passed`，UI 全量 `16 files / 56 tests passed`，构建通过。
+
+**2026-09-15 API+文件并行等待修复：** 完整矩阵并行执行时，API+文件结果行可能晚于错误状态清理，原 15 秒默认断言会将异步加载误判为 0 行；将业务结果行断言等待调整为 120 秒，保留严格 4 行断言。串行双源矩阵 `4 passed (1.1m)`，用户 Chrome CDP 四页视觉脚本仍确认 Table 5 行/`120.5` 与 ECharts canvas。
+**2026-09-15 当前工作树回归修复：** 发现标题 h2 的键盘 Enter 事件未阻止默认行为，可能导致 toolbar-name-input 刚挂载就失焦；改为 .prevent + startNameEditing 后，Chrome channel 的标题键盘编辑断言通过。另将 E2E seed 的 Aloudata 模拟元数据同步改为显式触发并等待完成，避免指标平台分页在异步空态期间缺失。相关定向 E2E 2 passed，完整矩阵待重新 seed 后复跑。
+**2026-09-15 标题键盘回归最终修正：** 复现确认 h2 的 Enter keydown 后，名称输入框同一按键的 keyup 会触发原 blurTarget，导致编辑框立即消失。现将名称/描述输入框提交事件改为 keydown.prevent，Chrome CDP 实测输入框可见且焦点保持；相关定向 E2E 2 passed，双源 CDP 仍为 5 行且含 120.5。
+**2026-09-15 最终 SHA 验收：** 提交 37a1041d 在干净 seed 数据和 MATECLAW_UI_BASE_URL=http://127.0.0.1:15174 下完成 Chrome channel 全量 35 passed (2.1m)，确认同步等待、双源快照和标题键盘修复未引入回归。
+
+**2026-09-15 当前提交全量基线：** 同一认证、seed 和 Chrome channel 以单 worker 重跑 36 条用例，结果 `36 passed (5.6m)`，无失败、无跳过；Google Chrome CDP 四页截图和 AX 摘要同步通过，双源 Table 为 5 行且含 `120.5`，ECharts `canvasCount=1`。共享服务的并行会话争用记录为测试基础设施边界，不改变串行产品验收结论。
+
+**2026-09-15 DashboardPanel 标签语义修复：** 右侧“仪表盘/原始数据”切换由普通按钮补齐 `tablist/tab`、`aria-selected`、roving `tabindex`、方向键及 Home/End 导航；新增组件回归，UI 全量 `17 files / 57 tests passed`，生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 HelpToc 键盘语义修复：** 帮助目录条目由仅鼠标点击改为可聚焦按钮语义，Enter/Space 均可触发跳转；新增回归测试，UI 全量 `18 files / 58 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 帮助文档卡片键盘语义修复：** 相关文档和搜索结果卡片补齐按钮语义、动态可访问名称和 Enter/Space 激活；新增回归测试，UI 全量 `19 files / 59 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 搜索面板语义修复：** 搜索结果面板关闭按钮增加“关闭搜索结果”名称，结果卡片支持按钮语义和 Enter/Space 激活；新增回归测试，UI 全量 `20 files / 60 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 帮助内容面包屑语义修复：** 首页和非当前分类面包屑支持键盘聚焦与 Enter/Space 跳转；新增回归测试，UI 全量 `21 files / 61 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 报告列表标签语义修复：** 报告分类切换改为标准 `tablist/tab` 语义，支持选中态、roving tabindex 和键盘导航；新增回归覆盖，UI 全量 `21 files / 62 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 AI 推理折叠语义修复：** 洞察 AI 助手推理过程标题支持键盘聚焦、Enter/Space 切换，并暴露展开状态；新增回归测试，UI 全量 `22 files / 63 tests passed`、生产构建和 Chrome CDP 四页视觉验收通过。
+
+**2026-09-15 本地模拟运行时最终回归：** 按本轮范围不进行真实 Aloudata/正式存储联调，改以本地模拟 Compose 和 Chrome channel 作为唯一运行时验收环境。完整 Playwright `36 passed (7.2m)`；双源 JDBC+模拟 Aloudata 结果严格为 5 行并包含 `120.5`，历史快照差异不再复现。CDP 视觉脚本输出 `/tmp/mateclaw-dashboard-cdp/dashboard-list.png`、`dashboard-editor.png`、`dashboard-preview.png`、`dashboard-echarts-preview.png`，ECharts `canvasCount=1` 且标题可见；未发现新的本地运行时回归。
+
+**2026-09-15 运行时聚合门禁恢复：** 遗留 E2E MinIO/WireMock 容器占用标准模拟端口导致门禁首次退出码 `7`；清理明确冲突容器并重启本地模拟栈后，`make dashboard-verify-local` 退出码 `0`，DataAgent、Runner、UI、构建和设计门禁均通过。后续执行 E2E 前需遵守同一轮 Compose 生命周期，避免跨栈复用端口。

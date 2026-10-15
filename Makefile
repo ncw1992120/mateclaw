@@ -1,3 +1,52 @@
+# Dashboard external prerequisite checks
+.PHONY: dashboard-prerequisites-local dashboard-prerequisites-simulation dashboard-prerequisites-external dashboard-prerequisites-contract-test dashboard-dataagent-test dashboard-worker-test dashboard-ui-test dashboard-ui-build dashboard-verify-local
+
+dashboard-prerequisites-local:
+	./scripts/verify-dashboard-external-prerequisites.sh --local
+
+dashboard-prerequisites-simulation:
+	./scripts/verify-dashboard-external-prerequisites.sh --simulation
+
+dashboard-prerequisites-external:
+	./scripts/verify-dashboard-external-prerequisites.sh --external
+
+dashboard-prerequisites-contract-test:
+	bash scripts/test-dashboard-external-prerequisites.sh
+
+# Run the DataAgent suite from a Maven container against Docker Desktop. The
+# host override is required for Testcontainers' dynamically published ports;
+# Ryuk is disabled because the Maven container cannot accept its callback on
+# the Desktop bridge network. Containers are still removed by Testcontainers'
+# JVM shutdown hooks and by the normal Docker cleanup commands.
+dashboard-dataagent-test:
+	docker run --rm \
+		-e TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal \
+		-e TESTCONTAINERS_RYUK_DISABLED=true \
+		-v "$(CURDIR):/workspace" \
+		-v "$(HOME)/.m2:/root/.m2" \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-w /workspace maven:3.9-eclipse-temurin-21 \
+		mvn -o -f mateclaw-dataagent/pom.xml test -q
+
+# Run the Worker suite from its DataAgent-owned uv project. Keeping the
+# working directory scoped to this project avoids collecting the sibling
+# Python client tests with incompatible dependencies.
+dashboard-worker-test:
+	cd mateclaw-dataagent/python-worker && uv run --locked --offline -- python -m pytest -q
+
+# Run the UI unit suite and production type/build gate with the repository's
+# installed Node dependencies.
+dashboard-ui-test:
+	npm --prefix mateclaw-dataagent-ui run test -- --run
+
+dashboard-ui-build:
+	npm --prefix mateclaw-dataagent-ui run build
+
+# Full local implementation gate. It uses only the disposable simulation
+# stack and never claims the external Aloudata authorization gate.
+dashboard-verify-local: dashboard-prerequisites-contract-test dashboard-prerequisites-simulation dashboard-dataagent-test dashboard-worker-test dashboard-ui-test dashboard-ui-build
+	bash scripts/verify-dashboard-design.sh
+
 # Docker buildx builder setup
 .PHONY: builder-create builder-rm builder-inspect
 

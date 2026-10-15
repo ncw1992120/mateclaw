@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "metric-strategy",
+      "name": "策略解读",
+      "parentId": null,
+      "categoryType": "CATEGORY_METRIC"
+    },
+    {
+      "id": "metric-sub-strategy",
+      "name": "子策略",
+      "parentId": "metric-strategy",
+      "categoryType": "CATEGORY_METRIC"
+    },
+    {
+      "id": "dim-strategy",
+      "name": "策略解读",
+      "parentId": null,
+      "categoryType": "CATEGORY_DIMENSION"
+    },
+    {
+      "id": "dim-sub-strategy",
+      "name": "子策略",
+      "parentId": "dim-strategy",
+      "categoryType": "CATEGORY_DIMENSION"
+    }
+  ],
+  "success": true,
+  "code": "200",
+  "errorMsg": null,
+  "detailErrorMsg": null,
+  "traceId": "mock-trace-category-list"
+}

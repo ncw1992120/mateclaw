@@ -1,0 +1,5 @@
+{
+  "request": {"method":"GET","urlPath":"/anymetrics/api/v1/category/list","queryParameters":{"categoryType":{"equalTo":"CATEGORY_DIMENSION"}}},
+  "priority": 1,
+  "response": {"status":200,"headers":{"Content-Type":"application/json"},"jsonBody":{"code":"200","success":true,"data":[{"id":"time","name":"时间与区域","type":"CATEGORY_DIMENSION"}]}}
+}

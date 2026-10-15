@@ -2,6 +2,7 @@ package vip.mate.dataagent.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
@@ -11,6 +12,7 @@ import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceAccountService;
@@ -36,12 +38,16 @@ public class AloudataServiceImpl implements AloudataService {
     private final AloudataConfigHelper configHelper;
     private final AloudataEndpointService endpointService;
     private final DatasourceAccountService datasourceAccountService;
+    private final Environment environment;
+
+    private static final String LOCAL_MOCK_PROFILE = "local-mock";
+    private static final String LOCAL_MOCK_AUTH_VALUE = "mock-uid-001";
 
     /** 测试连接使用的 API 端点名 */
     private static final String TEST_CONNECTION_ENDPOINT = "category_list";
 
     /** 指标列表端点名 */
-    private static final String METRICS_LIST_ENDPOINT = "metrics_list";
+    private static final String METRICS_LIST_ENDPOINT = "metric_list";
 
     /** 指标查询端点名 */
     private static final String METRICS_QUERY_ENDPOINT = "metrics_query";
@@ -53,7 +59,7 @@ public class AloudataServiceImpl implements AloudataService {
     private static final String METRIC_AVAILABLE_DIMENSIONS_ENDPOINT = "metric_available_dimensions";
 
     /** 维度列表端点名 */
-    private static final String DIMENSIONS_LIST_ENDPOINT = "dimensions_list";
+    private static final String DIMENSIONS_LIST_ENDPOINT = "dimension_list";
 
     /** 维度详情端点名 */
     private static final String DIMENSION_DETAIL_ENDPOINT = "dimension_detail";
@@ -91,9 +97,8 @@ public class AloudataServiceImpl implements AloudataService {
      * 解析数据源配置，并使用当前用户的 Aloudata 认证值替换管理员认证值（仅查询场景使用）
      * <p>
      * tenant-id 和 auth-type 仍来自数据源共享配置，仅 auth-value 替换为用户自己的认证值；
-     * 认证值解析链为「手动绑定优先，UID 自动映射兜底」（见
-     * {@code DatasourceAccountService#resolveAloudataAuthValue}），
-     * 两者均未命中时抛出异常，不允许回退到管理员账号。
+     * 认证值解析链为「手动绑定优先，UID 自动映射兜底」。生产环境未命中时禁止回退到管理员账号；
+     * local-mock 环境使用固定 mock 身份。
      *
      * @param datasourceId 数据源 ID
      * @return 替换用户认证值后的配置
@@ -109,11 +114,20 @@ public class AloudataServiceImpl implements AloudataService {
             throw new RuntimeException("当前用户未登录，无法执行 Aloudata 查询");
         }
         String userAuthValue = datasourceAccountService.resolveAloudataAuthValue(datasourceId, currentUserId);
+        userAuthValue = resolveAuthValue(userAuthValue, environment.acceptsProfiles(LOCAL_MOCK_PROFILE));
         if (userAuthValue == null) {
             throw new RuntimeException("当前用户未配置 Aloudata 认证值（未手动绑定且 UID 自动映射未命中），请在数据源页面绑定查询账号，或联系管理员同步 UID 映射");
         }
         config.setAuthValue(userAuthValue);
         return config;
+    }
+
+    /** 本地夹具没有真实用户账号时使用固定 mock 身份，生产环境仍要求用户绑定 auth-value。 */
+    static String resolveAuthValue(String userAuthValue, boolean localMockActive) {
+        if (userAuthValue == null && localMockActive) {
+            return LOCAL_MOCK_AUTH_VALUE;
+        }
+        return userAuthValue;
     }
 
     /**
@@ -245,6 +259,8 @@ public class AloudataServiceImpl implements AloudataService {
                 result.setSuccess((Boolean) responseBody.get("success"));
                 result.setCode((String) responseBody.get("code"));
                 result.setErrorMsg((String) responseBody.get("errorMsg"));
+                result.setDetailErrorMsg((String) responseBody.get("detailErrorMsg"));
+                result.setMessage((String) responseBody.get("message"));
                 result.setTraceId((String) responseBody.get("traceId"));
 
                 if (responseBody.get("data") != null) {
@@ -352,12 +368,12 @@ public class AloudataServiceImpl implements AloudataService {
         try {
             Map<String, Object> input = new HashMap<>();
             input.put("dimName", dimName);
-            if (keyword != null && !keyword.isBlank()) {
-                input.put("keyword", keyword);
+            String kw = NameMatchSupport.trimSpaces(keyword);
+            if (kw != null && !kw.isBlank()) {
+                input.put("dimValueKeyword", kw);
             }
-            if (limit > 0) {
-                input.put("limit", limit);
-            }
+            input.put("pageNumber", 1);
+            input.put("pageSize", limit > 0 ? limit : 200);
             Map<String, Object> params = endpointService.buildParamsFromConfigAndInput(
                     DIMENSION_VALUES_ENDPOINT, config, input);
 
@@ -368,10 +384,28 @@ public class AloudataServiceImpl implements AloudataService {
                 Map<String, Object> body = response.getBody();
                 if (Boolean.TRUE.equals(body.get("success")) && body.get("data") != null) {
                     Object dataObj = body.get("data");
-                    if (dataObj instanceof List) {
-                        for (Object item : (List<?>) dataObj) {
-                            if (item != null) {
-                                values.add(String.valueOf(item));
+                    Object rawValues = dataObj instanceof Map<?, ?> data
+                            ? Optional.ofNullable(data.get("table"))
+                                    .filter(Map.class::isInstance)
+                                    .map(Map.class::cast)
+                                    .map(table -> table.get(dimName))
+                                    .orElseGet(() -> Optional.ofNullable(data.get("tables"))
+                                            .filter(Map.class::isInstance)
+                                            .map(Map.class::cast)
+                                            .map(tables -> tables.get("values"))
+                                            .orElse(null))
+                            : dataObj;
+                    if (rawValues instanceof List<?> list) {
+                        for (Object item : list) {
+                            Object value = item;
+                            if (item instanceof List<?> row) {
+                                value = row.isEmpty() ? null : row.get(0);
+                            } else if (item instanceof Map<?, ?> row) {
+                                value = row.containsKey(dimName) ? row.get(dimName)
+                                        : row.containsKey("value") ? row.get("value") : null;
+                            }
+                            if (value != null) {
+                                values.add(String.valueOf(value));
                             }
                         }
                     }

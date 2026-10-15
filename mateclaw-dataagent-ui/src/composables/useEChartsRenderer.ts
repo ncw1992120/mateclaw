@@ -1,5 +1,22 @@
 import { onBeforeUnmount } from 'vue'
 import * as echarts from 'echarts'
+import type { ResolvedDashboardTheme } from '@/types'
+
+/** 在 ECharts 安全处理前注入局部主题；不修改后端返回的 option。 */
+export function withDashboardChartTheme(option: Record<string, unknown>, theme: ResolvedDashboardTheme): Record<string, any> {
+  const themed: Record<string, any> = JSON.parse(JSON.stringify(option))
+  if (!Object.prototype.hasOwnProperty.call(themed, 'color')) themed.color = [...theme.chartPalette]
+  const axisText = theme.textSecondary
+  const applyAxis = (axis: unknown) => {
+    if (!axis || Array.isArray(axis) || typeof axis !== 'object') return axis
+    const source = axis as Record<string, any>
+    return { ...source, axisLabel: { ...(source.axisLabel ?? {}), color: source.axisLabel?.color ?? axisText }, axisLine: { ...(source.axisLine ?? {}), lineStyle: { ...(source.axisLine?.lineStyle ?? {}), color: source.axisLine?.lineStyle?.color ?? theme.border } }, splitLine: { ...(source.splitLine ?? {}), lineStyle: { ...(source.splitLine?.lineStyle ?? {}), color: source.splitLine?.lineStyle?.color ?? theme.border } } }
+  }
+  if (themed.xAxis && !Array.isArray(themed.xAxis)) themed.xAxis = applyAxis(themed.xAxis)
+  if (themed.yAxis && !Array.isArray(themed.yAxis)) themed.yAxis = applyAxis(themed.yAxis)
+  if (themed.legend && typeof themed.legend === 'object') themed.legend = { ...themed.legend, textStyle: { ...(themed.legend.textStyle ?? {}), color: themed.legend.textStyle?.color ?? axisText } }
+  return themed
+}
 
 /** ECharts option 顶层 key 白名单（安全过滤） */
 const ECHARTS_ALLOWED_KEYS = new Set([
@@ -100,7 +117,7 @@ export function useEChartsRenderer() {
    * @param optionRaw 原始 ECharts option
    * @returns echarts 实例（失败返回 null）
    */
-  function renderECharts(container: HTMLElement, optionRaw: Record<string, unknown>): echarts.ECharts | null {
+  function renderECharts(container: HTMLElement, optionRaw: Record<string, unknown>, theme?: ResolvedDashboardTheme): echarts.ECharts | null {
     if (!container) {
       return null
     }
@@ -112,7 +129,8 @@ export function useEChartsRenderer() {
     }
 
     try {
-      const option = filterEchartsTopLevelKeys(optionRaw as Record<string, any>)
+      const themedOption = theme ? withDashboardChartTheme(optionRaw, theme) : optionRaw
+      const option = filterEchartsTopLevelKeys(themedOption as Record<string, any>)
       sanitizeEchartsOption(option)
 
       if (!option || typeof option !== 'object' || !option.series) {

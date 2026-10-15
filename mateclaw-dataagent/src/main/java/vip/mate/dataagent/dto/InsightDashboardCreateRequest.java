@@ -26,4 +26,10 @@ public class InsightDashboardCreateRequest implements Serializable {
 
     /** 负责人名称（可选，默认取当前用户） */
     private String ownerName;
+
+    /** 可见性（可选）：private / workspace / template / official，缺省 private */
+    private String visibility;
+
+    /** 模板元信息 JSON（可选） */
+    private String templateMeta;
 }

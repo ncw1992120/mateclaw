@@ -1,7 +1,8 @@
 <template>
   <div class="chart-widget">
-    <div class="chart-header">
-      <div v-if="showTitle" class="chart-title">{{ component.title }}</div>
+    <!-- 隐藏标题栏：整个标题栏（含组件级时间筛选）随标题一并隐藏 -->
+    <div v-if="component.titleBarStyle !== 'hidden'" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"
@@ -18,15 +19,28 @@
       </div>
     </div>
     <!-- Tab 栏（多 Tab 模式） -->
-    <div v-if="hasTabs" class="widget-tabs">
+    <div v-if="hasTabs" class="widget-tabs" role="tablist" aria-label="图表分页">
       <div
-        v-for="tab in tabList"
+        v-for="(tab, tabIndex) in tabList"
         :key="tab.id"
         class="widget-tab"
         :class="{ active: activeTabId === tab.id }"
-        @click="activeTabId = tab.id"
+        role="tab"
+        :data-tab-id="tab.id"
+        :aria-selected="activeTabId === tab.id"
+        :tabindex="activeTabId === tab.id ? 0 : -1"
+        @click="selectTab(tab.id)"
+        @keydown="handleTabKeydown($event, tab.id)"
       >
-        {{ tab.title }}
+        <DashboardTabTitle
+          :title="tab.title"
+          :title-icon-style="tab.titleIconStyle"
+          :title-icon-style-preview="tabIconStylePreview(tab)"
+          :dashboard-theme="dashboardTheme"
+          :variant="tabIndex"
+          :editable="editable"
+          @edit="(anchor) => emit('edit-tab-title-icon-style', { componentId: component.id, tabId: tab.id, tabKind: 'component', anchor })"
+        />
       </div>
     </div>
     <div ref="chartContainerRef" class="chart-container"></div>
@@ -37,7 +51,9 @@
 <script setup lang="ts">
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import DashboardTabTitle from './DashboardTabTitle.vue'
 import { useEChartsRenderer } from '@/composables/useEChartsRenderer'
 
 defineOptions({
@@ -51,12 +67,21 @@ const props = defineProps<{
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
-  /** 是否显示标题 */
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
+  /** 仪表盘级主题；不传时保持旧图表视觉 */
+  dashboardTheme?: ResolvedDashboardTheme
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
+  /** 正在编辑的页签图标样式即时预览 */
+  tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
+  /** 是否显示页签图标编辑操作 */
+  editable?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
 const chartContainerRef = ref<HTMLElement | null>(null)
@@ -68,14 +93,59 @@ const hasTabs = computed(() => {
 })
 
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+function tabIconStylePreview(tab: ComponentTab) {
+  const preview = props.tabTitleIconStylePreview
+  return preview?.componentId === props.component.id && preview.tabId === tab.id
+    ? preview.titleIconStyle
+    : undefined
+}
 const activeTabId = ref('')
 
-watch(hasTabs, (val) => {
-  if (val && !activeTabId.value) {
-    activeTabId.value = tabList.value[0]?.id ?? ''
+function selectTab(tabId: string): void {
+  activeTabId.value = tabId
+}
+
+function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
+  const currentIndex = tabList.value.findIndex(tab => tab.id === tabId)
+  if (currentIndex < 0 || tabList.value.length < 2) return
+
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+    nextIndex = (currentIndex + 1) % tabList.value.length
+  } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+    nextIndex = (currentIndex - 1 + tabList.value.length) % tabList.value.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = tabList.value.length - 1
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    selectTab(tabId)
+    return
+  } else {
+    return
   }
-  if (!val) {
+
+  event.preventDefault()
+  const nextTab = tabList.value[nextIndex]
+  if (!nextTab) return
+  selectTab(nextTab.id)
+  nextTick(() => {
+    const tab = Array.from(
+      chartContainerRef.value?.parentElement?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [],
+    ).find(candidate => candidate.dataset.tabId === nextTab.id)
+    tab?.focus()
+  })
+}
+
+// Tab 定义替换时校正失效的 activeTabId，避免图表容器停留在空状态。
+watch(() => tabList.value.map(tab => tab.id).join('|'), () => {
+  if (!hasTabs.value) {
     activeTabId.value = ''
+    return
+  }
+  if (!tabList.value.some(tab => tab.id === activeTabId.value)) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
   }
 }, { immediate: true })
 
@@ -91,8 +161,31 @@ const activeTabError = computed(() => {
 
 /** 当前生效的 option（Tab 模式取 activeTabOption，否则取主 option） */
 const effectiveOption = computed(() => {
-  if (hasTabs.value) return activeTabOption.value
-  return props.componentData?.option
+  const option = hasTabs.value ? activeTabOption.value : props.componentData?.option
+  const labels = props.componentData?.fieldLabels
+  if (!option || !labels || !Object.keys(labels).length) return option
+  const mapped = { ...option } as Record<string, unknown>
+  const label = (value: unknown) => typeof value === 'string' ? (labels[value] ?? value) : value
+  const mapAxis = (axis: unknown): unknown => Array.isArray(axis)
+    ? axis.map((item) => mapAxis(item))
+    : axis && typeof axis === 'object'
+      ? { ...(axis as Record<string, unknown>), ...(typeof (axis as Record<string, unknown>).name === 'string' ? { name: label((axis as Record<string, unknown>).name) } : {}) }
+      : axis
+  const series = mapped.series
+  if (Array.isArray(series)) {
+    mapped.series = series.map((item) => {
+      if (!item || typeof item !== 'object') return item
+      const entry = item as Record<string, unknown>
+      return typeof entry.name === 'string' ? { ...entry, name: label(entry.name) } : entry
+    })
+  }
+  if (mapped.legend && typeof mapped.legend === 'object') {
+    const legend = mapped.legend as Record<string, unknown>
+    mapped.legend = { ...legend, ...(Array.isArray(legend.data) ? { data: legend.data.map((item) => typeof item === 'string' ? label(item) : item && typeof item === 'object' && typeof (item as Record<string, unknown>).name === 'string' ? { ...(item as Record<string, unknown>), name: label((item as Record<string, unknown>).name) } : item) } : {}) }
+  }
+  if ('xAxis' in mapped) mapped.xAxis = mapAxis(mapped.xAxis)
+  if ('yAxis' in mapped) mapped.yAxis = mapAxis(mapped.yAxis)
+  return mapped
 })
 
 const hasOption = computed(() => !!effectiveOption.value)
@@ -131,7 +224,7 @@ async function render(): Promise<void> {
     chartContainerRef.value.innerHTML = ''
     return
   }
-  renderECharts(chartContainerRef.value, effectiveOption.value)
+  renderECharts(chartContainerRef.value, effectiveOption.value, props.dashboardTheme)
 }
 
 onMounted(() => {
@@ -179,7 +272,7 @@ watch(chartContainerRef, (el) => {
   min-height: 48px;
   flex-shrink: 0;
   gap: var(--space-sm);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .chart-title {
@@ -210,7 +303,7 @@ watch(chartContainerRef, (el) => {
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-lg);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   overflow-x: auto;
 }
@@ -236,6 +329,11 @@ watch(chartContainerRef, (el) => {
   font-weight: 600;
 }
 
+.widget-tab:focus-visible {
+  outline: 2px solid var(--db-accent);
+  outline-offset: 2px;
+}
+
 .chart-placeholder {
   position: absolute;
   top: 55%;
@@ -251,7 +349,7 @@ watch(chartContainerRef, (el) => {
 }
 
 .chart-placeholder::before {
-  content: '📊';
+  content: '—';
   font-size: 32px;
   opacity: 0.6;
 }

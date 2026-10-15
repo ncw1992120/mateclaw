@@ -1,0 +1,434 @@
+<template>
+  <el-dialog
+    v-model="ui.metricStyle.visible"
+    class="insight-dialog--md"
+    append-to-body
+    :title="`字段样式 · ${metric ? metric.displayName || metric.fieldKey : ''}`"
+    width="420px"
+    destroy-on-close
+    :close-on-click-modal="false"
+    aria-label="指标样式"
+  >
+    <div v-if="metric" class="ms-body">
+      <div class="ms-config" v-if="metric">
+        <div class="ms-icon-section">
+          <div class="ms-section-title">图标与强调色</div>
+          <p class="ms-hint">图标和强调色默认跟随仪表盘主题，可单独关闭或覆盖。</p>
+          <div class="ms-icon-row">
+            <el-switch v-model="iconEnabled" active-text="显示图标" />
+            <InsightColorField
+              v-model="metric.visual!.accentColor"
+              label="强调色"
+              :suggested-colors="PRESET_COLORS"
+              @change="setCustomAccent"
+            />
+          </div>
+          <div class="ms-icon-grid" role="grid" aria-label="选择指标图标" @keydown.esc="ui.metricStyle.visible = false">
+            <button
+              v-for="item in DASHBOARD_ICON_REGISTRY"
+              :key="item.key"
+              type="button"
+              class="ms-icon-option"
+              :class="{ active: metric.visual?.iconKey === item.key }"
+              :aria-label="item.label"
+              :aria-pressed="metric.visual?.iconKey === item.key"
+              @click="selectIcon(item.key)"
+              @keydown="onIconKeydown($event, item.key)"
+            >
+              <el-icon aria-hidden="true"><component :is="item.component" /></el-icon>
+              <span>{{ item.label }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="ms-section-title">指标信息</div>
+        <div class="ms-meta-grid">
+          <label class="ms-meta-label" for="metric-style-display-name">展示名</label>
+          <el-input
+            id="metric-style-display-name"
+            :model-value="metric.displayName"
+            size="small"
+            clearable
+            placeholder="留空时使用字段名"
+            aria-label="展示名"
+            data-testid="metric-display-name"
+            @update:model-value="updateDisplayName"
+          />
+          <label class="ms-meta-label" for="metric-style-unit">单位</label>
+          <el-input
+            id="metric-style-unit"
+            :model-value="metric.unit"
+            size="small"
+            clearable
+            placeholder="例如：人、元"
+            aria-label="单位"
+            data-testid="metric-unit"
+            @update:model-value="updateUnit"
+          />
+          <label class="ms-meta-label" for="metric-style-helper">辅助说明</label>
+          <el-input
+            id="metric-style-helper"
+            v-model="metric.helperText"
+            size="small"
+            placeholder="补充说明"
+            aria-label="辅助说明"
+            data-testid="metric-helper-text"
+          />
+          <label class="ms-meta-label" for="metric-value-unit-auto">数值缩放</label>
+          <div class="ms-unit-mode">
+            <el-switch
+              id="metric-value-unit-auto"
+              :model-value="metric.valueUnitMode !== 'none'"
+              active-text="自动换算"
+              aria-label="指标值自动换算"
+              data-testid="kpi-value-unit-auto"
+              @update:model-value="updateValueUnitMode"
+            />
+            <span class="ms-unit-hint">≥1万显示为万，≥1亿显示为亿</span>
+          </div>
+        </div>
+        <div class="ms-section-title">字段样式</div>
+        <div v-for="field in KPI_METRIC_FIELDS" :key="field" class="ms-style-row">
+          <span class="ms-field-name">{{ KPI_FIELD_LABELS[field] }}</span>
+          <el-input-number v-model="metric.styles[field].size" size="small" :min="10" :max="40" :step="1" controls-position="right" class="ms-size" />
+          <el-switch
+            :model-value="metric.styles[field].bold === 'bold'"
+            size="small"
+            :aria-label="`${KPI_FIELD_LABELS[field]}加粗`"
+            @update:model-value="(v: boolean) => (metric!.styles[field].bold = v ? 'bold' : 'normal')"
+          />
+          <InsightColorField
+            v-model="metric.styles[field].color"
+            :label="`${KPI_FIELD_LABELS[field]}颜色`"
+            :suggested-colors="PRESET_COLORS"
+            @change="() => (metric!.styles[field].colorMode = 'custom')"
+          />
+        </div>
+        <div class="ms-actions">
+          <el-button v-if="state.kpiMetrics.length > 1" text type="primary" @click="syncMetricStyles">
+            {{ t('insight.kpiMetricSync') }}
+          </el-button>
+          <el-button text type="primary" @click="resetMetric">重置该指标</el-button>
+        </div>
+      </div>
+    </div>
+
+    <div v-else class="ms-empty">未找到对应指标，请重新打开。</div>
+
+    <template #footer>
+      <el-button @click="ui.metricStyle.visible = false">关闭</el-button>
+    </template>
+  </el-dialog>
+</template>
+
+<script setup lang="ts">
+import { computed, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { ElMessage } from 'element-plus'
+import { useInsight } from './useInsight'
+import { KPI_FIELD_LABELS, KPI_METRIC_FIELDS, defaultMetricStyles, styleToCss } from '@/utils/kpi-metrics'
+import { TEXT_COLOR_PRESETS } from '@/utils/color-presets'
+import type { KpiMetricField } from '@/utils/kpi-metrics'
+import { DASHBOARD_ICON_REGISTRY } from '@/utils/dashboard-icon-registry'
+import InsightColorField from '../InsightColorField.vue'
+
+const { state, syncKpiMetricStyles, setFieldDisplayName, setFieldUnit } = useInsight()
+const ui = state.ui
+const { t } = useI18n()
+
+const metric = computed(() => state.kpiMetrics.find((m) => m.fieldKey === ui.metricStyle.fieldKey))
+const currentField = computed(() => (ui.metricStyle.field as KpiMetricField) || 'value')
+
+/** 取色器预设色板 · 统一收敛到 utils/color-presets.ts（与属性面板背景色板共用一处来源） */
+const PRESET_COLORS = TEXT_COLOR_PRESETS
+
+/** HEX 输入框草稿（打开/切换字段时同步当前颜色） */
+const iconEnabled = ref(true)
+watch(
+  () => [ui.metricStyle.visible, ui.metricStyle.fieldKey, ui.metricStyle.field] as const,
+  ([visible]) => {
+    if (visible && metric.value) {
+      metric.value.visual ??= { colorMode: 'theme' }
+      iconEnabled.value = metric.value.visual.iconKey !== null
+    }
+  },
+  { immediate: true },
+)
+
+watch(iconEnabled, (enabled) => {
+  if (metric.value) {
+    metric.value.visual ??= { colorMode: 'theme' }
+    metric.value.visual.iconKey = enabled ? undefined : null
+  }
+})
+
+function setCustomAccent() {
+  if (metric.value?.visual) metric.value.visual.colorMode = 'custom'
+}
+
+function updateDisplayName(value: string) {
+  if (!metric.value) return
+  const error = setFieldDisplayName(metric.value.fieldKey, value)
+  if (error) ElMessage.error(error)
+}
+
+function updateUnit(value: string) {
+  if (metric.value) setFieldUnit(metric.value.fieldKey, value)
+}
+
+function updateValueUnitMode(enabled: boolean) {
+  if (metric.value) metric.value.valueUnitMode = enabled ? 'auto' : 'none'
+}
+
+function selectIcon(iconKey: string) {
+  if (!metric.value) return
+  metric.value.visual ??= { colorMode: 'theme' }
+  metric.value.visual.iconKey = iconKey
+  iconEnabled.value = true
+}
+
+function onIconKeydown(event: KeyboardEvent, iconKey: string) {
+  if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    selectIcon(iconKey)
+  }
+  if (event.key.startsWith('Arrow')) {
+    const buttons = Array.from((event.currentTarget as HTMLElement).parentElement?.querySelectorAll('button') ?? [])
+    const current = buttons.indexOf(event.currentTarget as HTMLButtonElement)
+    const columns = 6
+    const next = event.key === 'ArrowRight' ? current + 1 : event.key === 'ArrowLeft' ? current - 1 : event.key === 'ArrowDown' ? current + columns : current - columns
+    const target = buttons[next] as HTMLButtonElement | undefined
+    if (target) { event.preventDefault(); target.focus() }
+  }
+}
+
+function cssOf(field: KpiMetricField): Record<string, string> {
+  const s = metric.value?.styles?.[field]
+  if (!s) return {}
+  const css = styleToCss(s, '#2563eb')
+  return Object.fromEntries(
+    css
+      .split(';')
+      .filter(Boolean)
+      .map((line) => {
+        const idx = line.indexOf(':')
+        return [line.slice(0, idx), line.slice(idx + 1)]
+      }),
+  )
+}
+
+function resetMetric() {
+  if (!metric.value) return
+  metric.value.styles = defaultMetricStyles()
+  metric.value.visual = { iconKey: undefined, colorMode: 'theme' }
+  metric.value.valueUnitMode = 'auto'
+  iconEnabled.value = true
+  ElMessage.success('已恢复跟随主题')
+}
+
+function syncMetricStyles() {
+  if (!metric.value || state.kpiMetrics.length < 2) return
+  syncKpiMetricStyles(metric.value.fieldKey)
+  ElMessage.success(t('insight.kpiMetricSyncSuccess'))
+}
+</script>
+
+<style scoped>
+.ms-body {
+  display: flex;
+  min-height: 220px;
+  /* 为弹窗标题和底部关闭按钮留出空间，窄视口时仅滚动内容区。 */
+  max-height: min(65vh, calc(100vh - 280px), 620px);
+  overflow-y: auto;
+}
+.ms-config {
+  width: 100%;
+  min-width: 0;
+}
+.ms-section-title {
+  margin: 0 0 8px;
+  color: var(--el-text-color-primary);
+  font-size: 13px;
+  font-weight: 600;
+}
+.ms-hint {
+  margin: 0 0 12px;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.ms-icon-section {
+  margin-bottom: 18px;
+}
+.ms-meta-grid {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  margin-bottom: 18px;
+}
+.ms-meta-label {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.ms-unit-mode {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+.ms-unit-hint {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+.ms-icon-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.ms-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+.ms-icon-option {
+  display: flex;
+  min-height: 48px;
+  padding: 5px 2px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-blank);
+  cursor: pointer;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  font-size: 10px;
+}
+.ms-icon-option:hover,
+.ms-icon-option:focus-visible,
+.ms-icon-option.active {
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  outline: none;
+}
+.ms-style-row {
+  display: grid;
+  grid-template-columns: 64px 76px 36px minmax(88px, 1fr);
+  gap: 8px;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.ms-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+}
+.ms-field-name {
+  color: var(--el-text-color-regular);
+  font-size: 13px;
+}
+.ms-size {
+  width: 100%;
+  min-width: 0;
+}
+/* 行内取色字段：隐藏独立标签/校验提示，HEX 输入占满剩余列宽，且不做红色失效描边。
+   min-width:0 必须加在栅格项上，否则 input 固有宽度会把定宽列撑出弹窗；
+   组件根节点是 auto 列 grid，同样要用 minmax(0,1fr) 钉死轨道宽度。 */
+.ms-config :deep(.insight-color-field) {
+  gap: 0;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+.ms-config :deep(.insight-color-field__label) {
+  display: none;
+}
+.ms-config :deep(.insight-color-field__error) {
+  display: none;
+}
+.ms-config :deep(.insight-color-field__controls) {
+  width: 100%;
+}
+.ms-config :deep(.insight-color-field__controls input) {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.ms-config :deep(.insight-color-field__controls input[aria-invalid="true"]) {
+  border-color: var(--el-border-color);
+}
+.ms-field {
+  margin-bottom: 14px;
+}
+.ms-label {
+  display: block;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 6px;
+}
+.ms-inline {
+  display: flex;
+  gap: 28px;
+}
+.ms-inline-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ms-inline-item .ms-label {
+  margin-bottom: 0;
+}
+.ms-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  border: 1px solid var(--el-border-color);
+}
+.ms-preview {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--el-border-color-lighter);
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+}
+.ms-preview-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin-bottom: 10px;
+}
+.ms-preview-stage {
+  flex: 1;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 8px;
+  background: var(--el-fill-color-lighter);
+  padding: 16px;
+  min-height: 120px;
+}
+.ms-preview-value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+.ms-preview-helper {
+  margin-top: 4px;
+}
+.ms-preview-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.6;
+  margin: 10px 0 0;
+}
+.ms-empty {
+  color: var(--el-text-color-secondary);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+</style>

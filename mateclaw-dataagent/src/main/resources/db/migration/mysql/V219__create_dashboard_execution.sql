@@ -1,0 +1,20 @@
+CREATE TABLE `dataagent_dashboard_execution` (
+    `id` BIGINT NOT NULL COMMENT '主键（雪花 ID）',
+    `execution_id` VARCHAR(128) NOT NULL COMMENT 'Runner 任务 ID',
+    `dashboard_id` BIGINT NOT NULL COMMENT '仪表盘 ID',
+    `workspace_id` BIGINT NOT NULL COMMENT '工作区 ID',
+    `user_id` BIGINT NOT NULL COMMENT '发起用户 ID',
+    `status` VARCHAR(32) NOT NULL COMMENT '任务状态',
+    `parameters_json` TEXT COMMENT '运行时参数 JSON',
+    `output_json` MEDIUMTEXT COMMENT '小结果 JSON（大结果使用 outputRef）',
+    `output_ref_json` TEXT COMMENT '大结果 ObjectRef JSON',
+    `logs` TEXT COMMENT '受限标准输出日志',
+    `error_message` TEXT COMMENT '错误信息',
+    `return_code` INT COMMENT 'Runner 进程退出码',
+    `create_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `update_time` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_dataagent_dashboard_execution_id` (`execution_id`),
+    KEY `idx_dataagent_dashboard_execution_dashboard` (`dashboard_id`, `create_time`),
+    KEY `idx_dataagent_dashboard_execution_workspace` (`workspace_id`, `create_time`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT = '仪表盘 Python 执行记录';

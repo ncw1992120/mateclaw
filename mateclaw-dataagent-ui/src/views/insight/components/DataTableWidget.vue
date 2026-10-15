@@ -1,8 +1,9 @@
 <template>
   <div class="data-table-widget">
-    <div class="table-header">
+    <!-- 隐藏标题栏：整个标题栏（含导出与组件级时间筛选）随标题一并隐藏 -->
+    <div v-if="component.titleBarStyle !== 'hidden'" class="table-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
       <div class="table-header-left">
-        <div v-if="showTitle" class="table-title">{{ component.title }}</div>
+        <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="table-title"><DashboardComponentIcon type="table" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</div>
       </div>
       <div class="table-header-right">
         <div v-if="showTimeFilter" class="table-time-filter">
@@ -20,42 +21,61 @@
           />
         </div>
         <el-tooltip v-if="activeTableData && activeTableData.rows.length > 0" :content="t('insight.tableExportCsv')" placement="top">
-          <el-button text size="small" :icon="Download" @click="handleExportCsv" />
+          <el-button text size="small" :icon="Download" :aria-label="t('insight.tableExportCsv')" @click="handleExportCsv" />
         </el-tooltip>
       </div>
     </div>
     <!-- Tab 栏（多 Tab 模式） -->
-    <div v-if="hasTabs" class="widget-tabs">
+    <div v-if="hasTabs" class="widget-tabs" role="tablist" aria-label="数据表分页">
       <div
-        v-for="tab in tabList"
+        v-for="(tab, tabIndex) in tabList"
         :key="tab.id"
         class="widget-tab"
         :class="{ active: activeTabId === tab.id }"
-        @click="activeTabId = tab.id"
+        role="tab"
+        :aria-selected="activeTabId === tab.id"
+        :tabindex="activeTabId === tab.id ? 0 : -1"
+        :data-tab-id="tab.id"
+        @click="selectTab(tab.id)"
+        @keydown="handleTabKeydown($event, tab.id)"
       >
-        {{ tab.title }}
+        <DashboardTabTitle
+          :title="tab.title"
+          :title-icon-style="tab.titleIconStyle"
+          :title-icon-style-preview="tabIconStylePreview(tab)"
+          :dashboard-theme="dashboardTheme"
+          :variant="tabIndex"
+          :editable="editable"
+          @edit="(anchor) => emit('edit-tab-title-icon-style', { componentId: component.id, tabId: tab.id, tabKind: 'component', anchor })"
+        />
       </div>
     </div>
     <div class="table-wrapper">
       <el-table
         v-if="activeTableData && activeTableData.rows.length > 0"
         :data="pagedTableRows"
+        @sort-change="handleSortChange"
         border
         size="small"
         height="100%"
+        show-header
         style="width: 100%"
       >
         <el-table-column
           v-for="(col, idx) in activeTableData.columns"
           :key="idx"
           :prop="`col_${idx}`"
-          :label="col"
+          :label="componentData?.fieldLabels?.[col] ?? col"
           min-width="120"
+          :sortable="isFieldSortable(col, idx) ? 'custom' : false"
+          :sort-orders="['ascending', 'descending', null]"
           show-overflow-tooltip
         />
       </el-table>
-      <div v-else class="table-placeholder">
-        {{ activeTabError || t('insight.tableNoData') }}
+      <div v-else class="table-placeholder" role="status">
+        <template v-if="activeTabError">{{ activeTabError }}</template>
+        <template v-else-if="!hasConfiguredDataset(props.component)">尚未绑定数据源，请在属性配置中添加数据。</template>
+        <template v-else>暂无数据，请检查查询配置或筛选条件。</template>
       </div>
     </div>
     <!-- 分页 -->
@@ -66,7 +86,7 @@
         :page-sizes="pageSizes"
         :total="activeTableRows.length"
         :pager-count="5"
-        layout="total, sizes, prev, pager, next"
+        layout="total, sizes, prev, pager, next, jumper"
         size="small"
       />
     </div>
@@ -74,10 +94,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { Download } from '@element-plus/icons-vue'
-import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab } from '@/types'
+import type { InsightComponent, InsightComponentData, TimeRangeValue, ComponentTab, ComponentTitleIconStyle, DashboardTabTitleIconStylePreview, ResolvedDashboardTheme } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import DashboardTabTitle from './DashboardTabTitle.vue'
+import { hasConfiguredDataset } from '@/utils/component-sample-data'
+import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
 defineOptions({
   name: 'DataTableWidget',
@@ -85,25 +109,62 @@ defineOptions({
 
 const { t } = useI18n()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /** 组件配置 */
   component: InsightComponent
   /** 组件渲染数据 */
   componentData?: InsightComponentData
-  /** 是否显示标题 */
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
-}>()
+  /** 当前内容是否为未绑定数据源时的默认样例数据 */
+  sampleMode?: boolean
+  dashboardTheme?: ResolvedDashboardTheme
+  /** 编辑态显示页签图标设置操作 */
+  editable?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
+  /** 正在编辑的页签图标样式即时预览 */
+  tabTitleIconStylePreview?: DashboardTabTitleIconStylePreview
+}>(), { showTitle: true, sampleMode: false, editable: false })
 
 const emit = defineEmits<{
   (e: 'component-time-range-change', payload: { componentId: string; timeRange: TimeRangeValue | undefined }): void
+  (e: 'table-view-change', payload: { componentId: string; currentPage: number; pageSize: number; total: number; columns: string[]; rows: string[][]; sort: { field: string; order: 'ascending' | 'descending' } | null }): void
+  (e: 'edit-tab-title-icon-style', payload: { componentId: string; tabId: string; tabKind: 'component'; anchor: HTMLElement }): void
 }>()
 
-/** 分页相关常量 */
-const PAGE_SIZE_DEFAULT = 20
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200]
+/** 分页选项；最终仍受查询配置的 maxPageSize 限制。 */
+const PAGE_SIZE_OPTIONS = [1, 2, 5, 10, 20, 50, 100, 200, 500]
 
 const tableData = computed(() => props.componentData?.table)
 const showTimeFilter = computed(() => props.component.enableTimeFilter)
+
+/** 表格消费的是组件最终结果：直连数据集读唯一输入配置，Python 读最终结果配置。 */
+const queryPolicy = computed(() => {
+  const pipeline = readComponentDatasetPipeline(props.component)
+  if (pipeline?.script?.trim()) {
+    const config = pipeline.finalResultQueryConfig
+    return config?.confirmed === true ? config : undefined
+  }
+  return pipeline?.datasetInputs.length === 1 ? pipeline.datasetInputs[0]?.queryConfig : undefined
+})
+const sortPolicy = computed(() => queryPolicy.value?.sortPolicy)
+const paginationPolicy = computed(() => queryPolicy.value?.paginationPolicy)
+const paginationEnabled = computed(() => paginationPolicy.value?.enabled === true)
+
+function clampPageSize(size: number | undefined): number {
+  const max = Math.min(500, Math.max(1, paginationPolicy.value?.maxPageSize || 500))
+  const configured = size && size > 0 ? size : 20
+  return Math.min(configured, max)
+}
+
+const configuredDefaultPageSize = computed(() => clampPageSize(paginationPolicy.value?.defaultPageSize))
+const pageSizes = computed(() => {
+  const max = Math.min(500, Math.max(1, paginationPolicy.value?.maxPageSize || 500))
+  const options = PAGE_SIZE_OPTIONS.filter((size) => size <= max)
+  if (!options.includes(configuredDefaultPageSize.value)) options.push(configuredDefaultPageSize.value)
+  return options.sort((a, b) => a - b)
+})
 
 /** 是否有多 Tab 模式（基于组件配置判断，而非后端返回数据） */
 const hasTabs = computed(() => {
@@ -112,17 +173,50 @@ const hasTabs = computed(() => {
 
 /** Tab 列表（从组件配置构建） */
 const tabList = computed<ComponentTab[]>(() => props.component.tabs ?? [])
+function tabIconStylePreview(tab: ComponentTab) {
+  const preview = props.tabTitleIconStylePreview
+  return preview?.componentId === props.component.id && preview.tabId === tab.id
+    ? preview.titleIconStyle
+    : undefined
+}
 
 /** 当前激活的 Tab ID */
 const activeTabId = ref('')
 
-// 初始化 / 切换组件时自动选中第一个 Tab
-watch(hasTabs, (val) => {
-  if (val && !activeTabId.value) {
-    activeTabId.value = tabList.value[0]?.id ?? ''
-  }
-  if (!val) {
+function selectTab(tabId: string): void {
+  activeTabId.value = tabId
+}
+
+function handleTabKeydown(event: KeyboardEvent, tabId: string): void {
+  const currentIndex = tabList.value.findIndex(tab => tab.id === tabId)
+  if (currentIndex < 0 || tabList.value.length < 2) return
+  let nextIndex = currentIndex
+  if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (currentIndex + 1) % tabList.value.length
+  else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (currentIndex - 1 + tabList.value.length) % tabList.value.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = tabList.value.length - 1
+  else if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectTab(tabId); return }
+  else return
+  event.preventDefault()
+  const nextTab = tabList.value[nextIndex]
+  if (!nextTab) return
+  selectTab(nextTab.id)
+  nextTick(() => {
+    const tab = Array.from(document.querySelectorAll<HTMLElement>('.data-table-widget [role="tab"]'))
+      .find(candidate => candidate.dataset.tabId === nextTab.id)
+    tab?.focus()
+  })
+}
+
+// 初始化 / 切换组件或 Tab 定义时自动选中一个仍然存在的 Tab。
+// 不能只监听 hasTabs：编辑器替换 Tab 定义后，旧 activeTabId 可能已经不存在。
+watch(() => tabList.value.map(tab => tab.id).join('|'), () => {
+  if (!hasTabs.value) {
     activeTabId.value = ''
+    return
+  }
+  if (!tabList.value.some(tab => tab.id === activeTabId.value)) {
+    activeTabId.value = tabList.value[0]?.id ?? ''
   }
 }, { immediate: true })
 
@@ -179,25 +273,90 @@ const activeTableRows = computed(() => {
 
 /** 分页状态 */
 const currentPage = ref(1)
-const pageSize = ref(PAGE_SIZE_DEFAULT)
-const pageSizes = PAGE_SIZE_OPTIONS
+const pageSize = ref(20)
+const sortState = ref<{ field: string; order: 'ascending' | 'descending' } | null>(null)
+
+watch(configuredDefaultPageSize, (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+}, { immediate: true })
 
 /** 数据变化时重置页码 */
 watch(activeTableRows, () => {
   currentPage.value = 1
+  sortState.value = null
 })
 
-/** 是否显示分页（数据量超过一页时显示） */
+watch(() => props.sampleMode, () => {
+  currentPage.value = 1
+  sortState.value = null
+})
+
+function isFieldSortable(field: string, index: number): boolean {
+  if (sortPolicy.value?.enabled) return sortPolicy.value.allowedFields.includes(field)
+  // 未配置数据源的样例仍保留原本的演示排序行为。
+  return props.sampleMode && index === 1
+}
+
+function handleSortChange(sort: { prop: string; order: 'ascending' | 'descending' | null }): void {
+  const columnIndex = Number(sort.prop.replace(/^col_/, ''))
+  const field = Number.isInteger(columnIndex) ? activeTableData.value?.columns[columnIndex] : undefined
+  if (!field || !isFieldSortable(field, columnIndex) || !sort.order) {
+    sortState.value = null
+    currentPage.value = 1
+    return
+  }
+  sortState.value = { field, order: sort.order }
+  currentPage.value = 1
+}
+
+/** 画布结果集已完整物化；按查询配置排序后再分页展示。 */
+const sortedTableRows = computed(() => {
+  const sort = sortState.value
+  if (!sort) return activeTableRows.value
+  const columnIndex = activeTableData.value?.columns.indexOf(sort.field) ?? -1
+  if (columnIndex < 0) return activeTableRows.value
+  const prop = `col_${columnIndex}`
+  const direction = sort.order === 'ascending' ? 1 : -1
+  return [...activeTableRows.value].sort((left, right) => {
+    const leftValue = left[prop] ?? ''
+    const rightValue = right[prop] ?? ''
+    const leftNumber = Number(leftValue)
+    const rightNumber = Number(rightValue)
+    const bothNumeric = leftValue !== '' && rightValue !== '' && Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+    const comparison = bothNumeric
+      ? leftNumber - rightNumber
+      : leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: 'base' })
+    return comparison * direction
+  })
+})
+
+/** 正式数据分页由查询配置决定；样例预览在行数较多时展示分页，便于体验表格交互。 */
 const showPagination = computed(() => {
-  return activeTableRows.value.length > PAGE_SIZE_DEFAULT
+  return paginationEnabled.value || (props.sampleMode && activeTableRows.value.length > pageSize.value)
 })
 
 /** 当前页数据 */
 const pagedTableRows = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
   const end = start + pageSize.value
-  return activeTableRows.value.slice(start, end)
+  return sortedTableRows.value.slice(start, end)
 })
+
+/** 将当前实际展示页同步给仪表盘预览，供自动分析复用同一份视图数据。 */
+watch([pagedTableRows, currentPage, pageSize, sortState, activeTableData], () => {
+  const table = activeTableData.value
+  if (!table) return
+  emit('table-view-change', {
+    componentId: props.component.id,
+    currentPage: currentPage.value,
+    pageSize: pageSize.value,
+    total: activeTableData.value?.totalCount ?? activeTableRows.value.length,
+    columns: [...table.columns],
+    rows: pagedTableRows.value.map((row) => table.columns.map((_, index) => row[`col_${index}`] ?? '')),
+    sort: sortState.value ? { ...sortState.value } : null,
+  })
+}, { deep: true, immediate: true, flush: 'post' })
 
 /** 导出 CSV */
 function handleExportCsv(): void {
@@ -256,7 +415,7 @@ function escapeCsvField(field: string): string {
   padding: var(--space-md) var(--space-lg);
   min-height: 48px;
   gap: var(--space-sm);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .table-header-left {
@@ -290,7 +449,8 @@ function escapeCsvField(field: string): string {
 
 .table-wrapper {
   flex: 1;
-  overflow: hidden;
+  min-height: 180px;
+  overflow: auto;
   padding: 0 var(--space-lg) var(--space-lg);
 }
 
@@ -299,7 +459,7 @@ function escapeCsvField(field: string): string {
   justify-content: flex-end;
   padding: var(--space-xs) var(--space-lg) var(--space-sm);
   flex-shrink: 0;
-  border-top: 1px solid var(--db-border);
+  border-top: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
 }
 
 .widget-tabs {
@@ -307,7 +467,7 @@ function escapeCsvField(field: string): string {
   align-items: center;
   gap: var(--space-xs);
   padding: var(--space-xs) var(--space-lg);
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 55%, transparent);
   flex-shrink: 0;
   overflow-x: auto;
 }
@@ -345,17 +505,23 @@ function escapeCsvField(field: string): string {
 }
 
 .table-placeholder::before {
-  content: '📋';
+  content: '—';
   font-size: 32px;
   opacity: 0.6;
 }
 
 /* Element Plus 表格样式覆盖 */
 .table-wrapper :deep(.el-table) {
+  min-height: 160px;
   font-size: 13px;
+  --el-table-bg-color: var(--db-card);
+  --el-table-tr-bg-color: var(--db-card);
   --el-table-border-color: var(--db-border);
   --el-table-header-bg-color: var(--db-card);
   --el-table-row-hover-bg-color: var(--db-hover);
+  --el-fill-color-lighter: var(--db-hover);
+  --el-text-color-regular: var(--db-text);
+  --el-text-color-secondary: var(--db-text-secondary);
 }
 
 .table-wrapper :deep(.el-table th.el-table__cell) {
@@ -373,17 +539,19 @@ function escapeCsvField(field: string): string {
   padding: 10px 16px;
   color: var(--db-text);
   font-variant-numeric: tabular-nums;
-  border-bottom: 1px solid var(--db-border);
+  border-bottom: 1px solid color-mix(in srgb, var(--db-border) 60%, transparent);
 }
 
 .table-wrapper :deep(.el-table--small .el-table__cell) {
   padding: 8px 12px;
 }
 
+/* 只隐藏 Element Plus 用来画外框的装饰元素。
+   注意：不要在这里带上 `.el-table--border .el-table__cell` —— 那是所有 td/th，
+   一旦 display:none 整张表格会塌成 0 高度、只剩空壳（2026-09-18 修复）。 */
 .table-wrapper :deep(.el-table--border::after),
 .table-wrapper :deep(.el-table--border::before),
-.table-wrapper :deep(.el-table__border-left-patch),
-.table-wrapper :deep(.el-table--border .el-table__cell) {
+.table-wrapper :deep(.el-table__border-left-patch) {
   display: none;
 }
 

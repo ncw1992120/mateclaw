@@ -1,11 +1,21 @@
 <template>
-  <div class="filter-select-widget">
-    <div v-if="showTitle" class="filter-label">{{ component.title }}</div>
+  <FilterControlShell
+    class="filter-select-widget"
+    :title="component.title"
+    :title-bar-style="component.titleBarStyle"
+    :show-label="showLabel"
+  >
+    <template #icon>
+      <DashboardComponentIcon type="filter" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" />
+    </template>
     <el-select
       v-model="selectedValue"
       :placeholder="t('insight.filterPlaceholder')"
-      clearable
+      :aria-label="component.title || t('insight.filterPlaceholder')"
+      :clearable="selectionBehavior.allowNoFilter"
       filterable
+      :multiple="selectionBehavior.selectionMode === 'multiple'"
+      :collapse-tags="selectionBehavior.selectionMode === 'multiple'"
       :remote="isDynamic"
       :remote-method="handleRemoteSearch"
       :loading="dynamicLoading"
@@ -15,20 +25,28 @@
       @visible-change="handleVisibleChange"
     >
       <el-option
+        v-if="selectionBehavior.allowSelectAll"
+        :label="t('insight.filterAllOption')"
+        :value="FILTER_ALL_VALUE"
+      />
+      <el-option
         v-for="opt in resolvedOptions"
         :key="opt.value"
         :label="opt.label"
         :value="opt.value"
       />
     </el-select>
-  </div>
+  </FilterControlShell>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import type { InsightComponent, FilterComponentConfig } from '@/types'
+import type { InsightComponent, FilterComponentConfig, ComponentTitleIconStyle, ResolvedDashboardTheme, TimeRangeValue } from '@/types'
+import DashboardComponentIcon from './DashboardComponentIcon.vue'
+import FilterControlShell from './FilterControlShell.vue'
 import * as datasourceApi from '@/api/datasource'
+import { FILTER_ALL_VALUE, getFilterSelectionBehavior, normalizeFilterSelection } from '@/utils/filter-selection'
 
 defineOptions({
   name: 'FilterSelectWidget',
@@ -37,19 +55,28 @@ defineOptions({
 const props = defineProps<{
   /** 组件配置 */
   component: InsightComponent
+  /** 预览态由仪表盘会话管理的选中值。 */
+  modelValue?: string | string[] | TimeRangeValue | null
+  /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
+  showTitle?: boolean
+  /** 正在编辑的组件标题图标样式即时预览 */
+  titleIconStylePreview?: ComponentTitleIconStyle
   /** 可选项（外部注入，优先级低于 config.staticOptions） */
   options?: Array<{ label: string; value: string }>
-  /** 是否显示标题 */
-  showTitle?: boolean
+  dashboardTheme?: ResolvedDashboardTheme
 }>()
 
+// 隐藏标题栏（titleBarStyle: 'hidden'）对筛选器同样生效：即便外层把 show-title 置为 true，
+// 只要组件自身标记为隐藏，内联标签仍随标题栏一并摘掉，仅保留控件 + 画布悬浮删除按钮。
+const showLabel = computed(() => props.showTitle !== false && props.component.titleBarStyle !== 'hidden')
+
 const emit = defineEmits<{
-  (e: 'change', payload: { field: string; value: string }): void
+  (e: 'change', payload: { field: string; value: string | string[] | undefined }): void
 }>()
 
 const { t } = useI18n()
 
-const selectedValue = ref<string>('')
+const selectedValue = ref<string | string[]>('')
 const dynamicLoading = ref(false)
 const dynamicOptions = ref<Array<{ label: string; value: string }>>([])
 
@@ -57,6 +84,8 @@ const dynamicOptions = ref<Array<{ label: string; value: string }>>([])
 const filterConfig = computed<FilterComponentConfig | undefined>(() => {
   return props.component.config as FilterComponentConfig | undefined
 })
+
+const selectionBehavior = computed(() => getFilterSelectionBehavior(filterConfig.value))
 
 /** 是否为动态选项模式 */
 const isDynamic = computed<boolean>(() => {
@@ -109,44 +138,70 @@ function handleVisibleChange(visible: boolean): void {
 
 /** 组件配置变化时重置动态选项和选中值 */
 watch(
-  () => filterConfig.value?.field,
+  [
+    () => filterConfig.value?.field,
+    () => filterConfig.value?.defaultValue,
+    () => filterConfig.value?.selectionMode,
+  ],
   () => {
-    selectedValue.value = ''
+    const defaultValue = filterConfig.value?.defaultValue
+    selectedValue.value = defaultValue == null
+      ? (selectionBehavior.value.selectionMode === 'multiple' ? [] : '')
+      : (Array.isArray(defaultValue) ? [...defaultValue] : defaultValue)
     dynamicOptions.value = []
-  }
+  },
+  { immediate: true },
 )
+watch(() => props.modelValue, (value) => {
+  if (value === null) {
+    selectedValue.value = selectionBehavior.value.selectionMode === 'multiple' ? [] : ''
+  } else if (typeof value === 'string' || Array.isArray(value)) {
+    selectedValue.value = Array.isArray(value) ? [...value] : value
+  } else {
+    const defaultValue = filterConfig.value?.defaultValue
+    selectedValue.value = defaultValue == null
+      ? (selectionBehavior.value.selectionMode === 'multiple' ? [] : '')
+      : (Array.isArray(defaultValue) ? [...defaultValue] : defaultValue)
+  }
+}, { immediate: true })
 
-function handleChange(value: string): void {
+function handleChange(value: string | string[]): void {
   const field = filterConfig.value?.field ?? ''
-  emit('change', { field, value })
+  let nextValue: string | string[] = value
+  if (Array.isArray(value) && selectionBehavior.value.allowSelectAll && value.includes(FILTER_ALL_VALUE)) {
+    nextValue = value.filter((item) => item !== FILTER_ALL_VALUE)
+    selectedValue.value = nextValue
+  }
+  emit('change', { field, value: normalizeFilterSelection(nextValue, filterConfig.value) })
 }
 </script>
 
 <style scoped>
-.filter-select-widget {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-xs);
-  padding: var(--space-md);
-  box-sizing: border-box;
-  background: var(--db-card);
-  border-radius: var(--radius-lg);
-}
-
-.filter-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--db-text-secondary);
-}
-
 .filter-select-widget :deep(.el-select) {
   width: 100%;
 }
 
 .filter-select-widget :deep(.el-input__wrapper) {
   border-radius: var(--radius-sm);
+  background: var(--db-surface-card, var(--db-card));
+  box-shadow: 0 0 0 1px var(--db-border) inset;
+}
+
+.filter-select-widget :deep(.el-input__wrapper.is-disabled),
+.filter-select-widget :deep(.el-select__wrapper.is-disabled) {
+  background: var(--db-hover);
+}
+
+.filter-select-widget :deep(.el-input__inner) {
+  color: var(--db-text);
+}
+
+.filter-select-widget :deep(.el-input__inner::placeholder) {
+  color: var(--db-text-muted);
+}
+
+.filter-select-widget :deep(.el-select__caret),
+.filter-select-widget :deep(.el-select__clear) {
+  color: var(--db-text-secondary);
 }
 </style>

@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "rowCount": 10,
+  "files": [
+    {
+      "objectKey": "files/orders.csv",
+      "fileName": "orders.csv",
+      "format": "CSV",
+      "bytes": 546,
+      "sha256": "c905fca9635a96cb90d83b8eedc6c9d6bd0bacc11494b157c65e51ac71107c19",
+      "schema": [
+        {
+          "name": "id",
+          "type": "int64"
+        },
+        {
+          "name": "customer_id",
+          "type": "int64"
+        },
+        {
+          "name": "order_date",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "double"
+        },
+        {
+          "name": "nullable_note",
+          "type": "string",
+          "nullable": true
+        }
+      ],
+      "filter": {
+        "field": "status",
+        "operator": "eq",
+        "value": "PAID",
+        "expectedRows": 3
+      },
+      "joinKey": "id"
+    },
+    {
+      "objectKey": "files/orders.json",
+      "fileName": "orders.json",
+      "format": "JSON",
+      "bytes": 1098,
+      "sha256": "5458b292d7052dfa33d82740275bdcdeca34838881d3510e66375ae70848563b",
+      "schema": [
+        {
+          "name": "id",
+          "type": "int64"
+        },
+        {
+          "name": "customer_id",
+          "type": "int64"
+        },
+        {
+          "name": "order_date",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "double"
+        },
+        {
+          "name": "nullable_note",
+          "type": "string",
+          "nullable": true
+        }
+      ],
+      "filter": {
+        "field": "status",
+        "operator": "eq",
+        "value": "PAID",
+        "expectedRows": 3
+      },
+      "joinKey": "id"
+    },
+    {
+      "objectKey": "files/orders.parquet",
+      "fileName": "orders.parquet",
+      "format": "PARQUET",
+      "bytes": 5540,
+      "sha256": "7f446597397a5b2bb422786e963c0934133ddf96e9fe8a2cd2d37ea1e8876dc6",
+      "schema": [
+        {
+          "name": "id",
+          "type": "int64"
+        },
+        {
+          "name": "customer_id",
+          "type": "int64"
+        },
+        {
+          "name": "order_date",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "double"
+        },
+        {
+          "name": "nullable_note",
+          "type": "string",
+          "nullable": true
+        }
+      ],
+      "filter": {
+        "field": "status",
+        "operator": "eq",
+        "value": "PAID",
+        "expectedRows": 3
+      },
+      "joinKey": "id"
+    },
+    {
+      "objectKey": "files/orders.xlsx",
+      "fileName": "orders.xlsx",
+      "format": "XLSX",
+      "bytes": 2047,
+      "sha256": "9ed534143781ba70f0d7b74dd098846a3def1649083da9db78ddb8ed98d4a7f3",
+      "schema": [
+        {
+          "name": "id",
+          "type": "int64"
+        },
+        {
+          "name": "customer_id",
+          "type": "int64"
+        },
+        {
+          "name": "order_date",
+          "type": "string"
+        },
+        {
+          "name": "status",
+          "type": "string"
+        },
+        {
+          "name": "amount",
+          "type": "double"
+        },
+        {
+          "name": "nullable_note",
+          "type": "string",
+          "nullable": true
+        }
+      ],
+      "filter": {
+        "field": "status",
+        "operator": "eq",
+        "value": "PAID",
+        "expectedRows": 3
+      },
+      "joinKey": "id"
+    }
+  ]
+}

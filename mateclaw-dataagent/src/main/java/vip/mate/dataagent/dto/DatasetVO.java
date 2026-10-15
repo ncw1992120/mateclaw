@@ -21,6 +21,12 @@ public class DatasetVO {
     /** 关联数据源 ID */
     private Long datasourceId;
 
+    /** 统一数据集来源类型 */
+    private String sourceType;
+
+    /** 数据集契约版本 */
+    private Integer schemaVersion;
+
     /** 数据源名称 */
     private String datasourceName;
 

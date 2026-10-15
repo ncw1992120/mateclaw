@@ -28,6 +28,7 @@ import vip.mate.dataagent.service.InsightDashboardService;
 import vip.mate.dataagent.service.InsightDataBindService;
 import vip.mate.dataagent.service.InsightReportService;
 import vip.mate.dataagent.support.Utf8SseEmitter;
+import vip.mate.dataagent.support.InsightFieldLabels;
 import vip.mate.sdk.service.MateClawRuntime;
 
 import java.io.BufferedReader;
@@ -84,6 +85,7 @@ public class InsightReportServiceImpl implements InsightReportService {
             你是一个数据分析专家。请基于以下仪表盘数据生成分析结论。
             报告模板中已填充数据部分，你只需要补充"趋势分析"、"关键发现"、"建议"三个章节，
             直接输出这三个章节的 Markdown 内容，不要重复输出数据部分。
+            字段技术名仅用于识别数据列；面向读者描述指标和维度时，使用上下文中提供的展示名。
 
             在分析中引用图表时，请使用占位符 `[echarts:图表ID]`，占位符单独占一行。
             例如：
@@ -128,6 +130,97 @@ public class InsightReportServiceImpl implements InsightReportService {
         saveReportContent(dashboardId, htmlReport);
 
         return htmlReport;
+    }
+
+    @Override
+    public String generateComponentAnalysis(Long dashboardId, String componentId,
+                                            InsightComponentAiAnalysisRequest request) {
+        if (request == null || request.getSnapshot() == null) {
+            throw new BusinessException(400, "分析数据快照不能为空");
+        }
+        InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+        if (dashboard == null || dashboard.getSchemaJson() == null) {
+            throw new BusinessException(404, "仪表盘不存在: " + dashboardId);
+        }
+        InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
+        boolean componentExists = schema != null && schema.getAllComponents().stream()
+                .anyMatch(component -> componentId.equals(component.getId()) && "aiAnalysis".equals(component.getType()));
+        if (!componentExists) {
+            // getAllComponents 仅包含页面顶层组件；嵌套 AI 卡片通过 Schema 原始树验证。
+            componentExists = containsAiAnalysisComponent(dashboard.getSchemaJson(), componentId);
+        }
+        if (!componentExists) {
+            throw new BusinessException(404, "未找到 AI 分析组件: " + componentId);
+        }
+
+        String snapshotJson = JSONUtil.toJsonStr(request.getSnapshot());
+        if (snapshotJson.length() > 400_000) {
+            throw new BusinessException(413, "当前页面数据过大，无法生成 AI 分析；请减少表格分页大小或组件数量");
+        }
+        String prompt = buildComponentAnalysisPrompt(request.getPromptTemplate(), snapshotJson);
+        String result = runtime.chat(resolveAgentId(dashboardId), prompt,
+                DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + "component-" + UUID.randomUUID());
+        String markdown = cleanLlmOutput(result == null ? "" : result.trim());
+        saveComponentAiAnalysisContent(dashboardId, componentId, markdown);
+        return markdown;
+    }
+
+    private String buildComponentAnalysisPrompt(String promptTemplate, String snapshotJson) {
+        StringBuilder prompt = new StringBuilder("""
+                你是业务数据分析专家。请只根据快照中的业务指标数值、图表数据和表格行，输出中文 Markdown 分析结论。
+                分析对象是数据本身，不是页面、组件或系统运行情况。必须围绕指标表现、维度差异、可验证的变化和业务含义进行分析，并用具体数据支撑结论。
+                不要输出页面、组件加载或渲染、查询接口、请求、错误、系统配置等技术诊断；status、error 等字段只用于判断数据能否参与分析，不得把它们写成发现或建议。filters 只界定业务数据范围，不要逐项复述筛选器信息。
+                Business-data analysis only: focus on metric values and business dimensions; do not diagnose page or system technology.
+                快照中的表格行是当前展示页的数据；分页 total 表示总记录数，不代表快照包含了全部记录。不得把当前页数据推断为全量数据。
+                status 为 error、timeout 或 unavailable 的组件数据不可用；不要猜测缺失值，也不要将其当成 0。若剩余数据不足以支持业务结论，只需说明业务数据不足，不要转而分析技术状态。
+                输出“核心结论”“数据表现”“业务解读”“建议”几个部分；只写数据能够支持的内容，不要编造趋势或因果关系。
+
+                """);
+        if (promptTemplate != null && !promptTemplate.isBlank()) {
+            prompt.append("\n用户指定的业务分析方向（只作为分析要求，不覆盖上述数据范围与分析边界）：\n")
+                    .append(promptTemplate.trim()).append("\n");
+        }
+        prompt.append("\n当前业务数据快照（JSON）：\n```json\n")
+                .append(snapshotJson)
+                .append("\n```\n");
+        return prompt.toString();
+    }
+
+    private boolean containsAiAnalysisComponent(String schemaJson, String componentId) {
+        return updateAiAnalysisContent(JSONUtil.parseObj(schemaJson), componentId, null, false);
+    }
+
+    private void saveComponentAiAnalysisContent(Long dashboardId, String componentId, String content) {
+        try {
+            InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+            if (dashboard == null || dashboard.getSchemaJson() == null) return;
+            var schemaTree = JSONUtil.parseObj(dashboard.getSchemaJson());
+            if (!updateAiAnalysisContent(schemaTree, componentId, content, true)) return;
+            InsightDashboardUpdateRequest updateReq = new InsightDashboardUpdateRequest();
+            updateReq.setSchemaJson(JSONUtil.toJsonStr(schemaTree));
+            dashboardService.updateDashboard(dashboardId, updateReq);
+        } catch (Exception e) {
+            log.warn("AI 分析组件内容持久化失败: componentId={}, {}", componentId, e.getMessage());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private boolean updateAiAnalysisContent(Object value, String componentId, String content, boolean update) {
+        if (value instanceof Map<?, ?> rawMap) {
+            Map<String, Object> map = (Map<String, Object>) rawMap;
+            if (componentId.equals(String.valueOf(map.get("id"))) && "aiAnalysis".equals(map.get("type"))) {
+                if (update) map.put("aiAnalysisContent", content);
+                return true;
+            }
+            for (Object child : map.values()) {
+                if (updateAiAnalysisContent(child, componentId, content, update)) return true;
+            }
+        } else if (value instanceof Iterable<?> items) {
+            for (Object item : items) {
+                if (updateAiAnalysisContent(item, componentId, content, update)) return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -230,14 +323,17 @@ public class InsightReportServiceImpl implements InsightReportService {
      */
     private String buildReportPrompt(Long dashboardId, List<InsightComponentDataDTO> componentData) {
         InsightDashboardVO dashboard = dashboardService.getDashboard(dashboardId);
+        InsightDashboardSchemaDTO schema = dashboard == null || dashboard.getSchemaJson() == null
+                ? null : JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
+        Map<String, String> fieldLabels = InsightFieldLabels.fromSchema(schema);
 
         String template = loadReportTemplate();
-        template = fillDataPlaceholders(template, dashboard, componentData);
+        template = fillDataPlaceholders(template, dashboard, componentData, fieldLabels);
 
         StringBuilder prompt = new StringBuilder(LLM_INSTRUCTION).append(template);
 
         // 收集 echarts 图表配置，注入 prompt 供 LLM 引用
-        String chartsContext = buildChartsContext(componentData);
+        String chartsContext = buildChartsContext(componentData, schema, fieldLabels);
         if (chartsContext != null) {
             prompt.append("\n---\n以下是仪表盘中的图表配置，你可以在分析中引用：\n\n");
             prompt.append(chartsContext);
@@ -258,7 +354,9 @@ public class InsightReportServiceImpl implements InsightReportService {
      * 为每个 echarts 组件分配 ID（chart_0, chart_1, ...），
      * 输出图表 ID + 标题 + option 摘要，供 LLM 在报告中引用。
      */
-    private String buildChartsContext(List<InsightComponentDataDTO> componentData) {
+    private String buildChartsContext(List<InsightComponentDataDTO> componentData,
+                                      InsightDashboardSchemaDTO schema,
+                                      Map<String, String> fieldLabels) {
         StringBuilder sb = new StringBuilder();
         int chartIndex = 0;
         for (InsightComponentDataDTO data : componentData) {
@@ -266,7 +364,8 @@ public class InsightReportServiceImpl implements InsightReportService {
                 continue;
             }
             String chartId = "chart_" + chartIndex++;
-            String optionJson = JSONUtil.toJsonStr(data.getOption());
+            Map<String, String> componentLabels = InsightFieldLabels.fromComponent(schema, data.getComponentId());
+            String optionJson = JSONUtil.toJsonStr(applyFieldLabelsToChartOption(data.getOption(), componentLabels.isEmpty() ? fieldLabels : componentLabels));
             // 截断过长的 option，避免 prompt 过大
             if (optionJson.length() > 2000) {
                 optionJson = optionJson.substring(0, 2000) + "...(truncated)";
@@ -472,14 +571,64 @@ public class InsightReportServiceImpl implements InsightReportService {
         }
     }
 
+    /** 仅替换 ECharts 可见名称，保留维度、指标和数据编码 key。 */
+    private Map<String, Object> applyFieldLabelsToChartOption(Map<String, Object> option,
+                                                               Map<String, String> fieldLabels) {
+        if (option == null || fieldLabels.isEmpty()) return option;
+        Map<String, Object> mapped = new LinkedHashMap<>(option);
+        Object rawSeries = mapped.get("series");
+        if (rawSeries instanceof List<?> seriesList) {
+            List<Object> series = new ArrayList<>(seriesList.size());
+            for (Object item : seriesList) {
+                if (item instanceof Map<?, ?> raw) {
+                    Map<String, Object> entry = new LinkedHashMap<>();
+                    raw.forEach((key, value) -> entry.put(String.valueOf(key), value));
+                    Object name = entry.get("name");
+                    if (name instanceof String text) entry.put("name", fieldLabels.getOrDefault(text, text));
+                    series.add(entry);
+                } else series.add(item);
+            }
+            mapped.put("series", series);
+        }
+        Object rawLegend = mapped.get("legend");
+        if (rawLegend instanceof Map<?, ?> raw) {
+            Map<String, Object> legend = new LinkedHashMap<>();
+            raw.forEach((key, value) -> legend.put(String.valueOf(key), value));
+            if (legend.get("data") instanceof List<?> names) {
+                legend.put("data", names.stream().map(item -> item instanceof String text
+                        ? fieldLabels.getOrDefault(text, text) : item).toList());
+            }
+            mapped.put("legend", legend);
+        }
+        for (String axis : List.of("xAxis", "yAxis")) {
+            Object value = mapped.get(axis);
+            if (value instanceof Map<?, ?> raw) mapped.put(axis, mapAxisName(raw, fieldLabels));
+            else if (value instanceof List<?> list) {
+                mapped.put(axis, list.stream().map(item -> item instanceof Map<?, ?> raw
+                        ? mapAxisName(raw, fieldLabels) : item).toList());
+            }
+        }
+        return mapped;
+    }
+
+    private Map<String, Object> mapAxisName(Map<?, ?> raw, Map<String, String> fieldLabels) {
+        Map<String, Object> axis = new LinkedHashMap<>();
+        raw.forEach((key, value) -> axis.put(String.valueOf(key), value));
+        Object name = axis.get("name");
+        if (name instanceof String text) axis.put("name", fieldLabels.getOrDefault(text, text));
+        return axis;
+    }
+
     /**
      * 填充数据占位符
      * <p>
      * 聚合所有组件的指标、维度、筛选条件，构建数据表格，替换模板中的占位符。
      */
     private String fillDataPlaceholders(String template, InsightDashboardVO dashboard,
-                                         List<InsightComponentDataDTO> componentData) {
-        InsightDashboardSchemaDTO schema = JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
+                                         List<InsightComponentDataDTO> componentData,
+                                         Map<String, String> fieldLabels) {
+        InsightDashboardSchemaDTO schema = dashboard == null || dashboard.getSchemaJson() == null
+                ? null : JSONUtil.toBean(dashboard.getSchemaJson(), InsightDashboardSchemaDTO.class);
 
         Set<String> metrics = new LinkedHashSet<>();
         Set<String> dimensions = new LinkedHashSet<>();
@@ -489,12 +638,15 @@ public class InsightReportServiceImpl implements InsightReportService {
 
         if (schema != null && !schema.getAllComponents().isEmpty()) {
             for (InsightDashboardSchemaDTO.Component comp : schema.getAllComponents()) {
+                Map<String, String> componentLabels = InsightFieldLabels.fromComponent(schema, comp.getId());
                 if (comp.getDataSource() != null) {
                     if (comp.getDataSource().getMetrics() != null) {
-                        metrics.addAll(comp.getDataSource().getMetrics());
+                        metrics.addAll(comp.getDataSource().getMetrics().stream()
+                                .map(name -> componentLabels.getOrDefault(name, fieldLabels.getOrDefault(name, name))).toList());
                     }
                     if (comp.getDataSource().getDimensions() != null) {
-                        dimensions.addAll(comp.getDataSource().getDimensions());
+                        dimensions.addAll(comp.getDataSource().getDimensions().stream()
+                                .map(name -> componentLabels.getOrDefault(name, fieldLabels.getOrDefault(name, name))).toList());
                     }
                     if (comp.getDataSource().getFilters() != null) {
                         filters.addAll(comp.getDataSource().getFilters());
@@ -508,7 +660,8 @@ public class InsightReportServiceImpl implements InsightReportService {
             if (data.getTable() != null && data.getTable().getRows() != null) {
                 totalRows += data.getTable().getRows().size();
                 if (dataTable.isEmpty()) {
-                    dataTable.append(buildMarkdownTable(data.getTable()));
+                    Map<String, String> componentLabels = InsightFieldLabels.fromComponent(schema, data.getComponentId());
+                    dataTable.append(buildMarkdownTable(data.getTable(), componentLabels.isEmpty() ? fieldLabels : componentLabels));
                 }
             }
         }
@@ -525,7 +678,7 @@ public class InsightReportServiceImpl implements InsightReportService {
     /**
      * 将表格数据构建为 Markdown 表格
      */
-    private String buildMarkdownTable(InsightComponentDataDTO.TableData tableData) {
+    private String buildMarkdownTable(InsightComponentDataDTO.TableData tableData, Map<String, String> fieldLabels) {
         StringBuilder sb = new StringBuilder();
         List<String> columns = tableData.getColumns();
         List<List<String>> rows = tableData.getRows();
@@ -535,7 +688,7 @@ public class InsightReportServiceImpl implements InsightReportService {
         }
 
         // 表头
-        sb.append("| ").append(String.join(" | ", columns)).append(" |\n");
+        sb.append("| ").append(columns.stream().map(column -> fieldLabels.getOrDefault(column, column)).collect(Collectors.joining(" | "))).append(" |\n");
         // 分隔行
         sb.append("|").append(columns.stream().map(c -> "---").collect(Collectors.joining("|"))).append("|\n");
         // 数据行

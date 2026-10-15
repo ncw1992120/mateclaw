@@ -23,6 +23,9 @@ public class AloudataMetricQueryRequest implements Serializable {
     /** 指标名称列表 */
     private List<String> metrics;
 
+    /** 查询中临时定义的指标。 */
+    private Map<String, Object> metricDefinitions;
+
     /** 维度名称列表 */
     private List<String> dimensions;
 
@@ -37,6 +40,12 @@ public class AloudataMetricQueryRequest implements Serializable {
      * </ul>
      */
     private List<String> filters;
+
+    /** 物化视图加速配置。 */
+    private Map<String, Object> specialMvConfig;
+
+    /** 对查询结果进行二次筛选的表达式。 */
+    private List<String> resultFilters;
 
     /**
      * 指标日期范围约束（表达式字符串）
@@ -64,4 +73,13 @@ public class AloudataMetricQueryRequest implements Serializable {
 
     /** 偏移量 */
     private Integer offset;
+
+    /** 自定义查询来源标识。 */
+    private String source;
+
+    /** 是否返回分页前的总条数。 */
+    private Boolean isQueryTotalCount;
+
+    /** 返回类型：DATA、SQL、SQL_AND_DATA。 */
+    private String queryResultType;
 }

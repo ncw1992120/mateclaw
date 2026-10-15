@@ -1,0 +1,72 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mateclaw-local-sim-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local-root-password}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-mateclaw_sim}
+      MYSQL_USER: ${MYSQL_USER:-mateclaw_sim}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-local-user-password}
+      TZ: Asia/Shanghai
+    ports:
+      - "${MYSQL_PORT:-13306}:3306"
+    volumes:
+      - local_sim_mysql:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  postgres:
+    image: postgres:15.6
+    container_name: mateclaw-local-sim-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mateclaw_sim}
+      POSTGRES_USER: ${POSTGRES_USER:-mateclaw_sim}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-postgres-password}
+      TZ: Asia/Shanghai
+    ports:
+      - "${POSTGRES_PORT:-15432}:5432"
+    volumes:
+      - local_sim_postgres:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: mateclaw-local-sim-wiremock
+    depends_on:
+      wiremock-tls-init:
+        condition: service_completed_successfully
+    command: ["--global-response-templating", "--https-port", "8443", "--https-keystore", "/run/tls/wiremock.p12", "--keystore-type", "PKCS12", "--keystore-password", "local-sim-password", "--key-manager-password", "local-sim-password"]
+    ports:
+      - "${WIREMOCK_PORT:-18081}:8080"
+      - "${WIREMOCK_HTTPS_PORT:-18443}:8443"
+    volumes:
+      - ./wiremock:/home/wiremock:ro
+      - local_sim_wiremock_tls:/run/tls:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/__admin/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  wiremock-tls-init:
+    image: wiremock/wiremock:3.9.1
+    container_name: mateclaw-local-sim-wiremock-tls-init
+    volumes:
+      - local_sim_wiremock_tls:/run/tls
+      - ./wiremock/init-tls.sh:/opt/sim/init-tls.sh:ro
+    entrypoint: ["/bin/sh", "/opt/sim/init-tls.sh"]
+
+volumes:
+  local_sim_mysql:
+  local_sim_postgres:
+  local_sim_wiremock_tls:

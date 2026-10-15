@@ -1,0 +1,12 @@
+{
+  "request": {"method": "POST", "urlPath": "/semantic/api/v1.1/metrics/query"},
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {
+      "code": "200",
+      "success": true,
+      "data": [{"region":"east","order_date":"2026-01-01","revenue":120.50}]
+    }
+  }
+}

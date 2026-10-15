@@ -1,0 +1,16 @@
+{
+  "request": {"method": "GET", "urlPath": "/semantic/api/v1.1/analysisView/query"},
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {
+      "code": "200",
+      "success": true,
+      "analysisView": [
+        {"region":"east","order_date":"2026-01-01","revenue":120.50},
+        {"region":"west","order_date":"2026-01-02","revenue":80.00},
+        {"region":"south","order_date":"2026-01-04","revenue":210.00}
+      ]
+    }
+  }
+}

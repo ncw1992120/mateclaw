@@ -4,15 +4,20 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 import vip.mate.common.result.R;
 import vip.mate.dataagent.auth.annotation.RequireWorkspaceRole;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.service.DatasetManageService;
+import vip.mate.dataagent.service.DatasetExecutionService;
+import vip.mate.dataagent.auth.service.WorkspaceGuard;
+import vip.mate.dataagent.dataset.*;
 
 import java.util.List;
 import java.util.Map;
+import org.slf4j.MDC;
 
 /**
  * 数据集管理控制器
@@ -22,10 +27,109 @@ import java.util.Map;
 @RestController
 @RequestMapping("/v1/datasets")
 @RequiredArgsConstructor
+@Slf4j
 @Tag(name = "数据集管理", description = "数据集 CRUD、数据查询与行级操作接口")
 public class DataAgentDatasetController {
 
     private final DatasetManageService datasetService;
+    private final DatasetExecutionService executionService;
+    private final WorkspaceGuard workspaceGuard;
+    private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
+    private final com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
+    @GetMapping("/{id}/descriptor")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "获取数据集输入描述", description = "返回 Python/预览使用的字段和来源类型，不返回连接凭据")
+    public R<DatasetInputDescriptor> descriptor(@PathVariable Long id, @RequestParam(defaultValue = "dataset") String inputName) {
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + id, java.util.Set.of(id));
+        return R.ok(executionService.descriptor(context, id, inputName));
+    }
+
+    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request) {
+        return preview(request, null);
+    }
+
+    @PostMapping("/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "预览统一数据集", description = "通过统一 DatasetSourceAdapter 读取并返回受控预览")
+    public R<DatasetBatch> preview(@RequestBody DatasetReadRequest request, jakarta.servlet.http.HttpServletRequest servletRequest) {
+        long startedAt = System.nanoTime();
+        String performanceId = servletRequest == null ? null : servletRequest.getHeader("X-Perf-Id");
+        if (performanceId != null && !performanceId.matches("[\\w-]{8,64}")) performanceId = null;
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(), "preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
+        try {
+            if (performanceId != null) MDC.put("dataset-query-perf-id", performanceId);
+            DatasetBatch batch = executionService.preview(context, request);
+            if (performanceId != null) {
+                log.info("[dataset-query-perf] requestId={} stage=backend-response backendTotalMs={} rows={} columns={} source=dataset-preview",
+                        performanceId, (System.nanoTime() - startedAt) / 1_000_000,
+                        batch.rows() == null ? 0 : batch.rows().size(), batch.rows() == null || batch.rows().isEmpty() ? 0 : batch.rows().getFirst().size());
+            }
+            return R.ok(batch);
+        } finally {
+            MDC.remove("dataset-query-perf-id");
+        }
+    }
+
+    /**
+     * 查询计划预览：合并查询配置草稿与运行时 QueryContext，返回计划、描述符、受控行集与下推报告。
+     * 预览不落库；显式空集合短路时不访问数据源。
+     */
+    @PostMapping("/query-plan/preview")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "查询计划预览", description = "编辑器验证单个数据集查询计划，返回 plan/descriptor/rows/pushdownReport")
+    public R<Map<String, Object>> queryPlanPreview(@RequestBody QueryPlanPreviewRequest request) {
+        DatasetAccessContext context = new DatasetAccessContext(workspaceGuard.currentWorkspaceId(),
+                workspaceGuard.currentUserId(), "plan-preview-" + request.datasetId(), java.util.Set.of(request.datasetId()));
+        DatasetInputDescriptor descriptor = executionService.descriptor(context, request.datasetId(), request.inputName());
+
+        com.fasterxml.jackson.databind.node.ObjectNode input = objectMapper.createObjectNode();
+        input.put("datasetId", String.valueOf(request.datasetId()));
+        input.put("inputName", request.inputName());
+        if (request.queryConfig() != null && request.queryConfig().isObject()) {
+            input.set("queryConfig", request.queryConfig());
+        }
+        com.fasterxml.jackson.databind.node.ObjectNode component = objectMapper.createObjectNode();
+        component.putObject("config").putObject("datasetPipeline")
+                .putArray("datasetInputs").add(input);
+
+        vip.mate.dataagent.dto.DatasetQueryPlanDTO plan =
+                queryPlanner.plan(component, input, request.queryContext(), false);
+
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("plan", plan);
+        response.put("descriptor", descriptor);
+        response.put("pushdownReport", null);
+        if (plan.shortCircuitEmpty()) {
+            // 显式空集合：短路空结果，不访问数据源
+            response.put("rows", List.of());
+            response.put("rowCount", 0);
+            response.put("hasNext", false);
+            return R.ok(response);
+        }
+
+        Map<String, String> fieldRoles = new java.util.HashMap<>();
+        descriptor.schema().forEach(column -> fieldRoles.put(column.name(), column.semanticRole()));
+        List<DatasetFilter> filters = plan.filters().stream()
+                .map(f -> new DatasetFilter(f.field(), fieldRoles.getOrDefault(f.field(), "dimension"), f.operator(), f.value()))
+                .toList();
+        List<DatasetSort> sorts = plan.orders().stream()
+                .map(o -> new DatasetSort(o.field(), o.direction()))
+                .toList();
+        Integer limit = plan.pagination() == null ? 100 : plan.pagination().pageSize();
+        Integer offset = plan.pagination() == null ? 0 : plan.pagination().offset();
+        boolean requestTotal = plan.pagination() != null;
+        DatasetReadRequest readRequest = new DatasetReadRequest(request.datasetId(), request.inputName(),
+                plan.columns(), filters, sorts, limit, offset, Map.of(), requestTotal);
+        DatasetBatch batch = executionService.preview(context, readRequest);
+        response.put("rows", batch.rows());
+        response.put("rowCount", batch.rowCount());
+        // totalCount 对旧版 Aloudata 接口可能缺失；hasNext 始终返回，供前端无总数分页使用。
+        response.put("hasNext", !batch.last());
+        response.put("pushdownReport", batch.pushdownReport());
+        if (batch.totalCount() != null) response.put("totalCount", batch.totalCount());
+        return R.ok(response);
+    }
 
     /**
      * 数据集列表

@@ -10,7 +10,11 @@
           v-for="heading in headings"
           :key="heading.id"
           :class="['toc-item', 'level-' + heading.level, { active: activeHeadingId === heading.id }]"
+          role="button"
+          tabindex="0"
+          :aria-label="`跳转到：${heading.text}`"
           @click="scrollToHeading(heading.id)"
+          @keydown="handleKeydown($event, heading.id)"
         >
           {{ heading.text }}
         </li>
@@ -42,6 +46,12 @@ const emit = defineEmits<{
 
 function scrollToHeading(id: string): void {
   emit('scrollTo', id)
+}
+
+function handleKeydown(event: KeyboardEvent, id: string): void {
+  if (event.key !== 'Enter' && event.key !== ' ') return
+  event.preventDefault()
+  scrollToHeading(id)
 }
 </script>
 

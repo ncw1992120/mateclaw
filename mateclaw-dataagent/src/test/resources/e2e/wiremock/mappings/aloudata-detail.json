@@ -1,0 +1,16 @@
+{
+  "request": {
+    "method": "GET",
+    "urlPath": "/anymetrics/api/v1/analysisview/queryByName",
+    "queryParameters": {"viewName": {"equalTo": "local_sales_view"}}
+  },
+  "response": {
+    "status": 200,
+    "headers": {"Content-Type": "application/json"},
+    "jsonBody": {
+      "code": "200",
+      "success": true,
+      "data": {"id":"local-sales-view","name":"local_sales_view","displayName":"本地销售视图","metrics":[{"name":"revenue","displayName":"收入","dataType":"DECIMAL"}],"dimensions":[{"name":"region","displayName":"区域","dataType":"STRING"},{"name":"order_date","displayName":"日期","dataType":"DATE"}]}
+    }
+  }
+}

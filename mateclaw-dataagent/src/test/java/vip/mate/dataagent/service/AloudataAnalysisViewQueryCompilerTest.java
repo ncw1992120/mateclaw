@@ -1,0 +1,182 @@
+package vip.mate.dataagent.service;
+
+import org.junit.jupiter.api.Test;
+import vip.mate.dataagent.dataset.DatasetFilter;
+import vip.mate.dataagent.dataset.DatasetReadException;
+import vip.mate.dataagent.dataset.DatasetReadRequest;
+import vip.mate.dataagent.dataset.DatasetSort;
+import vip.mate.dataagent.dto.AloudataAnalysisViewDetail;
+
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * 视图筛选编译：真实 semantic {@code metrics/query} 只接受表达式字符串数组，
+ * 结构化 {@code {field,operator,value}} 会返回 {@code SM99002}。这里锁定该契约，
+ * 防止有人改回结构化形态（本地 mock 已同步返回 SM99002，见 LocalAloudataFixturesTest）。
+ */
+class AloudataAnalysisViewQueryCompilerTest {
+
+    private final AloudataAnalysisViewQueryCompiler compiler = new AloudataAnalysisViewQueryCompiler();
+
+    private AloudataAnalysisViewDetail view() {
+        return new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "region")),
+                null, List.of(), List.of(), List.of());
+    }
+
+    @Test
+    void compilesFiltersIntoAloudataExpressions() {
+        Map<String, Object> body = compiler.compile(view(), new DatasetReadRequest(7L, "sales", List.of(),
+                List.of(new DatasetFilter("region", "dimension", "eq", "华东"),
+                        new DatasetFilter("revenue", "measure", "gte", 10)),
+                10, 0, Map.of()));
+
+        assertEquals(List.of("[region] = \"华东\"", "[revenue] >= 10"), body.get("filters"));
+        assertEquals(List.of("revenue"), body.get("metrics"));
+        assertEquals(List.of("region"), body.get("dimensions"));
+        assertEquals("DATA", body.get("queryResultType"));
+    }
+
+    @Test
+    void inAndBetweenUseAloudataSyntax() {
+        Map<String, Object> body = compiler.compile(view(), new DatasetReadRequest(7L, "sales", List.of(),
+                List.of(new DatasetFilter("region", "dimension", "in", List.of("华东", "华南")),
+                        new DatasetFilter("revenue", "measure", "between", List.of(10, 40))),
+                10, 0, Map.of()));
+
+        assertEquals(List.of("[region] IN (\"华东\",\"华南\")", "([revenue] >= 10 AND [revenue] <= 40)"),
+                body.get("filters"));
+    }
+
+    @Test
+    void compilesAllowedSortAndRuntimePageIntoAloudataQuery() {
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of(), List.of(),
+                List.of(new DatasetSort("revenue", "desc")), 25, 50, Map.of(), true);
+
+        Map<String, Object> body = compiler.compile(view(), request);
+
+        assertEquals(List.of(Map.of("revenue", "desc")), body.get("orders"));
+        assertEquals(25, body.get("limit"));
+        assertEquals(50, body.get("offset"));
+        assertEquals(true, body.get("isQueryTotalCount"));
+    }
+
+    @Test
+    void projectsDisplayedFieldsAndKeepsFilteredTimeOutOfGrouping() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue"), Map.of("name", "cost")),
+                List.of(Map.of("name", "metric_time"), Map.of("name", "region")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales",
+                List.of("region", "revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-02")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("revenue"), body.get("metrics"));
+        assertEquals(List.of("region"), body.get("dimensions"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-02 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
+        assertFalse(body.containsKey("timeConstraint"));
+    }
+
+    @Test
+    void selectingMetricNameAlsoProjectsItsStableMetricId() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "strategy", "策略", null,
+                List.of(), List.of(Map.of("name", "platform_id"), Map.of("name", "metric_name"),
+                        Map.of("name", "metric_id")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "strategy_contribution_wd",
+                List.of("platform_id", "metric_name"), List.of(), 50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("platform_id", "metric_name", "metric_id"), body.get("dimensions"));
+        assertEquals(List.of("platform_id", "metric_name", "metric_id"),
+                compiler.resolveColumns(view, request.columns()));
+    }
+
+    @Test
+    void sendsDateRangeAsSinglePartitionFilterWhenNoDimensionIsDisplayed() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-03")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("revenue"), body.get("metrics"));
+        assertEquals(List.of(), body.get("dimensions"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-03 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
+        assertFalse(body.containsKey("timeConstraint"));
+    }
+
+    @Test
+    void compilesMetricTimePartitionBoundsUsingRequestedGranularity() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-10-01")),
+                List.of(), 50, 0, Map.of(), false, "QUARTER");
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"QUARTER\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))"
+                        + " AND (DateTrunc(['metric_time'], \"QUARTER\") < (DateTrunc(Cast(\"2026-10-01 00:00:00\", \"TIMESTAMP\"), \"QUARTER\")))"),
+                body.get("filters"));
+    }
+
+    @Test
+    void keepsStaticViewConstraintSeparateFromRuntimePartitionFilter() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
+                List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),
+                "([metric_time__day] >= \"2026-09-01\")", List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("revenue"),
+                List.of(new DatasetFilter("metric_time", "dimension", "gte", "2026-09-01"),
+                        new DatasetFilter("metric_time", "dimension", "lt", "2026-09-03")),
+                50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals("([metric_time__day] >= \"2026-09-01\")", body.get("timeConstraint"));
+        assertEquals(List.of("(DateTrunc(['metric_time'], \"DAY\") >= (DateTrunc(Cast(\"2026-09-01 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"
+                        + " AND (DateTrunc(['metric_time'], \"DAY\") < (DateTrunc(Cast(\"2026-09-03 00:00:00\", \"TIMESTAMP\"), \"DAY\")))"),
+                body.get("filters"));
+        assertEquals(List.of(), body.get("dimensions"));
+    }
+
+    @Test
+    void rejectsDisplayedFieldsOutsideTheAnalysisView() {
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of("missing_field"),
+                List.of(), 50, 0, Map.of());
+
+        DatasetReadException error = assertThrows(DatasetReadException.class,
+                () -> compiler.compile(view(), request));
+
+        assertEquals(vip.mate.dataagent.dataset.DatasetReadErrorCode.INVALID_REQUEST, error.code());
+    }
+
+    @Test
+    void unsupportedFieldAndOperatorAreRejected() {
+        DatasetReadRequest request = new DatasetReadRequest(7L, "sales", List.of(),
+                List.of(new DatasetFilter("secret", "dimension", "eq", "x")), 10, 0, Map.of());
+        assertThrows(DatasetReadException.class, () -> compiler.compile(view(), request));
+
+        DatasetReadRequest nullCheck = new DatasetReadRequest(7L, "sales", List.of(),
+                List.of(new DatasetFilter("region", "dimension", "is_null", null)), 10, 0, Map.of());
+        assertThrows(DatasetReadException.class, () -> compiler.compile(view(), nullCheck));
+    }
+}

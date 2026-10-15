@@ -64,7 +64,11 @@ public class AloudataEndpointService {
             // 3. 从数据库读取
             Map<String, ApiEndpoint> fromDb = apiProperties.readEndpoints();
             if (fromDb != null && !fromDb.isEmpty()) {
-                cachedEndpoints = fromDb;
+                // 数据库配置允许覆盖默认端点，但不能因旧迁移缺少核心端点而让同步能力整体失效。
+                // 先放入代码级兜底，再用数据库定义覆盖同名项，兼容历史不完整配置。
+                Map<String, ApiEndpoint> merged = new LinkedHashMap<>(getDefaultEndpoints());
+                merged.putAll(fromDb);
+                cachedEndpoints = merged;
             } else {
                 // 4. 数据库无配置，使用默认兜底
                 cachedEndpoints = getDefaultEndpoints();
@@ -108,7 +112,74 @@ public class AloudataEndpointService {
      * 无需预先获取 Token。公共请求头参数通过 commonHeaderParams() 统一生成。
      */
     private Map<String, ApiEndpoint> getDefaultEndpoints() {
-        return new LinkedHashMap<>();
+        Map<String, ApiEndpoint> endpoints = new LinkedHashMap<>();
+        List<ApiParam> headers = commonHeaderParams();
+        endpoints.put("analysis_view_tree", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/treeList", "GET", headers));
+        endpoints.put("metric_tree", endpoint("anymetrics", "/anymetrics/api/v1/metrics/treeList", "GET", headers));
+        endpoints.put("analysis_view_query_by_name", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/queryByName", "GET",
+                mergeParams(headers, List.of(new ApiParam("viewName", "String", true, null, "指标视图名称", "QUERY")))));
+        endpoints.put("analysis_view_query_data", endpoint("semantic", "/semantic/api/v1.1/analysisView/query", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("viewName", "String", true, null, "指标视图名称", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY"),
+                        new ApiParam("pageIndex", "Integer", false, "0", "页码", "QUERY"),
+                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "QUERY")))));
+        // 指标视图平铺列表（支持关键字模糊搜索）。相比 treeList，响应额外携带
+        // basicAttributes.owner，可用于识别「我的视图」。注意：实测不传 keyword 会返回
+        // AM_00_0000（与文档「不传则查所有」不符），需用单字符通配 "_" 查询全量。
+        endpoints.put("analysis_view_list", endpoint("anymetrics", "/anymetrics/api/v1/analysisview/list", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("keyword", "String", false, null, "指标视图名称关键字（空则用 _ 查全量）", "QUERY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "200", "每页条数", "QUERY")))));
+        endpoints.put("category_list", endpoint("anymetrics", "/anymetrics/api/v1/category/list", "GET",
+                mergeParams(headers, List.of(new ApiParam("categoryType", "String", true, null, "类目类型", "QUERY")))));
+        endpoints.put("metric_list", endpoint("anymetrics", "/anymetrics/api/v1/metrics/list", "GET",
+                mergeParams(headers, List.of(
+                        new ApiParam("keyword", "String", false, null, "指标展示名或字段名关键字", "QUERY"),
+                        new ApiParam("metricCategoryId", "String", false, null, "指标类目 ID", "QUERY"),
+                        new ApiParam("statusFilters", "Array", false, null, "状态筛选", "QUERY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码", "QUERY"),
+                        new ApiParam("pageSize", "Integer", false, "100", "分页大小", "QUERY")))));
+        endpoints.put("metric_batch_detail", endpoint("anymetrics", "/anymetrics/api/v1/metrics/batchDetail", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("metric_all_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimensionAll", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("metric_dimensions", endpoint("anymetrics", "/anymetrics/api/v1/metrics/dimension", "GET",
+                mergeParams(headers, List.of(new ApiParam("metricNames", "Array", true, null, "指标名称", "QUERY")))));
+        endpoints.put("dimension_list", endpoint("anymetrics", "/anymetrics/api/v1/dimension/list", "POST",
+                mergeParams(headers, List.of(new ApiParam("keyword", "String", false, null, "维度展示名或字段名关键字", "BODY"),
+                        new ApiParam("categoryId", "String", false, null, "维度类目", "BODY"),
+                        new ApiParam("statusFilters", "Array", false, null, "状态筛选", "BODY"),
+                        new ApiParam("pager", "Object", false, null, "分页器", "BODY")))));
+        endpoints.put("dimension_detail", endpoint("anymetrics", "/anymetrics/api/v1/dimension/detail", "GET",
+                mergeParams(headers, List.of(new ApiParam("dimName", "String", true, null, "维度名称", "QUERY")))));
+        endpoints.put("dimension_values", endpoint("anymetrics", "/anymetrics/api/v1/dimension/values", "POST",
+                mergeParams(headers, List.of(
+                        new ApiParam("dimName", "String", true, null, "维度名称", "BODY"),
+                        new ApiParam("dimValueKeyword", "String", false, null, "维度值搜索关键字", "BODY"),
+                        new ApiParam("pageNumber", "Integer", false, "1", "页码，从1开始", "BODY"),
+                        new ApiParam("pageSize", "Integer", false, "200", "每页数据记录条数", "BODY")))));
+        endpoints.put("metrics_query", endpoint("semantic", "/semantic/api/v1.1/metrics/query", "POST",
+                mergeParams(headers, List.of(
+                        new ApiParam("metrics", "Array", true, null, "指标列表", "BODY"),
+                        new ApiParam("metricDefinitions", "Map", false, null, "临时指标定义", "BODY"),
+                        new ApiParam("dimensions", "Array", false, null, "维度列表", "BODY"),
+                        new ApiParam("filters", "Array", false, null, "筛选条件", "BODY"),
+                        new ApiParam("specialMvConfig", "Map", false, null, "物化视图加速配置", "BODY"),
+                        new ApiParam("resultFilters", "Array", false, null, "结果筛选条件", "BODY"),
+                        new ApiParam("timeConstraint", "String", false, null, "时间约束", "BODY"),
+                        new ApiParam("orders", "Array", false, null, "排序条件", "BODY"),
+                        new ApiParam("limit", "Integer", false, "100", "返回行数", "BODY"),
+                        new ApiParam("offset", "Integer", false, "0", "偏移量", "BODY"),
+                        new ApiParam("queryResultType", "String", false, "DATA", "结果类型", "BODY", "SQL_AND_DATA,SQL,DATA"),
+                        new ApiParam("source", "String", false, null, "查询来源标识", "BODY"),
+                        new ApiParam("isQueryTotalCount", "Boolean", false, null, "是否返回总条数", "BODY")))));
+        return endpoints;
+    }
+
+    private ApiEndpoint endpoint(String service, String path, String method, List<ApiParam> requestParams) {
+        return new ApiEndpoint(service, path, method, "代码级核心端点兜底", requestParams, List.of());
     }
 
     /**
