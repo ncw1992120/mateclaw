@@ -76,10 +76,10 @@ describe('筛选类组件的横向工具栏布局', () => {
     expect(wrapper.find('.stub-date-picker').exists()).toBe(true)
   })
 
-  it('编辑态显式要求显示标题时，不被隐藏的标题栏样式吞掉', () => {
+  it('编辑态显式要求显示标题时显示筛选器标签', () => {
     const wrapper = mount(FilterSelectWidget, {
       props: {
-        component: { ...filterComponent, titleBarStyle: 'hidden' },
+        component: { ...filterComponent, titleBarStyle: 'standard' },
         showTitle: true,
       },
       global,

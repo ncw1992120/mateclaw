@@ -213,9 +213,13 @@ beforeEach(() => {
     metrics: ['metric_a'],
     dims: ['dim_a'],
   }
-  getAloudataMetricDirectory.mockClear()
-  getAloudataMetricDetail.mockClear()
-  getAloudataMetricDetail.mockImplementation(async (_datasourceId: string, metricName: string) => ({
+  getAloudataMetricDirectory.mockReset().mockImplementation(async () => [{
+    categoryId: 'metric-root',
+    categoryName: '业务指标',
+    metricList: [{ metricName: 'metric_a', metricDisplayName: '指标 A' }],
+    subCategory: [],
+  }])
+  getAloudataMetricDetail.mockReset().mockImplementation(async (_datasourceId: string, metricName: string) => ({
     metricName,
     metricDisplayName: metricName === 'metric_a' ? '指标 A' : '转化率',
     type: 'DERIVED',
@@ -224,10 +228,44 @@ beforeEach(() => {
     owner: '数据团队',
     availableDimensions: ['dim_a'],
   }))
-  getAloudataDimensionDetail.mockClear()
-  pageAloudataMetrics.mockClear()
-  pageAloudataDimensions.mockClear()
-  listAloudataCategoryCounts.mockClear()
+  getAloudataDimensionDetail.mockReset().mockImplementation(async (_datasourceId: string, dimName: string) => ({
+    dimName,
+    dimDisplayName: dimName === 'region' ? '所属大区' : '维度 A',
+    originDataType: 'VARCHAR',
+    dimDescription: '维度描述',
+  }))
+  pageAloudataMetrics.mockReset().mockImplementation(async () => ({
+    records: [
+      { metricName: 'metric_a', metricDisplayName: '指标 A', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
+      { metricName: 'technical_rate', metricDisplayName: '转化率', metricCategoryId: 'metric-child', metricCategoryName: '转化指标', availableDimensions: ['dim_a'] },
+    ],
+    total: 2,
+    current: 1,
+    size: 20,
+    pages: 1,
+  }))
+  pageAloudataDimensions.mockReset().mockImplementation(async (_datasourceId: string, params?: { categoryId?: string }) => ({
+    records: params?.categoryId === 'dim-uncategorized'
+      ? [{ dimName: 'dim_level_type', dimDisplayName: '会员等级', categoryId: 'dim-uncategorized', categoryName: '未分类' }]
+      : [
+        { dimName: 'dim_a', dimDisplayName: '维度 A', categoryId: 'dim-child', categoryName: '客户维度' },
+        { dimName: 'region', dimDisplayName: '所属大区', categoryId: 'dim-child', categoryName: '客户维度' },
+      ],
+    total: params?.categoryId === 'dim-uncategorized' ? 1262 : 1,
+    current: 1,
+    size: 20,
+    pages: 1,
+  }))
+  listAloudataCategoryCounts.mockReset().mockImplementation(async (_datasourceId: string, categoryType: string) => categoryType === 'CATEGORY_METRIC'
+    ? [
+      { categoryId: 'metric-root', categoryName: '业务指标', parentId: null },
+      { categoryId: 'metric-child', categoryName: '转化指标', parentId: 'metric-root' },
+    ]
+    : [
+      { categoryId: 'dim-root', categoryName: '业务维度', parentId: null },
+      { categoryId: 'dim-child', categoryName: '客户维度', parentId: 'dim-root' },
+      { categoryId: 'dim-uncategorized', categoryName: '未分类', parentId: null, count: 1262 },
+    ])
 })
 
 describe('Aloudata 指标&维度选择', () => {

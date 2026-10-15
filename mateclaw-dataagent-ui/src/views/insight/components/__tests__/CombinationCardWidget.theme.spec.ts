@@ -100,7 +100,7 @@ describe('CombinationCardWidget · dashboard theme surfaces', () => {
         editable: false,
         component: {
           ...component({ layoutMode: 'free', tabs: [] }),
-          visualStyle: { shadow: 'medium' },
+          visualStyle: { border: { mode: 'theme' }, shadow: 'medium' },
         },
       },
       global: { stubs, plugins: [i18n] },

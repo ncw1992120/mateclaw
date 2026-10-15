@@ -10,6 +10,10 @@ vi.mock('@/api/dataset', () => ({
   previewInput: vi.fn().mockResolvedValue({ rows: [{ id: 1, status: 'PAID' }], total: 1 }),
 }))
 
+vi.mock('@/api/datasource', () => ({
+  list: vi.fn().mockResolvedValue([]),
+}))
+
 const executeMock = vi.hoisted(() => vi.fn())
 const statusMock = vi.hoisted(() => vi.fn())
 const cancelMock = vi.hoisted(() => vi.fn())

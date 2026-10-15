@@ -1,7 +1,12 @@
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import HelpContent from '../HelpContent.vue'
+
+vi.mock('@/api/help-center', () => ({
+  getRelatedDocuments: vi.fn().mockResolvedValue([]),
+  getFeedbackSummary: vi.fn().mockResolvedValue(null),
+}))
 
 const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false, fallbackWarn: false })
 
