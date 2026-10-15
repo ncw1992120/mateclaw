@@ -133,7 +133,6 @@ export function hydratePanel(
     title: component.title || '',
     titleBarStyle: component.titleBarStyle === 'accent' ? 'standard' : (component.titleBarStyle ?? 'standard'),
     themeAccentGroup: component.themeAccentGroup ?? 'primary',
-    componentColor: component.componentColor,
     visualStyle: normalizeComponentVisualStyle(component.visualStyle, component.type),
     multiMetric: Boolean(component.multiKpi),
     multiTab: Array.isArray(component.tabs) && component.tabs.length > 0,
@@ -223,7 +222,6 @@ export function buildComponentPatch(component: InsightComponent): InsightCompone
     title: card.title,
     titleBarStyle: card.titleBarStyle,
     themeAccentGroup: card.themeAccentGroup,
-    componentColor: card.componentColor,
     visualStyle: card.visualStyle,
   }
   if (card.type === 'kpi') {

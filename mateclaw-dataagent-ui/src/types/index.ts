@@ -1302,8 +1302,6 @@ export interface InsightComponent {
   titleIconStyle?: ComponentTitleIconStyle
   /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
   themeAccentGroup?: ComponentThemeAccentGroup
-  /** 组件自定义配色；未配置时沿用仪表盘主题颜色。 */
-  componentColor?: string
   /** 通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 栅格位置 */
@@ -1434,8 +1432,6 @@ export interface InsightCombinationChild {
   titleIconStyle?: ComponentTitleIconStyle
   /** 仪表盘主题中的组件强调色分组；缺省沿用主色以兼容历史配置。 */
   themeAccentGroup?: ComponentThemeAccentGroup
-  /** 子卡片自定义配色；未配置时沿用仪表盘主题颜色。 */
-  componentColor?: string
   /** 子卡片通用展示样式（边框、背景、圆角、阴影、内边距） */
   visualStyle?: ComponentVisualStyle
   /** 图表子类型（仅 chart） */
@@ -1647,6 +1643,8 @@ export interface QueryContext {
   datasetId?: string
   /** 键必须来自已绑定筛选器的参数定义；空选/全部 = 无过滤，显式空集合 = 短路空结果。 */
   parameters: Record<string, unknown>
+  /** Python 输入数据集的本次参数；同名页面筛选器可按 inputName 使用各自最近一次查询值。 */
+  datasetParameters?: Record<string, Record<string, unknown>>
   sort?: QuerySortSpec | null
   pagination?: QueryPaginationSpec | null
   /** 链路关联标识，用于丢弃旧请求晚返回的响应。 */
@@ -2194,6 +2192,8 @@ export interface InsightComponentData {
   table?: {
     columns: string[]
     rows: string[][]
+    /** 查询服务提供的匹配总数；缺失时按前端已取回行数计算。 */
+    totalCount?: number
   }
   /** AI 分析数据（renderType=aiAnalysis 时） */
   aiAnalysis?: {

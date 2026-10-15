@@ -3,6 +3,28 @@ import type { DashboardDatasetInput, DashboardScriptParameter, DashboardScriptFi
 export const SYSTEM_SCRIPT_START = '# ===== 系统生成区域：输入数据集和筛选绑定（请勿手动修改） ====='
 export const SYSTEM_SCRIPT_END = '# ===== 系统生成区域结束 ====='
 export const USER_SCRIPT_START = '# ===== 用户处理区域：Join、合并、计算和业务规则 ====='
+export const PYTHON_SAMPLE_START = '# ===== 自动更新的造数示例 ====='
+export const PYTHON_SAMPLE_END = '# ===== 自动更新的造数示例结束 ====='
+
+function sampleCommentLines(
+  inputs: DashboardDatasetInput[],
+  samplesByInputName: Record<string, Record<string, unknown>[]>,
+): string[] {
+  return inputs.flatMap((input) => {
+    const rows = samplesByInputName[input.inputName] ?? []
+    return rows.length
+      ? [`# ${input.inputName} = pl.DataFrame(json.loads(${JSON.stringify(JSON.stringify(rows.slice(0, 2)))}))`]
+      : [`# ${input.inputName}：尚未获取真实查询结果行，不生成 schema 造数；请检查上游数据集查询。`]
+  })
+}
+
+function sampleCommentBlock(
+  inputs: DashboardDatasetInput[],
+  samplesByInputName: Record<string, Record<string, unknown>[]>,
+): string[] {
+  if (!inputs.length) return []
+  return [PYTHON_SAMPLE_START, ...sampleCommentLines(inputs, samplesByInputName), PYTHON_SAMPLE_END]
+}
 
 /**
  * 生成只读的系统区域（实施计划任务 6 契约）：
@@ -48,17 +70,9 @@ export function buildSystemScript(
       '# 造数优先：变量已在此处赋值时，下面会跳过对应的真实数据读取。',
       '# import json',
       '# import polars as pl',
+      ...sampleCommentBlock(validInputs, samplesByInputName),
     )
   }
-  if (includeDataExamples) validInputs.forEach((input) => {
-    const rows = samplesByInputName[input.inputName] ?? []
-    const sampleData = rows
-    if (rows.length) {
-      lines.push(`# ${input.inputName} = pl.DataFrame(json.loads(${JSON.stringify(JSON.stringify(sampleData))}))`)
-    } else {
-      lines.push(`# ${input.inputName}：尚未获取真实查询结果行，不生成 schema 造数；请检查上游数据集查询。`)
-    }
-  })
 
   validInputs.forEach((input) => {
     lines.push(
@@ -74,6 +88,76 @@ export function buildSystemScript(
   }
   lines.push('', SYSTEM_SCRIPT_END)
   return lines.join('\n')
+}
+
+/** 只刷新编辑器系统区域中的查询样例，保留用户脚本及其余手动编辑内容。 */
+export function refreshPythonEditorSamples(
+  document: string,
+  inputs: DashboardDatasetInput[],
+  samplesByInputName: Record<string, Record<string, unknown>[]>,
+): string {
+  const userMarker = '# ===== 自定义处理代码（可编辑） ====='
+  const userMarkerIndex = document.indexOf(userMarker)
+  const systemEnd = userMarkerIndex >= 0 ? userMarkerIndex : document.length
+  let system = document.slice(0, systemEnd)
+  const start = system.indexOf(PYTHON_SAMPLE_START)
+  const end = system.indexOf(PYTHON_SAMPLE_END)
+  if (start >= 0 && end >= start) {
+    system = `${system.slice(0, start)}${system.slice(end + PYTHON_SAMPLE_END.length)}`
+  }
+  // 兼容此前保存的、没有样例区域标记的脚本：去除旧字段 JSON 与已删除输入的占位行。
+  system = system.split('\n').filter((line) =>
+    !/^#\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*pl\.DataFrame\(json\.loads\(/.test(line)
+    && !/^#\s*[A-Za-z_][A-Za-z0-9_]*：尚未获取真实查询结果行/.test(line),
+  ).join('\n')
+
+  const activeNames = new Set(inputs.filter((input) => input.datasetId && input.inputName).map((input) => input.inputName))
+  const lines = system.split('\n')
+  const synchronizedLines: string[] = []
+  const existingReaders = new Set<string>()
+  for (let index = 0; index < lines.length; index += 1) {
+    const readerMatch = lines[index].match(/^if ("(?:[^"\\]|\\.)+") not in locals\(\):$/)
+    if (!readerMatch) {
+      synchronizedLines.push(lines[index])
+      continue
+    }
+    const inputName = JSON.parse(readerMatch[1]) as string
+    if (activeNames.has(inputName)) {
+      existingReaders.add(inputName)
+      synchronizedLines.push(lines[index])
+      continue
+    }
+    // 该条件是系统生成的一个完整读取块；移除块内缩进行和紧随的空行。
+    while (index + 1 < lines.length && (lines[index + 1].startsWith(' ') || !lines[index + 1].trim())) index += 1
+  }
+  system = synchronizedLines.join('\n')
+
+  const missingReaders = inputs.filter((input) => input.datasetId && input.inputName && !existingReaders.has(input.inputName))
+  if (missingReaders.length) {
+    const readerBlocks = missingReaders.flatMap((input) => [
+      `if ${JSON.stringify(input.inputName)} not in locals():`,
+      `    ${input.inputName} = datasets.input(`,
+      `        input_name=${JSON.stringify(input.inputName)},`,
+      '    ).to_polars()',
+      '',
+    ]).join('\n')
+    const endMarker = '# ===== 数据读取结束 ====='
+    const endIndex = system.indexOf(endMarker)
+    const insertAt = endIndex >= 0 ? endIndex : system.length
+    system = `${system.slice(0, insertAt).trimEnd()}\n\n${readerBlocks.trimEnd()}\n\n${system.slice(insertAt).trimStart()}`
+  }
+
+  const block = sampleCommentBlock(inputs.filter((input) => input.datasetId && input.inputName), samplesByInputName).join('\n')
+  if (block) {
+    const readerIndex = system.search(/^if .+ not in locals\(\):/m)
+    const insertAt = readerIndex >= 0 ? readerIndex : system.length
+    const before = system.slice(0, insertAt).trimEnd()
+    const after = system.slice(insertAt).trimStart()
+    system = [before, block, after].filter(Boolean).join('\n\n')
+  }
+  return userMarkerIndex >= 0
+    ? `${system.trimEnd()}\n\n${document.slice(userMarkerIndex)}`
+    : system
 }
 
 /** 替换旧系统区域，保留用户区域；没有标记时将现有脚本整体视为用户代码。 */

@@ -8,6 +8,7 @@ import type {
   ChartType,
   InsightComponentType,
   ComponentThemeAccentGroup,
+  ComponentVisualStyle,
   ResolvedDashboardTheme,
   ThemeValidationError,
 } from '@/types'
@@ -19,6 +20,9 @@ interface ThemePreset extends Omit<ThemeToken, 'iconPalette'> {
 }
 
 const palette = (values: string[]): string[] => values.slice(0, 5)
+
+/** 仪表盘画布保持稳定的中性底色，避免切主题时大面积背景一起变色。 */
+export const DASHBOARD_CANVAS_BACKGROUND = '#F7F8FA'
 
 export const DASHBOARD_THEME_PRESETS: Record<string, ThemePreset> = {
   blue: {
@@ -117,6 +121,7 @@ export function themeCssVariables(theme: ResolvedDashboardTheme): Record<string,
   const mix = (foreground: string, background: string, foregroundAmount: number): string =>
     `color-mix(in srgb, ${foreground} ${foregroundAmount}%, ${background})`
   const vars: Record<string, string> = {
+    '--dashboard-canvas-background': DASHBOARD_CANVAS_BACKGROUND,
     '--insight-page-bg': theme.pageBackground, '--insight-card-bg': theme.cardBackground, '--insight-border': theme.border,
     '--insight-text': theme.text, '--insight-text-secondary': theme.textSecondary, '--insight-text-muted': theme.textMuted,
     '--insight-primary': theme.primary, '--insight-accent-alt': theme.accentAlt || theme.metricPalette[1] || theme.primary, '--insight-positive': theme.positive, '--insight-negative': theme.negative,
@@ -178,11 +183,37 @@ export function componentThemeZone(type: InsightComponentType): 'data' | 'insigh
   return 'data'
 }
 
-/** 将组件强调色分组映射到有限的三色主题；琥珀使用当前主题的第四个指标色。 */
+/** 将组件强调色分组映射到每个主题协调的三色组合。 */
 export function componentAccentColor(theme: ResolvedDashboardTheme, group: ComponentThemeAccentGroup): string {
-  if (group === 'secondary') return theme.accentAlt || theme.metricPalette[2] || theme.primary
-  if (group === 'highlight') return theme.metricPalette[3] || '#B45309'
+  const primary = theme.primary.toUpperCase()
+  const secondaryCandidates = [theme.accentAlt, ...theme.chartPalette, ...theme.metricPalette]
+  const secondary = secondaryCandidates.find((color) => color && color.toUpperCase() !== primary) ?? theme.primary
+  if (group === 'secondary') return secondary
+  if (group === 'highlight') {
+    const excluded = new Set([primary, secondary.toUpperCase()])
+    const highlight = [theme.metricPalette[3], theme.metricPalette[2], ...theme.chartPalette, ...theme.metricPalette]
+      .find((color) => color && !excluded.has(color.toUpperCase()))
+    return highlight ?? '#B45309'
+  }
   return theme.primary
+}
+
+function defaultComponentAccentGroup(theme: ResolvedDashboardTheme, type: InsightComponentType): ComponentThemeAccentGroup {
+  if (theme.componentColorMode === 'uniform') return 'primary'
+  if (type === 'chart' || type === 'aiAnalysis') return 'secondary'
+  if (type === 'table' || type === 'combination') return 'highlight'
+  return 'primary'
+}
+
+function variantComponentAccentGroup(
+  theme: ResolvedDashboardTheme,
+  type: InsightComponentType,
+  variant: number,
+): ComponentThemeAccentGroup {
+  if (theme.componentColorMode === 'uniform') return 'primary'
+  const groups: ComponentThemeAccentGroup[] = ['primary', 'secondary', 'highlight']
+  const baseIndex = type === 'chart' || type === 'aiAnalysis' ? 1 : type === 'table' || type === 'combination' ? 2 : 0
+  return groups[((baseIndex + Math.max(0, variant)) % groups.length)]
 }
 
 /** 输出给画布/组合卡片的分区层次 Token；显式组件样式可在调用方覆盖。 */
@@ -191,23 +222,42 @@ export function componentThemeStyle(
   type: InsightComponentType,
   _depth = 0,
   accentGroup?: ComponentThemeAccentGroup,
-  componentColor?: string,
+  variant = 0,
 ): Record<string, string> {
   if (!theme || componentThemeZone(type) === 'control') return {}
-  if (theme.source === 'legacy') {
-    return isHexColor(componentColor) ? { '--component-group-accent': componentColor } : {}
-  }
-  const defaultGroup: ComponentThemeAccentGroup = theme.componentColorMode === 'uniform'
-    ? 'primary'
-    : componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'
-  const accent = isHexColor(componentColor) ? componentColor : componentAccentColor(theme, accentGroup ?? defaultGroup)
+  if (theme.source === 'legacy') return {}
+  const defaultGroup = variant > 0 ? variantComponentAccentGroup(theme, type, variant) : defaultComponentAccentGroup(theme, type)
+  const accent = componentAccentColor(theme, accentGroup ?? defaultGroup)
   const hierarchyAmount = theme.hierarchy === 'soft' ? 4 : theme.hierarchy === 'strong' ? 12 : 7
   const mix = (foreground: string, background: string, amount: number): string => `color-mix(in srgb, ${foreground} ${amount}%, ${background})`
+  const radius = { small: '8px', medium: '12px', large: '16px' }[theme.radius]
+  const shadow = {
+    none: 'none',
+    subtle: '0 2px 8px rgba(15, 23, 42, 0.06)',
+    elevated: '0 10px 28px rgba(0, 0, 0, 0.24)',
+  }[theme.shadow]
   return {
     '--component-group-accent': accent,
     '--component-group-border': mix('var(--insight-text)', 'var(--insight-border)', hierarchyAmount),
     '--component-group-surface': 'var(--insight-card-bg)',
     '--component-group-header-surface': 'var(--insight-card-bg)',
+    '--component-radius': radius,
+    '--component-shadow': shadow,
+  }
+}
+
+/** 主题只补充用户未明确设置的形态，保留显式样式与隐藏边框的无阴影语义。 */
+export function componentThemeShapeOverrides(
+  themeStyle: Record<string, string>,
+  visualStyle?: ComponentVisualStyle,
+): Record<string, string> {
+  return {
+    ...(visualStyle?.radius == null && themeStyle['--component-radius']
+      ? { '--component-radius': themeStyle['--component-radius'] }
+      : {}),
+    ...(visualStyle?.shadow == null && visualStyle?.border?.mode !== 'hidden' && themeStyle['--component-shadow']
+      ? { '--component-shadow': themeStyle['--component-shadow'] }
+      : {}),
   }
 }
 
@@ -216,35 +266,27 @@ export function componentIconStyle(
   theme: ResolvedDashboardTheme | undefined,
   type: InsightComponentType | 'tab',
   title?: string,
-  _variant = 0,
+  variant = 0,
   accentGroup?: ComponentThemeAccentGroup,
-  componentColor?: string,
 ): Record<string, string> {
   if (!theme) return {}
   if (theme.source === 'legacy') {
-    if (componentThemeZone(type) === 'control' || !isHexColor(componentColor)) return {}
+    if (componentThemeZone(type) === 'control') return {}
     return {
       '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
       '--dashboard-icon-weight': '800',
-      '--dashboard-icon-color': componentColor,
     }
   }
   const color = type === 'tab'
     ? theme.primary
     : componentThemeZone(type) === 'control'
       ? theme.textSecondary
-      : isHexColor(componentColor)
-        ? componentColor
-        : componentAccentColor(theme, accentGroup ?? (componentThemeZone(type) === 'insight' ? 'secondary' : 'primary'))
+      : componentAccentColor(theme, accentGroup ?? defaultComponentAccentGroup(theme, type))
   return {
     '--dashboard-icon-size': type === 'tab' ? '16px' : '18px',
     '--dashboard-icon-weight': '800',
     '--dashboard-icon-color': color,
   }
-}
-
-function isHexColor(value: string | undefined): value is string {
-  return typeof value === 'string' && /^#[\da-f]{6}$/i.test(value)
 }
 
 /** 标准语义图标注册表。返回 Element Plus 图标组件名，业务不配置图标名称。 */

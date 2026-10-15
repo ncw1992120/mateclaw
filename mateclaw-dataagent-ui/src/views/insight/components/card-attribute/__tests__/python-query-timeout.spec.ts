@@ -55,4 +55,43 @@ describe('Python 查看数据查询等待时间', () => {
     await expect(pendingPreview).resolves.toEqual({ ok: true, message: 'execution-1' })
     expect(calls).toBe(121)
   })
+
+  it('后端返回字符串错误时展示原始错误并写入控制台', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    vi.spyOn(backend, 'fetchExecutionStatus').mockResolvedValue({
+      status: 'FAILED',
+      error: 'ValueError: 指标字段不存在',
+    } as never)
+
+    await expect(runComponentPreview()).resolves.toEqual({
+      ok: false,
+      message: 'ValueError: 指标字段不存在',
+    })
+
+    expect(state.resultSet.error).toBe('ValueError: 指标字段不存在')
+    expect(consoleError).toHaveBeenCalledWith('[python-execution] failed', expect.objectContaining({
+      executionId: 'execution-1',
+      status: 'FAILED',
+      error: 'ValueError: 指标字段不存在',
+    }))
+  })
+
+  it('状态接口返回 HTTP 错误时提取服务端 message 而非只显示状态码', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const requestError = Object.assign(new Error('Request failed with status code 500'), {
+      response: { status: 500, data: { msg: 'Python Worker 状态查询失败：进程不可用' } },
+    })
+    vi.spyOn(backend, 'fetchExecutionStatus').mockRejectedValue(requestError)
+
+    await expect(runComponentPreview()).resolves.toEqual({
+      ok: false,
+      message: 'Python Worker 状态查询失败：进程不可用',
+    })
+
+    expect(state.backend.lastError).toBe('Python Worker 状态查询失败：进程不可用')
+    expect(consoleError).toHaveBeenCalledWith('[python-execution] request failed', expect.objectContaining({
+      executionId: 'execution-1',
+      error: 'Python Worker 状态查询失败：进程不可用',
+    }))
+  })
 })

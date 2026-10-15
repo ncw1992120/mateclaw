@@ -87,6 +87,22 @@ class AloudataAnalysisViewQueryCompilerTest {
     }
 
     @Test
+    void selectingMetricNameAlsoProjectsItsStableMetricId() {
+        AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "strategy", "策略", null,
+                List.of(), List.of(Map.of("name", "platform_id"), Map.of("name", "metric_name"),
+                        Map.of("name", "metric_id")),
+                null, List.of(), List.of(), List.of());
+        DatasetReadRequest request = new DatasetReadRequest(7L, "strategy_contribution_wd",
+                List.of("platform_id", "metric_name"), List.of(), 50, 0, Map.of());
+
+        Map<String, Object> body = compiler.compile(view, request);
+
+        assertEquals(List.of("platform_id", "metric_name", "metric_id"), body.get("dimensions"));
+        assertEquals(List.of("platform_id", "metric_name", "metric_id"),
+                compiler.resolveColumns(view, request.columns()));
+    }
+
+    @Test
     void sendsDateRangeAsSinglePartitionFilterWhenNoDimensionIsDisplayed() {
         AloudataAnalysisViewDetail view = new AloudataAnalysisViewDetail("v1", "sales", "销售", null,
                 List.of(Map.of("name", "revenue")), List.of(Map.of("name", "metric_time")),

@@ -71,11 +71,11 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useInsight, currentPythonSource } from './useInsight'
-import { buildPythonEditorDocument, effectiveSystemCode, parsePythonEditorDocument } from '@/utils/python-script-template'
+import { buildPythonEditorDocument, effectiveSystemCode, parsePythonEditorDocument, refreshPythonEditorSamples } from '@/utils/python-script-template'
 import type { FinalResultQueryConfig, QueryDisplayField } from '@/types'
 import { isFinalResultQueryConfigured, sortDisplayFieldsDimensionsFirst } from '@/utils/final-result-query'
 import { highlightPython } from '@/utils/python-syntax'
-import { fetchDatasetSampleRows } from '../dataset-sample-query'
+import { datasetSampleSourceSignature, fetchDatasetSampleRows } from '../dataset-sample-query'
 import PythonQueryConfigDialog from './PythonQueryConfigDialog.vue'
 
 const { state, savePython } = useInsight()
@@ -93,6 +93,7 @@ const queryConfigDraft = ref<FinalResultQueryConfig | null>(null)
 const finalQueryConfig = computed(() => state.finalResultQueryConfig)
 const queryConfigured = computed(() => isFinalResultQueryConfigured(finalQueryConfig.value))
 const highlightedCode = computed(() => highlightPython(editorCode.value))
+const sampleSourceSignature = computed(() => datasetSampleSourceSignature(state.datasets, state.filterCatalog))
 
 const datasetQueryDisplayFields = computed<QueryDisplayField[]>(() => {
   const fields = new Map<string, QueryDisplayField>()
@@ -129,6 +130,7 @@ function loadEditorDocument(): void {
     ? effectiveSystemCode(state.pythonSystemState)
     : undefined
   editorCode.value = buildPythonEditorDocument(currentPythonSource(), state.pythonUser, {}, false, editableSystemCode)
+  editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, {})
   void nextTick(bindEditorScroll)
 }
 
@@ -139,22 +141,33 @@ function onSampleSectionChange(activeNames: string[] | string): void {
 
 async function loadSampleRows(): Promise<void> {
   if (!state.datasets.length) {
+    sampleRowsByInputName.value = {}
+    sampleWarnings.value = []
+    editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, {})
     samplesLoaded.value = true
     return
   }
   const loadId = ++sampleLoadId
   sampleLoading.value = true
+  sampleRowsByInputName.value = {}
+  editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, {})
   sampleWarnings.value = []
   const samples: Record<string, Record<string, unknown>[]> = {}
   const warnings: string[] = []
   await Promise.all(state.datasets.map(async (dataset) => {
     try {
-      const result = await fetchDatasetSampleRows(dataset, state.filterCatalog)
+      const result = await fetchDatasetSampleRows(dataset, state.filterCatalog, { sampleOnly: true })
       samples[dataset.alias] = result.rows
       if (!result.rows.length) warnings.push(`上游数据集「${dataset.alias}」查询成功，但结果为 0 行。`)
+      if (loadId === sampleLoadId && ui.python.visible) {
+        sampleRowsByInputName.value = { ...sampleRowsByInputName.value, [dataset.alias]: result.rows }
+        sampleWarnings.value = [...warnings]
+        editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, sampleRowsByInputName.value)
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       warnings.push(`上游数据集「${dataset.alias}」查询失败：${reason}`)
+      if (loadId === sampleLoadId && ui.python.visible) sampleWarnings.value = [...warnings]
     }
   }))
   if (loadId !== sampleLoadId || !ui.python.visible) return
@@ -162,6 +175,7 @@ async function loadSampleRows(): Promise<void> {
   sampleWarnings.value = warnings
   samplesLoaded.value = true
   sampleLoading.value = false
+  editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, samples)
 }
 
 function hasSampleRows(alias: string): boolean {
@@ -183,6 +197,20 @@ watch(() => ui.python.visible, (visible) => {
 
 watch(() => ui.python.queryConfigOnly, (queryConfigOnly) => {
   if (queryConfigOnly && ui.python.visible) openQueryConfig()
+}, { flush: 'post' })
+
+watch(sampleSourceSignature, () => {
+  sampleLoadId += 1
+  sampleRowsByInputName.value = {}
+  sampleWarnings.value = []
+  samplesLoaded.value = false
+  sampleLoading.value = false
+  if (!ui.python.visible || ui.python.queryConfigOnly) return
+
+  // 数据集结构、别名、筛选或查询状态变化后立即清除脚本中的旧 JSON 示例。
+  editorCode.value = refreshPythonEditorSamples(editorCode.value, currentPythonSource().inputs, {})
+  const expanded = expandedSections.value.includes('data-samples')
+  if (expanded) void loadSampleRows()
 }, { flush: 'post' })
 
 watch(showQueryConfig, (visible) => {

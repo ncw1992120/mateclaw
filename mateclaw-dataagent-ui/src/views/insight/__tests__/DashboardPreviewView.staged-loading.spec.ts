@@ -19,12 +19,16 @@ const mocks = vi.hoisted(() => ({
   generateComponentAnalysis: vi.fn(),
 }))
 
-vi.mock('@/stores/useInsightDashboardStore', () => ({
-  useInsightDashboardStore: () => ({
-    get currentDashboard() { return mocks.currentDashboard.value },
-    selectDashboard: mocks.selectDashboard,
-  }),
-}))
+vi.mock('@/stores/useInsightDashboardStore', async () => {
+  const { ref } = await import('vue')
+  mocks.currentDashboard = ref(null)
+  return {
+    useInsightDashboardStore: () => ({
+      get currentDashboard() { return mocks.currentDashboard.value },
+      selectDashboard: mocks.selectDashboard,
+    }),
+  }
+})
 
 vi.mock('@/api/insight-dashboard', () => ({
   preview: mocks.preview,
@@ -85,9 +89,9 @@ async function mountPreview() {
       stubs: {
         DashboardCanvas: {
           name: 'DashboardCanvas',
-          props: ['components', 'componentDataMap'],
+          props: ['components', 'componentDataMap', 'previewFillWidth'],
           emits: ['filter-change', 'ai-analysis-generate', 'table-view-change'],
-          template: '<div data-test="canvas">{{ JSON.stringify(componentDataMap) }}</div>',
+          template: '<div data-test="canvas" :data-preview-fill-width="previewFillWidth">{{ JSON.stringify(componentDataMap) }}</div>',
         },
         ElButton: true, ElIcon: true, ElDrawer: true,
       },
@@ -103,6 +107,8 @@ function canvasDataMap(wrapper: ReturnType<typeof mount>): Record<string, any> {
 describe('DashboardPreviewView 阶段式并行加载', () => {
   let wrapper: ReturnType<typeof mount> | undefined
   beforeEach(() => {
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
+    localStorage.clear()
     mocks.currentDashboard.value = null
     mocks.selectDashboard.mockResolvedValue(undefined)
     mocks.preview.mockReset()
@@ -115,6 +121,88 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     mocks.previewQueryPlan.mockResolvedValue({ rows: [{ region: '华东' }], rowCount: 1 })
   })
   afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.clearAllMocks() })
+
+  it('详情请求未完成时展示预览加载态，不提前显示暂无组件', async () => {
+    const pendingDashboard = deferred<void>()
+    mocks.selectDashboard.mockReturnValue(pendingDashboard.promise)
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(wrapper.get('[data-test="dashboard-loading"]').exists()).toBe(true)
+    expect(wrapper.find('.preview-empty').exists()).toBe(false)
+
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '空看板', schemaJson: schemaFor([]),
+    }
+    pendingDashboard.resolve()
+    await flushPromises()
+
+    expect(wrapper.find('[data-test="dashboard-loading"]').exists()).toBe(false)
+    expect(wrapper.find('.preview-empty').exists()).toBe(true)
+  })
+
+  it('重新进入同一仪表盘预览时恢复自适应宽度状态', async () => {
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '自适应状态', schemaJson: schemaFor([pipelineComponent]),
+    }
+    const first = await mountPreview()
+    await flushPromises()
+    await first.get('.preview-fill-btn').trigger('click')
+    expect(first.get('.preview-fill-btn').attributes('aria-pressed')).toBe('true')
+    first.unmount()
+
+    const second = await mountPreview()
+    await flushPromises()
+    expect(second.get('.preview-fill-btn').attributes('aria-pressed')).toBe('true')
+    expect(second.get('[data-test="canvas"]').attributes('data-preview-fill-width')).toBe('true')
+    second.unmount()
+  })
+
+  it('重新进入预览时将页面滚动位置复位到顶部', async () => {
+    const scrollTo = vi.mocked(window.scrollTo)
+    scrollTo.mockClear()
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '自适应状态', schemaJson: schemaFor([pipelineComponent]),
+    }
+
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(scrollTo).toHaveBeenCalledWith(0, 0)
+  })
+
+  it('自适应宽度状态按仪表盘隔离', async () => {
+    mocks.currentDashboard.value = {
+      id: 'dashboard-1', name: '自适应状态', schemaJson: schemaFor([pipelineComponent]),
+    }
+    const first = await mountPreview()
+    await flushPromises()
+    await first.get('.preview-fill-btn').trigger('click')
+    first.unmount()
+
+    const second = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-2' },
+      global: {
+        plugins: [createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })],
+        stubs: {
+          DashboardCanvas: { props: ['previewFillWidth'], template: '<div data-test="canvas" :data-preview-fill-width="previewFillWidth" />' },
+          ElButton: true, ElIcon: true, ElDrawer: true,
+        },
+      },
+    })
+    await flushPromises()
+    expect(second.get('.preview-fill-btn').attributes('aria-pressed')).toBe('false')
+    second.unmount()
+  })
+
+  it('详情请求失败时显示错误态而不是空看板提示', async () => {
+    mocks.selectDashboard.mockRejectedValue(new Error('network unavailable'))
+    wrapper = await mountPreview()
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain('insight.loadFailed')
+    expect(wrapper.find('.preview-empty').exists()).toBe(false)
+  })
 
   it('直连通道延迟时，管线组件独立先出数，不被整页响应阻塞', async () => {
     const pendingPreview = deferred<any[]>()
@@ -290,6 +378,6 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     wrapper = await mountPreview()
     await flushPromises()
 
-    expect(wrapper.get('.dashboard-preview-view').attributes('style') ?? '').toContain('--dashboard-preview-background: #FFFFFF')
+    expect(wrapper.get('.dashboard-preview-view').attributes('style') ?? '').toContain('--dashboard-preview-background: #F7F8FA')
   })
 })

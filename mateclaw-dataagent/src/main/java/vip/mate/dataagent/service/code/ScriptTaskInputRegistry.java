@@ -5,6 +5,8 @@ import vip.mate.dataagent.dataset.DatasetColumn;
 import vip.mate.dataagent.dataset.DatasetInputDescriptor;
 import vip.mate.dataagent.dataset.ObjectRef;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -21,7 +23,9 @@ public class ScriptTaskInputRegistry {
                                 long rowCount, long expiresAt) {
         public PreparedInput {
             schema = schema == null ? List.of() : List.copyOf(schema);
-            inlineRows = inlineRows == null ? List.of() : inlineRows.stream().map(Map::copyOf).toList();
+            inlineRows = inlineRows == null ? List.of() : inlineRows.stream()
+                    .map(row -> Collections.unmodifiableMap(new LinkedHashMap<>(row)))
+                    .toList();
             if (inlineRows.isEmpty() && objectRef == null && rowCount == 0) {
                 // 空输入是合法 prepared input（源端无匹配行）
             }

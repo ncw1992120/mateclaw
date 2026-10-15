@@ -70,7 +70,7 @@ class LocalAloudataFixturesTest {
                 fieldResults.stream().map(item -> item.get("metricName")).toList());
 
         Map<String, Object> allMetrics = fixtures.payload("metric_list", Map.of("pageNumber", 1, "pageSize", 100), null);
-        assertEquals(19, ((Map<String, Object>) allMetrics.get("data")).get("total"));
+        assertEquals(109, ((Map<String, Object>) allMetrics.get("data")).get("total"));
         Map<String, Object> allDimensions = fixtures.payload("dimension_list", Map.of(
                 "pager", Map.of("pageNumber", 1, "pageSize", 100)), null);
         assertEquals(13, ((Map<String, Object>) allDimensions.get("data")).get("total"));
@@ -187,7 +187,7 @@ class LocalAloudataFixturesTest {
         assertEquals("cljd_zcl_zb_view", data.get("viewName"));
         List<Object> metrics = (List<Object>) data.get("metrics");
         List<Object> dimensions = (List<Object>) data.get("dimensions");
-        assertEquals(13, metrics.size());
+        assertEquals(103, metrics.size());
         assertEquals(5, dimensions.size());
         assertInstanceOf(String.class, metrics.getFirst(), "metrics 必须是字符串数组（与真实响应一致）");
         assertInstanceOf(String.class, dimensions.getFirst());
@@ -282,8 +282,8 @@ class LocalAloudataFixturesTest {
                 (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("table");
         Map<String, Object> columns = (Map<String, Object>) table.get("columns");
 
-        assertEquals(18, columns.size(), "zb 视图应为 5 维度 + 13 指标");
-        assertEquals(6L, table.get("total"));
+        assertEquals(108, columns.size(), "zb 视图应为 5 维度 + 103 指标");
+        assertEquals(1000L, table.get("total"));
         for (Object column : columns.values()) {
             assertEquals(2, ((List<?>) column).size(), "分页后每列应为 2 行");
         }
@@ -295,22 +295,92 @@ class LocalAloudataFixturesTest {
 
     @Test
     @SuppressWarnings("unchecked")
-    void wdViewProducesEighteenRowsAcrossNineteenColumns() {
+    void wdViewProducesMatchingMetricRowsAcrossNineteenColumns() {
         Map<String, Object> body = fixtures.payload("analysis_view_query_data",
-                Map.of("viewName", "cljd_zcl_wd_view", "pageSize", 100, "pageIndex", 0), null);
+                Map.of("viewName", "cljd_zcl_wd_view", "pageSize", 2000, "pageIndex", 0), null);
         Map<String, Object> table =
                 (Map<String, Object>) ((Map<String, Object>) body.get("data")).get("table");
         Map<String, Object> columns = (Map<String, Object>) table.get("columns");
 
         assertEquals(19, columns.size(), "wd 视图应为 13 维度 + 6 指标");
-        assertEquals(18L, table.get("total"), "6 组 × 3 个 metric_id");
+        assertEquals(1012L, table.get("total"), "保留原始 18 行，并为其余 994 条宽表记录各造一条匹配维度记录");
         for (Object column : columns.values()) {
-            assertEquals(18, ((List<?>) column).size());
+            assertEquals(1012, ((List<?>) column).size());
         }
         List<Map<String, Object>> metricId = (List<Map<String, Object>>) columns.get("metric_id");
         assertEquals("trd_fund_amt_inout_cy_jjgr", metricId.get(0).get("value"));
         assertEquals("pub_fh_kgdb_trdamt_ppcadd_jjgr", metricId.get(2).get("value"));
         assertEquals("trd_fund_amt_inout_cy_jjgr", metricId.get(3).get("value"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void generatedConversionMetricColumnsHaveMatchingIdsAndNamesInDimensionView() {
+        Map<String, Object> zbResponse = fixtures.payload("analysis_view_query_data",
+                Map.of("viewName", "cljd_zcl_zb_view", "pageSize", 1000, "pageIndex", 0), null);
+        Map<String, Object> zbData = (Map<String, Object>) zbResponse.get("data");
+        Map<String, Object> zbTable = (Map<String, Object>) zbData.get("table");
+        Map<String, Object> zbColumns = (Map<String, Object>) zbTable.get("columns");
+        Set<String> indicatorColumns = zbColumns.keySet().stream()
+                .filter(name -> name.startsWith("digo_"))
+                .collect(java.util.stream.Collectors.toSet());
+        assertTrue(indicatorColumns.size() > 100, "宽表指标物理列必须超过 100 列");
+        assertEquals(1000L, zbTable.get("total"));
+        for (Object rawColumn : zbColumns.values()) {
+            assertEquals(1000, ((List<?>) rawColumn).size());
+        }
+        assertTrue(indicatorColumns.contains("digo_strategy_conversion_001"));
+        assertTrue(indicatorColumns.contains("digo_strategy_conversion_001_trans_user_cnt"));
+        List<Map<String, Object>> scaleValues =
+                (List<Map<String, Object>>) zbColumns.get("digo_strategy_conversion_001");
+        assertTrue(scaleValues.stream().allMatch(cell -> {
+            int value = ((Number) cell.get("value")).intValue();
+            return value >= 80 && value <= 120;
+        }), "模拟转化规模数值应在 100 左右");
+
+        Map<String, Object> wdResponse = fixtures.payload("analysis_view_query_data",
+                Map.of("viewName", "cljd_zcl_wd_view", "pageSize", 2000, "pageIndex", 0), null);
+        Map<String, Object> wdData = (Map<String, Object>) wdResponse.get("data");
+        Map<String, Object> wdTable = (Map<String, Object>) wdData.get("table");
+        Map<String, Object> wdColumns = (Map<String, Object>) wdTable.get("columns");
+        List<Map<String, Object>> ids = (List<Map<String, Object>>) wdColumns.get("metric_id");
+        List<Map<String, Object>> names = (List<Map<String, Object>>) wdColumns.get("metric_name");
+        boolean hasGeneratedMetric = false;
+        for (int index = 0; index < ids.size(); index++) {
+            String metricId = String.valueOf(ids.get(index).get("value"));
+            String metricName = String.valueOf(names.get(index).get("value"));
+            assertTrue(indicatorColumns.contains("digo_" + metricId),
+                    "table_wd metric_id 必须能映射到 table_ab 的规模列: " + metricId);
+            assertTrue(indicatorColumns.contains("digo_" + metricId + "_trans_user_cnt"),
+                    "table_wd metric_id 必须能映射到 table_ab 的人数列: " + metricId);
+            assertFalse(metricName.isBlank());
+            if ("strategy_conversion_001".equals(metricId)) {
+                assertEquals("转化规模模拟指标001", metricName);
+                hasGeneratedMetric = true;
+            } else if (metricId.matches("strategy_conversion_\\d{3}")) {
+                String metricNumber = metricId.substring("strategy_conversion_".length());
+                assertEquals("转化规模模拟指标" + metricNumber, metricName);
+            }
+        }
+        assertTrue(hasGeneratedMetric, "维度表应包含新增指标 ID 与展示名称");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void metricsQueryCanAggregateANewSyntheticConversionMetric() {
+        Map<String, Object> body = fixtures.payload("metrics_query", Map.of(
+                "metrics", List.of("digo_strategy_conversion_001"),
+                "dimensions", List.of("channel"),
+                "filters", List.of("[channel] = \"APP\"")), null);
+        Map<String, Object> data = (Map<String, Object>) body.get("data");
+        Map<String, Object> table = (Map<String, Object>) data.get("table");
+        Map<String, Object> columns = (Map<String, Object>) table.get("columns");
+
+        assertEquals(Boolean.TRUE, body.get("success"), body.toString());
+        assertEquals(List.of("channel", "digo_strategy_conversion_001"), List.copyOf(columns.keySet()));
+        assertEquals("APP", ((Map<String, Object>) ((List<?>) columns.get("channel")).getFirst()).get("value"));
+        assertTrue(((Number) ((Map<String, Object>)
+                ((List<?>) columns.get("digo_strategy_conversion_001")).getFirst()).get("value")).intValue() > 0);
     }
 
     /** metrics_query 无 viewName，应按请求字段反查视图，先筛选明细再按维度分组聚合。 */

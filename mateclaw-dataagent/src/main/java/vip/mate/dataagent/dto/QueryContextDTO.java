@@ -24,9 +24,17 @@ public record QueryContextDTO(
         String componentId,
         String datasetId,
         Map<String, Object> parameters,
+        Map<String, Map<String, Object>> datasetParameters,
         SortSpec sort,
         PaginationSpec pagination,
         String requestId) {
+
+    /** 向后兼容旧请求与现有 Java 调用点。 */
+    public QueryContextDTO(String dashboardId, String componentId, String datasetId,
+                           Map<String, Object> parameters, SortSpec sort,
+                           PaginationSpec pagination, String requestId) {
+        this(dashboardId, componentId, datasetId, parameters, Map.of(), sort, pagination, requestId);
+    }
 
     /** 服务端首轮每页条数硬上限。 */
     public static final int MAX_PAGE_SIZE = 500;
@@ -45,7 +53,20 @@ public record QueryContextDTO(
         // 注意：参数值允许 null（null = 清空筛选），因此不能用 Map.copyOf
         parameters = parameters == null ? Map.of()
                 : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(parameters));
-        for (Map.Entry<String, Object> entry : parameters.entrySet()) {
+        Map<String, Map<String, Object>> scoped = new java.util.LinkedHashMap<>();
+        if (datasetParameters != null) {
+            datasetParameters.forEach((inputName, values) -> {
+                if (inputName == null || inputName.isBlank()) {
+                    throw new IllegalArgumentException("dataset parameter input name must not be blank");
+                }
+                scoped.put(inputName, values == null ? Map.of()
+                        : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(values)));
+            });
+        }
+        datasetParameters = java.util.Collections.unmodifiableMap(scoped);
+        Map<String, Object> allParameters = new java.util.LinkedHashMap<>(parameters);
+        datasetParameters.values().forEach(allParameters::putAll);
+        for (Map.Entry<String, Object> entry : allParameters.entrySet()) {
             if (entry.getKey() == null || entry.getKey().isBlank()) {
                 throw new IllegalArgumentException("parameter name must not be blank");
             }
@@ -58,6 +79,19 @@ public record QueryContextDTO(
         if (requestId != null && requestId.length() > MAX_REQUEST_ID_LENGTH) {
             throw new IllegalArgumentException("requestId exceeds " + MAX_REQUEST_ID_LENGTH + " characters");
         }
+    }
+
+    /** 组件级参数保留兼容；当前输入的作用域参数覆盖同名全局参数。 */
+    public Map<String, Object> parametersFor(String inputName) {
+        Map<String, Object> result = new java.util.LinkedHashMap<>(parameters);
+        result.putAll(datasetParameters.getOrDefault(inputName, Map.of()));
+        return java.util.Collections.unmodifiableMap(result);
+    }
+
+    private Map<String, Object> allParameters() {
+        Map<String, Object> result = new java.util.LinkedHashMap<>(parameters);
+        datasetParameters.values().forEach(result::putAll);
+        return result;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

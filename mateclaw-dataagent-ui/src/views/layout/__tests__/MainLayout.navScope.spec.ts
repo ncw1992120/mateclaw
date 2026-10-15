@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   fetchEnabledModels: vi.fn().mockResolvedValue(undefined),
   fetchProviders: vi.fn().mockResolvedValue(undefined),
   fetchActiveModel: vi.fn().mockResolvedValue(undefined),
+  loadedViews: { workbench: 0, report: 0, config: 0, help: 0 },
   // 由 vue-router mock 工厂注入响应式 route（hoisted 阶段不能 import vue）
   route: undefined as undefined | { query: Record<string, string> },
 }))
@@ -48,20 +49,33 @@ vi.mock('../mainLayoutModelLoad', () => ({
 
 // 页面子组件与配置弹窗一律打桩：本用例只关心导航作用域的请求时机
 vi.mock('../TopNavBar.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('../../WorkbenchView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('../../WorkbenchView.vue', () => {
+  mocks.loadedViews.workbench += 1
+  return { default: { template: '<div />' } }
+})
 vi.mock('../../insight/DashboardListView.vue', () => ({
   default: { name: 'DashboardListViewStub', template: '<div />' },
 }))
-vi.mock('../../report/ReportListView.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('../../config/ConfigCenter.vue', () => ({ default: { template: '<div />' } }))
-vi.mock('../../help/HelpCenterView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('../../report/ReportListView.vue', () => {
+  mocks.loadedViews.report += 1
+  return { default: { template: '<div />' } }
+})
+vi.mock('../../config/ConfigCenter.vue', () => {
+  mocks.loadedViews.config += 1
+  return { default: { template: '<div />' } }
+})
+vi.mock('../../help/HelpCenterView.vue', () => {
+  mocks.loadedViews.help += 1
+  return { default: { template: '<div />' } }
+})
 vi.mock('../../dialog/ModelConfigDialog.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('../../dialog/AgentConfigDialog.vue', () => ({ default: { template: '<div />' } }))
 
-import MainLayout from '../MainLayout.vue'
 import { createI18n } from 'vue-i18n'
 
-function mountLayout() {
+async function mountLayout(nav: string) {
+  const { default: MainLayout } = await import('../MainLayout.vue')
+  mocks.route!.query = nav ? { nav } : {}
   const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
   return mount(MainLayout, { global: { plugins: [i18n] } })
 }
@@ -70,7 +84,7 @@ describe('MainLayout 导航作用域后台请求', () => {
   let wrapper: ReturnType<typeof mount> | undefined
 
   beforeEach(() => {
-    mocks.route!.query = {}
+    mocks.loadedViews = { workbench: 0, report: 0, config: 0, help: 0 }
     vi.clearAllMocks()
     mocks.fetchAgents.mockResolvedValue(undefined)
     mocks.fetchConversations.mockResolvedValue(undefined)
@@ -84,19 +98,18 @@ describe('MainLayout 导航作用域后台请求', () => {
   })
 
   it('进入洞察不触发会话列表/历史消息恢复，也不加载智能体列表', async () => {
-    mocks.route!.query = { nav: 'insight' }
-    wrapper = mountLayout()
+    wrapper = await mountLayout('insight')
     await flushPromises()
 
     expect(mocks.fetchConversations).not.toHaveBeenCalled()
     expect(mocks.tryResumeStream).not.toHaveBeenCalled()
     expect(mocks.switchConversation).not.toHaveBeenCalled()
     expect(mocks.fetchAgents).not.toHaveBeenCalled()
+    expect(mocks.loadedViews).toEqual({ workbench: 0, report: 0, config: 0, help: 0 })
   })
 
   it('进入问数仍执行原会话恢复流程', async () => {
-    mocks.route!.query = { nav: 'smart-ask' }
-    wrapper = mountLayout()
+    wrapper = await mountLayout('smart-ask')
     await flushPromises()
 
     expect(mocks.fetchConversations).toHaveBeenCalledTimes(1)
@@ -104,8 +117,7 @@ describe('MainLayout 导航作用域后台请求', () => {
   })
 
   it('从洞察切换到问数时补齐会话初始化', async () => {
-    mocks.route!.query = { nav: 'insight' }
-    wrapper = mountLayout()
+    wrapper = await mountLayout('insight')
     await flushPromises()
     expect(mocks.fetchConversations).not.toHaveBeenCalled()
 
@@ -120,8 +132,7 @@ describe('MainLayout 导航作用域后台请求', () => {
   it('快速切换回旧导航时，旧作用域未完成的恢复不再写会话状态', async () => {
     let releaseResume!: (value: boolean) => void
     mocks.tryResumeStream.mockReturnValue(new Promise<boolean>((resolve) => { releaseResume = resolve }))
-    mocks.route!.query = { nav: 'smart-ask' }
-    wrapper = mountLayout()
+    wrapper = await mountLayout('smart-ask')
     await flushPromises()
     expect(mocks.fetchConversations).toHaveBeenCalledTimes(1)
 

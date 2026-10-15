@@ -38,14 +38,6 @@
             </el-select>
           </div>
           <div v-if="!['filter', 'timeFilter'].includes(activeCard.type)" class="field">
-            <InsightColorField
-              :model-value="activeCard.componentColor ?? DEFAULT_COMPONENT_COLOR"
-              label="组件配色"
-              :suggested-colors="COMPONENT_COLOR_PRESETS"
-              @update:model-value="activeCard.componentColor = $event"
-            />
-          </div>
-          <div v-if="!['filter', 'timeFilter'].includes(activeCard.type)" class="field">
             <label class="field-label">顶线颜色</label>
             <el-select v-model="activeCard.visualStyle.border!.colorMode" aria-label="组件顶线颜色" style="width: 100%">
               <el-option value="theme" label="跟随主题" />
@@ -195,14 +187,11 @@ import DatasetCard from './DatasetCard.vue'
 import ComponentSampleDialog from '../ComponentSampleDialog.vue'
 import { resolveComponentSample } from '@/utils/component-sample-data'
 import { resolveFieldLabel } from '@/utils/field-mapping'
-import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
 import InsightColorField from '../InsightColorField.vue'
 import { isFinalResultQueryConfigured } from '@/utils/final-result-query'
 
 const { state, activeCard, isKpiCard, datasetCount, openDataSourceTree, openPython, openPythonQueryConfig, openPythonResultPreview, removePython } = useInsight()
-
-const DEFAULT_COMPONENT_COLOR = '#1E40AF'
-const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
 
 const sampleDialogVisible = ref(false)
 const componentSample = computed(() => resolveComponentSample({

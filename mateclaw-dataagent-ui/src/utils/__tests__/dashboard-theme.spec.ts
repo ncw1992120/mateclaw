@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  componentThemeStyle,
+  componentIconStyle,
+  componentThemeShapeOverrides,
   densityScale,
   resolveDashboardTheme,
   themeCssVariables,
@@ -81,6 +84,56 @@ describe('dashboard theme · 变量和密度', () => {
     expect(vars['--insight-chart-1']).toBeDefined()
     expect(vars['--db-bg']).toBe('var(--insight-page-bg)')
     expect(vars['--db-accent']).toBe('var(--insight-primary)')
+  })
+
+  it('keeps the dashboard canvas neutral while themes style components', () => {
+    const vars = themeCssVariables(resolveDashboardTheme({ mode: 'preset', presetId: 'rose' }, 'light'))
+
+    expect(vars['--dashboard-canvas-background']).toBe('#F7F8FA')
+  })
+
+  it('uses three coordinated component accents and applies each preset component shape', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'rose' }, 'light')
+    const kpi = componentThemeStyle(theme, 'kpi')
+    const chart = componentThemeStyle(theme, 'chart')
+    const table = componentThemeStyle(theme, 'table')
+
+    expect(kpi['--component-group-accent']).toBe('#BE185D')
+    expect(chart['--component-group-accent']).toBe('#0F766E')
+    expect(table['--component-group-accent']).toBe('#C2410C')
+    expect(new Set([kpi['--component-group-accent'], chart['--component-group-accent'], table['--component-group-accent']]).size).toBe(3)
+    expect(kpi['--component-radius']).toBe('16px')
+    expect(kpi['--component-shadow']).toContain('0 2px 8px')
+  })
+
+  it('cycles neighboring components through three accents while keeping uniform mode uniform', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+    const uniform = resolveDashboardTheme({ mode: 'preset', presetId: 'blue', componentColorMode: 'uniform' }, 'light')
+    const accents = [0, 1, 2].map((variant) => componentThemeStyle(theme, 'kpi', 0, undefined, variant)['--component-group-accent'])
+
+    expect(new Set(accents).size).toBe(3)
+    expect(componentIconStyle(theme, 'kpi', undefined, 1)['--dashboard-icon-color']).toBe(accents[0])
+    expect(componentThemeStyle(uniform, 'kpi', 0, undefined, 2)['--component-group-accent']).toBe(uniform.primary)
+  })
+
+  it('applies theme shape only as a default and preserves explicit shape choices', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'rose' }, 'light')
+    const themeStyle = componentThemeStyle(theme, 'kpi')
+
+    expect(componentThemeShapeOverrides(themeStyle)).toEqual({
+      '--component-radius': '16px',
+      '--component-shadow': themeStyle['--component-shadow'],
+    })
+    expect(componentThemeShapeOverrides(themeStyle, { radius: 6, shadow: 'none' })).toEqual({})
+    expect(componentThemeShapeOverrides(themeStyle, { border: { mode: 'hidden' } })).toEqual({ '--component-radius': '16px' })
+  })
+
+  it('keeps user-selected accent groups and unified-color mode authoritative', () => {
+    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
+    const unified = resolveDashboardTheme({ mode: 'preset', presetId: 'blue', componentColorMode: 'uniform' }, 'light')
+
+    expect(componentThemeStyle(theme, 'chart', 0, 'highlight')['--component-group-accent']).toBe('#B45309')
+    expect(componentThemeStyle(unified, 'table')['--component-group-accent']).toBe(unified.primary)
   })
 
   it('深色预设完整覆盖交互背景、边框、状态背景和图表预览 Token', () => {

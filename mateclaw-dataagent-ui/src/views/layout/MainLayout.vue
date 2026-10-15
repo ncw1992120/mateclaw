@@ -58,10 +58,6 @@ import { useModelStore } from '@/stores/useModelStore'
 import { useUserStore } from '@/stores/useUserStore'
 import { shouldLoadActiveModel } from './mainLayoutModelLoad'
 import TopNavBar from './TopNavBar.vue'
-import WorkbenchView from '../WorkbenchView.vue'
-import ReportListView from '../report/ReportListView.vue'
-import ConfigCenter from '../config/ConfigCenter.vue'
-import HelpCenterView from '../help/HelpCenterView.vue'
 import ModelConfigDialog from '../dialog/ModelConfigDialog.vue'
 import AgentConfigDialog from '../dialog/AgentConfigDialog.vue'
 import type { Agent } from '@/types'
@@ -71,6 +67,20 @@ import type { Agent } from '@/types'
 // loader 的 resolve 值恒为组件对象本身。
 const DashboardListView = defineAsyncComponent(
   async () => (await import('../insight/DashboardListView.vue')).default,
+)
+// 主布局首屏只加载当前导航对应的页面；问数、报告、配置和帮助通常不参与洞察首屏。
+// 导航条件及页面生命周期保持原样，仅将这些页面的下载/解析推迟到首次访问时。
+const WorkbenchView = defineAsyncComponent(
+  async () => (await import('../WorkbenchView.vue')).default,
+)
+const ReportListView = defineAsyncComponent(
+  async () => (await import('../report/ReportListView.vue')).default,
+)
+const ConfigCenter = defineAsyncComponent(
+  async () => (await import('../config/ConfigCenter.vue')).default,
+)
+const HelpCenterView = defineAsyncComponent(
+  async () => (await import('../help/HelpCenterView.vue')).default,
 )
 
 const { t } = useI18n()

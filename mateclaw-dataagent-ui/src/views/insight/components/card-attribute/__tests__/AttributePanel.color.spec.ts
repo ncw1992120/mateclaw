@@ -188,15 +188,12 @@ describe('AttributePanel', () => {
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
     const card = insightFixture.value.activeCard.value
 
-    expect(fields).toHaveLength(3)
+    expect(fields).toHaveLength(2)
     const toplineField = fields.find(field => field.attributes('aria-label') === '自定义顶线颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
-    const componentColorField = fields.find(field => field.attributes('aria-label') === '组件配色')!
     expect(toplineField.attributes('data-suggested-colors')).not.toBe(JSON.stringify(CARD_BG_PRESETS))
     expect(wrapper.findAll('label').filter(label => label.text() === '自定义顶线颜色')).toHaveLength(1)
     expect(backgroundField.attributes('data-suggested-colors')).toBe(JSON.stringify(CARD_BG_PRESETS))
-    expect(componentColorField.attributes('data-suggested-colors')).toBeTruthy()
-    expect(componentColorField.attributes('data-show-picker')).toBe('true')
 
     await backgroundField.setValue('#AABBCC')
     expect(card.visualStyle.background).toEqual({ mode: 'custom', color: '#AABBCC' })

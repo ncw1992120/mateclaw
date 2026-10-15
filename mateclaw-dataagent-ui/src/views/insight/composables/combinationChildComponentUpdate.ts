@@ -15,7 +15,6 @@ export function mergeCombinationChildComponentUpdate(
     titleBarStyle: updated.titleBarStyle,
     titleIconStyle: updated.titleIconStyle,
     themeAccentGroup: updated.themeAccentGroup,
-    componentColor: updated.componentColor,
     visualStyle: updated.visualStyle,
     chartType: updated.chartType,
     config: updated.config,

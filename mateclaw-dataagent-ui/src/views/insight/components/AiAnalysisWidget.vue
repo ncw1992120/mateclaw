@@ -1,7 +1,7 @@
 <template>
   <div class="ai-analysis-widget">
     <div class="analysis-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</span>
+      <span v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="analysis-title"><DashboardComponentIcon type="aiAnalysis" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</span>
       <el-button
         v-if="!autoGenerate && !generating"
         type="primary"
@@ -12,7 +12,7 @@
       >
         {{ t('insight.aiAnalysis.generate') }}
       </el-button>
-      <div v-else class="generating-indicator">
+      <div v-else-if="generating" class="generating-indicator">
         <el-icon class="is-loading"><Loading /></el-icon>
         <span>{{ t('insight.aiAnalysis.generating') }}</span>
       </div>

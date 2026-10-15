@@ -12,6 +12,7 @@ import vip.mate.dataagent.auth.context.UserContextHolder;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.exception.BusinessException;
 import vip.mate.dataagent.model.DatasourceEntity;
+import vip.mate.dataagent.util.NameMatchSupport;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.service.AloudataService;
 import vip.mate.dataagent.service.DatasourceAccountService;
@@ -367,8 +368,9 @@ public class AloudataServiceImpl implements AloudataService {
         try {
             Map<String, Object> input = new HashMap<>();
             input.put("dimName", dimName);
-            if (keyword != null && !keyword.isBlank()) {
-                input.put("dimValueKeyword", keyword);
+            String kw = NameMatchSupport.trimSpaces(keyword);
+            if (kw != null && !kw.isBlank()) {
+                input.put("dimValueKeyword", kw);
             }
             input.put("pageNumber", 1);
             input.put("pageSize", limit > 0 ? limit : 200);

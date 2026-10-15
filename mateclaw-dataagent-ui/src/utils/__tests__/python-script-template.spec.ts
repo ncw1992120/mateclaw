@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   composeExecutionScript,
   buildPythonEditorDocument,
+  refreshPythonEditorSamples,
   effectiveSystemCode,
   fingerprintSystemSource,
   generateSystemScript,
@@ -40,10 +41,44 @@ describe('python script system state', () => {
       bindings: [],
     })
     expect(next.mode).toBe('managed')
-    expect(next.managedCode).toBe('dataset_a = custom_read()')
+    expect(next.managedCode).toContain('dataset_a = custom_read()')
+    expect(next.managedCode).toContain('if "dataset_b" not in locals():')
     expect(next.generatedCode).toContain('dataset_b')
     expect(next.hasGeneratedUpdate).toBe(true)
-    expect(effectiveSystemCode(next)).toBe('dataset_a = custom_read()')
+    expect(effectiveSystemCode(next)).toContain('dataset_a = custom_read()')
+    expect(effectiveSystemCode(next)).toContain('input_name="dataset_b"')
+  })
+
+  it('managed mode adds newly declared dataset readers to the effective execution script', () => {
+    const current = {
+      mode: 'managed' as const,
+      generatedCode: generateSystemScript(source),
+      managedCode: [
+        '# ===== 系统生成区域：输入数据集和筛选绑定（请勿手动修改） =====',
+        'if "table_wd" not in locals():',
+        '    table_wd = datasets.input(input_name="table_wd").to_polars()',
+        'if "table_zb" not in locals():',
+        '    table_zb = datasets.input(input_name="table_zb").to_polars()',
+        '# ===== 系统生成区域结束 =====',
+      ].join('\n'),
+      generatedFingerprint: 'old',
+      userCode: 'result = table_cnt',
+    }
+
+    const next = reconcileSystemScript(current, {
+      inputs: [
+        { datasetId: 'wd', inputName: 'table_wd' },
+        { datasetId: 'zb', inputName: 'table_zb' },
+        { datasetId: 'cnt', inputName: 'table_cnt' },
+      ],
+      bindings: [],
+    })
+
+    expect(effectiveSystemCode(next)).toContain('if "table_cnt" not in locals():')
+    expect(effectiveSystemCode(next)).toContain('table_cnt = datasets.input(')
+    expect(effectiveSystemCode(next)).toContain('input_name="table_cnt"')
+    expect(effectiveSystemCode(next)).toContain('table_wd = datasets.input(input_name="table_wd").to_polars()')
+    expect(next.userCode).toBe('result = table_cnt')
   })
 
   it('restoreGenerated explicitly returns generated mode and preserves user code', () => {
@@ -120,6 +155,30 @@ describe('python script system state', () => {
     expect(document).toContain('table_ab = datasets.input(input_name="table_ab").to_pandas()')
     expect(document).not.toContain('dataset_a = datasets.input(')
     expect(parsePythonEditorDocument(document).systemCode).toContain('.to_pandas()')
+  })
+
+  it('刷新注释示例时更新字段并移除已删除数据集的旧行，同时保留手写脚本', () => {
+    const document = buildPythonEditorDocument({
+      inputs: [
+        { datasetId: 'a', inputName: 'table_ab' },
+        { datasetId: 'b', inputName: 'table_wd' },
+      ],
+      bindings: [],
+    }, 'result = custom_transform(table_ab)', {
+      table_ab: [{ old_field: 1 }],
+      table_wd: [{ legacy: 'old' }],
+    })
+
+    const refreshed = refreshPythonEditorSamples(document, [
+      { datasetId: 'a', inputName: 'table_ab' },
+    ], { table_ab: [{ new_field: 2 }, { new_field: 3 }] })
+
+    expect(refreshed).toContain('new_field')
+    expect(refreshed).not.toContain('old_field')
+    expect(refreshed).not.toContain('table_wd = pl.DataFrame')
+    expect(refreshed).toContain('result = custom_transform(table_ab)')
+    expect(refreshed).toContain('if "table_ab" not in locals():')
+    expect(refreshed).not.toContain('if "table_wd" not in locals():')
   })
 
   it('没有真实查询行时不再用字段映射伪造 schema 造数', () => {

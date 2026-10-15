@@ -125,6 +125,28 @@ class QueryPlannerTest {
     }
 
     @Test
+    @DisplayName("同名页面参数可按 Python 上游输入分别覆盖")
+    void datasetScopedParametersAreAppliedPerInput() throws Exception {
+        JsonNode firstComponent = component(QUERY_CONFIG_INPUT);
+        JsonNode secondComponent = component(QUERY_CONFIG_INPUT.replace("strategy_data", "second_data"));
+        Map<String, Map<String, Object>> perInput = Map.of(
+                "strategy_data", Map.of("start_date", "2026-09-29", "end_date", "2026-10-02"),
+                "second_data", Map.of("start_date", "2026-09-17", "end_date", "2026-10-09"));
+        QueryContextDTO scopedContext = new QueryContextDTO(
+                "dashboard-001", "component-001", null, Map.of(), perInput, null, null, "run-test");
+
+        DatasetQueryPlanDTO first = planner.plan(firstComponent, input(firstComponent), scopedContext, true);
+        DatasetQueryPlanDTO second = planner.plan(secondComponent, input(secondComponent), scopedContext, true);
+
+        assertThat(first.filters()).contains(
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-09-29"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-10-02"));
+        assertThat(second.filters()).contains(
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-09-17"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-10-09"));
+    }
+
+    @Test
     @DisplayName("Python 输入计划同时合并数据集固定条件和页面筛选器绑定")
     void fixedFiltersAndBoundFiltersAreBothAppliedToPythonInput() throws Exception {
         String inputJson = QUERY_CONFIG_INPUT.replace(

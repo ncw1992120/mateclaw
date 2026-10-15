@@ -22,6 +22,8 @@ import vip.mate.dataagent.repository.DatasetMapper;
 import vip.mate.dataagent.repository.DatasourceColumnMapper;
 import vip.mate.dataagent.repository.DatasourceMapper;
 import vip.mate.dataagent.repository.DatasourceTableMapper;
+import vip.mate.dataagent.repository.AloudataMetricMapper;
+import vip.mate.dataagent.repository.AloudataDimensionMapper;
 import vip.mate.dataagent.service.impl.DatasetManageServiceImpl;
 import vip.mate.dataagent.service.DatasourceManageService;
 
@@ -42,6 +44,8 @@ class DatasetCatalogServiceTest {
     @Mock DatasourceMapper datasourceMapper;
     @Mock DatasourceTableMapper datasourceTableMapper;
     @Mock DatasourceColumnMapper datasourceColumnMapper;
+    @Mock AloudataMetricMapper aloudataMetricMapper;
+    @Mock AloudataDimensionMapper aloudataDimensionMapper;
     @Mock DatasourceManageService datasourceManageService;
     @Mock WorkspaceGuard workspaceGuard;
 
@@ -390,6 +394,7 @@ class DatasetCatalogServiceTest {
     private DatasetManageServiceImpl newService() {
         return new DatasetManageServiceImpl(datasetMapper, datasetFieldMapper, datasetDataMapper,
                 datasourceMapper, datasourceTableMapper, datasourceColumnMapper,
+                aloudataMetricMapper, aloudataDimensionMapper,
                 new ObjectMapper(), workspaceGuard, datasourceManageService);
     }
 }

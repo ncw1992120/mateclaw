@@ -34,14 +34,6 @@
               <el-option value="section" label="分组标题" />
             </el-select>
           </div>
-          <div v-if="!['filter', 'timeFilter'].includes(component.type)" class="form-group component-color-field">
-            <InsightColorField
-              :model-value="localComponent.componentColor ?? DEFAULT_COMPONENT_COLOR"
-              label="组件配色"
-              :suggested-colors="COMPONENT_COLOR_PRESETS"
-              @update:model-value="handleComponentColorChange"
-            />
-          </div>
           <div v-if="!['filter', 'timeFilter'].includes(component.type)" class="form-group">
             <label class="form-label">顶线颜色</label>
             <el-select v-model="localComponent.visualStyle!.border!.colorMode" aria-label="组件顶线颜色" style="width: 100%" @change="emitChange">
@@ -803,7 +795,7 @@ import * as semanticModelApi from '@/api/semantic-model'
 import * as insightDashboardApi from '@/api/insight-dashboard'
 import { classifyDatasourceType, datasetCategoryLabel, groupDatasources, type DatasourceCategory } from '@/utils/data-binding'
 import { normalizeComponentVisualStyle } from '@/utils/component-visual-style'
-import { CARD_BG_PRESETS, TEXT_COLOR_PRESETS } from '@/utils/color-presets'
+import { CARD_BG_PRESETS } from '@/utils/color-presets'
 import InsightColorField from './InsightColorField.vue'
 import InlineHelp from './property/InlineHelp.vue'
 import ComponentSampleDialog from './ComponentSampleDialog.vue'
@@ -814,9 +806,6 @@ defineOptions({
 })
 
 const { t } = useI18n()
-
-const DEFAULT_COMPONENT_COLOR = '#1E40AF'
-const COMPONENT_COLOR_PRESETS = TEXT_COLOR_PRESETS
 
 const props = defineProps<{
   /** 当前选中的组件 */
@@ -852,11 +841,6 @@ const datasourceGroups = computed(() => groupDatasources(datasourceStore.datasou
 const filterDatasourceGroups = computed(() => datasourceGroups.value.filter(group => group.category === 'aloudata'))
 
 function handleTitleBarStyleChange(style: InsightComponent['titleBarStyle']): void {
-  emitChange()
-}
-
-function handleComponentColorChange(color: string): void {
-  localComponent.componentColor = color
   emitChange()
 }
 

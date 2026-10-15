@@ -88,6 +88,44 @@ def test_worker_marks_stdout_over_limit_without_buffering_unbounded_output(tmp_p
     assert response["result"] is None
 
 
+def test_worker_returns_uploaded_result_reference_without_stderr_error(tmp_path):
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            assert self.headers.get("Authorization") == "Bearer task-scoped-token"
+            assert self.headers.get("Content-Type") == "application/vnd.apache.parquet"
+            self.rfile.read(int(self.headers.get("Content-Length", "0")))
+            payload = json.dumps({"code": 200, "data": {"objectId": "result-1"}}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *_):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}/results"
+        request = task_request(
+            "result = [{'value': 'x' * 1000}]",
+            resultUploadEndpoint=endpoint,
+        )
+        request["limits"]["max_result_bytes"] = 128
+        completed, response = run_worker(tmp_path, request)
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+
+    assert completed.returncode == 0
+    assert response["status"] == "RESULT_REF"
+    assert response["outputRef"]["objectId"] == "result-1"
+    assert response["error"] is None
+    assert response["stats"]["returncode"] == 0
+
+
 def test_worker_script_errors_are_terminal_and_token_is_redacted(tmp_path):
     completed, response = run_worker(
         tmp_path,

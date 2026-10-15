@@ -1,5 +1,5 @@
 import type { DashboardDatasetInput, DashboardScriptFilterBinding, DashboardSystemScriptState } from '@/types'
-import { buildSystemScript, SYSTEM_SCRIPT_END, SYSTEM_SCRIPT_START } from './script-template'
+import { buildSystemScript, refreshPythonEditorSamples as refreshSystemScriptSamples, SYSTEM_SCRIPT_END, SYSTEM_SCRIPT_START } from './script-template'
 
 export const PYTHON_EDITOR_USER_MARKER = '# ===== 自定义处理代码（可编辑） ====='
 export const PYTHON_EDITOR_OUTPUT_MARKER = '# ===== 输出结果示例（参考） ====='
@@ -36,6 +36,14 @@ export function buildPythonEditorDocument(
     '# 示例仅用于参考；实际输出仍按组件契约校验。',
     outputExample,
   ].join('\n\n')
+}
+
+export function refreshPythonEditorSamples(
+  document: string,
+  inputs: DashboardDatasetInput[],
+  samplesByInputName: Record<string, Record<string, unknown>[]>,
+): string {
+  return refreshSystemScriptSamples(document, inputs, samplesByInputName)
 }
 
 export function parsePythonEditorDocument(document: string): { systemCode: string; userCode: string } {
@@ -93,12 +101,44 @@ export function composeExecutionScript(state: DashboardSystemScriptState): strin
 export function reconcileSystemScript(state: DashboardSystemScriptState, source: PythonSystemSource): ReconciledSystemScript {
   const generatedCode = generateSystemScript(source)
   const generatedFingerprint = fingerprintSystemSource(source)
+  const managedCode = state.mode === 'managed'
+    ? addMissingInputReaders(state.managedCode || state.generatedCode, source.inputs)
+    : state.managedCode
   return {
     ...state,
+    ...(managedCode !== undefined ? { managedCode } : {}),
     generatedCode,
     generatedFingerprint,
     hasGeneratedUpdate: state.generatedFingerprint !== generatedFingerprint,
   }
+}
+
+/** 手动接管系统区时保留既有读取方式，同时补齐新增数据集的标准读取块。 */
+function addMissingInputReaders(systemCode: string, inputs: DashboardDatasetInput[]): string {
+  const lines = systemCode.split('\n')
+  const missing = inputs.filter((input) => {
+    if (!input.datasetId || !input.inputName) return false
+    const name = input.inputName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return !lines.some((line) =>
+      new RegExp(`^\\s*(?:if\\s+["']${name}["']\\s+not\\s+in\\s+locals\\(\\):|${name}\\s*=)`).test(line),
+    )
+  })
+  if (!missing.length) return systemCode
+
+  const blocks = missing.flatMap((input) => [
+    `if ${JSON.stringify(input.inputName)} not in locals():`,
+    `    ${input.inputName} = datasets.input(`,
+    `        input_name=${JSON.stringify(input.inputName)},`,
+    '    ).to_polars()',
+    '',
+  ]).join('\n').trimEnd()
+  const endMarkers = [SYSTEM_SCRIPT_END, '# ===== 数据读取结束 =====']
+  const endIndex = endMarkers
+    .map((marker) => systemCode.indexOf(marker))
+    .filter((index) => index >= 0)
+    .sort((left, right) => left - right)[0]
+  if (endIndex === undefined) return `${systemCode.trimEnd()}\n\n${blocks}`
+  return `${systemCode.slice(0, endIndex).trimEnd()}\n\n${blocks}\n\n${systemCode.slice(endIndex)}`
 }
 
 export function restoreGenerated(state: DashboardSystemScriptState): ReconciledSystemScript {

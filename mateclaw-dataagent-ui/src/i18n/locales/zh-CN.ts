@@ -1979,7 +1979,7 @@ export default {
     },
     aiAnalysis: {
       generate: 'AI分析',
-      generating: '正在生成...',
+      generating: '正在分析当前数据…',
       dataSection: '查询概要',
       aiSection: 'AI 分析',
       dataSectionLabel: '数据概览',

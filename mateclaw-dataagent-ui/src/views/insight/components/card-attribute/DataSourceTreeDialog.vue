@@ -1,6 +1,7 @@
 <template>
   <el-dialog v-model="ui.treeVisible" title="添加数据集" width="440px" append-to-body :close-on-click-modal="false">
     <!-- 搜索框只存在于数据源选择树中（文档 10.3 / 11.3） -->
+    <div v-if="loading" class="tree-loading" role="status">正在加载数据源…</div>
     <el-input
       v-model="search"
       placeholder="搜索数据源"
@@ -33,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { Search, Folder, Coin } from '@element-plus/icons-vue'
 import { useInsight } from './useInsight'
 import * as datasetApi from '@/api/dataset'
@@ -148,6 +149,7 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
 }
 
 async function loadTree(): Promise<void> {
+  if (loading.value) return
   loading.value = true
   try {
     const [dsList, srcList] = await Promise.all([
@@ -166,14 +168,14 @@ async function loadTree(): Promise<void> {
   }
 }
 
-// 打开树时刷新（数据可能已变更）；首次挂载也加载一次
+// 只在弹窗打开时加载；隐藏时不抢占编辑器首屏，也避免挂载和打开各请求一次。
 watch(
   () => ui.treeVisible,
   (visible) => {
     if (visible) loadTree()
   },
+  { immediate: true },
 )
-onMounted(loadTree)
 
 const treeProps = { label: 'label', children: 'children', disabled: 'disabled' }
 const defaultExpandedKeys = ref(['cat-aloudata'])
@@ -202,6 +204,12 @@ function onNodeClick(data: any, node: any) {
 .src-tree {
   max-height: 360px;
   overflow: auto;
+}
+.tree-loading {
+  padding: 20px 0;
+  color: var(--db-text-muted, #999);
+  text-align: center;
+  font-size: 13px;
 }
 .tree-node {
   display: inline-flex;

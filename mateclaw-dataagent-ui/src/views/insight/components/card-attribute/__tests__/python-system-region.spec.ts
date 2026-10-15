@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import { buildPipeline, buildPythonSystemRegion, useInsight } from '../useInsight'
+import { buildPipeline, buildPythonSystemRegion, generateDatasetAlias, useInsight } from '../useInsight'
 import { buildComponentPatch, hydratePanel } from '../useCardAttributeBridge'
 import { writeComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 
@@ -24,6 +24,11 @@ describe('Python 查询 Pipeline 筛选组件声明', () => {
 })
 
 describe('buildPythonSystemRegion', () => {
+  it('uses timestamp-based unique aliases for newly added datasets', () => {
+    expect(generateDatasetAlias([], 1790000000000)).toBe('table_1790000000000')
+    expect(generateDatasetAlias(['table_1790000000000'], 1790000000000)).toBe('table_1790000000001')
+  })
+
   it('保存统一编辑器中的数据接入代码时将其作为当前执行脚本持久化', () => {
     state.pythonSystemState = {
       mode: 'generated', generatedCode: 'old generated input', generatedFingerprint: 'old', userCode: '', hasGeneratedUpdate: false,
@@ -202,8 +207,11 @@ describe('buildPythonSystemRegion', () => {
 
 import PythonScriptDialog from '../PythonScriptDialog.vue'
 
-const { fetchDatasetSampleRows } = vi.hoisted(() => ({ fetchDatasetSampleRows: vi.fn() }))
-vi.mock('../../dataset-sample-query', () => ({ fetchDatasetSampleRows }))
+const { fetchDatasetSampleRows, datasetSampleSourceSignature } = vi.hoisted(() => ({
+  fetchDatasetSampleRows: vi.fn(),
+  datasetSampleSourceSignature: vi.fn(() => ''),
+}))
+vi.mock('../../dataset-sample-query', () => ({ fetchDatasetSampleRows, datasetSampleSourceSignature }))
 
 const elInputStub = {
   name: 'el-input',

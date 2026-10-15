@@ -97,7 +97,15 @@
         </button>
       </div>
 
-      <div v-if="currentPageComponents.length === 0" class="preview-empty">
+      <div v-if="dashboardLoading" class="preview-load-state" role="status" aria-live="polite" data-test="dashboard-loading">
+        <el-icon class="is-loading"><Loading /></el-icon>
+        <span>{{ t('insight.loadingSchema') }}</span>
+      </div>
+      <div v-else-if="dashboardLoadError" class="preview-load-state is-error" role="alert">
+        <span>{{ dashboardLoadError }}</span>
+        <el-button class="toolbar-btn" @click="handleBack">{{ t('common.back') }}</el-button>
+      </div>
+      <div v-else-if="currentPageComponents.length === 0" class="preview-empty">
         <div class="empty-illustration">
           <svg width="80" height="80" viewBox="0 0 80 80" aria-hidden="true">
             <rect x="12" y="14" width="56" height="52" rx="10" fill="var(--db-muted)" opacity=".45"/>
@@ -198,7 +206,7 @@ import { migrateInsightDashboardSchema } from '@/utils/dashboard-schema'
 import { extractResultSchema, parseScriptResultEnvelope, resultEnvelopeToComponentData } from '@/utils/script-result'
 import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
-import { resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
+import { DASHBOARD_CANVAS_BACKGROUND, resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
 import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
 import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
@@ -230,13 +238,16 @@ const store = useInsightDashboardStore()
 
 const dashboard = computed(() => store.currentDashboard)
 const schema = reactive<InsightDashboardSchema>({ version: '1.0', pages: [] })
+/** 详情与 Schema 尚未就绪时不能把初始空数组误报成真正的空看板。 */
+const dashboardLoading = ref(true)
+const dashboardLoadError = ref('')
 const componentDataMap = ref<Record<string, InsightComponentData>>({})
 const tableViews = reactive<Record<string, AiAnalysisTableView>>({})
 const dashboardTheme = computed(() => resolveDashboardTheme(schema.theme, 'light'))
 const dashboardThemeVariables = computed(() => ({
   ...themeCssVariables(dashboardTheme.value),
-  // 预览以主题卡片表面作为统一底色，与铺满画布的组合卡片视觉一致。
-  '--dashboard-preview-background': dashboardTheme.value.cardBackground || 'var(--db-card)',
+  // 主题改变组件外观，但编辑器与预览画布始终使用相同的中性底色。
+  '--dashboard-preview-background': DASHBOARD_CANVAS_BACKGROUND,
 }))
 
 /** 组件级时间范围状态（componentId → TimeRangeValue） */
@@ -493,14 +504,28 @@ watch(visibleAnalysisDataKey, () => {
 /** 加载仪表盘 */
 async function loadDashboard(): Promise<void> {
   if (!props.dashboardId) {
+    dashboardLoading.value = false
     return
   }
+  autoAnalysisScheduleSequence += 1
+  for (const request of aiAnalysisRequests.values()) request.controller.abort()
+  aiAnalysisRequests.clear()
+  aiAnalysisGeneratingIds.clear()
+  lastAutoAnalysisKeys.clear()
   previewDataReady.value = false
   dataRefreshPending.value = true
   componentDataMap.value = {}
   for (const key of Object.keys(tableViews)) delete tableViews[key]
+  dashboardLoading.value = true
+  dashboardLoadError.value = ''
   markDashboardPerformance('insight-preview-start')
-  await store.selectDashboard(props.dashboardId)
+  try {
+    await store.selectDashboard(props.dashboardId)
+  } catch {
+    dashboardLoadError.value = t('insight.loadFailed')
+    dashboardLoading.value = false
+    return
+  }
   if (dashboard.value) {
     try {
       const parsed = JSON.parse(dashboard.value.schemaJson)
@@ -534,8 +559,14 @@ async function loadDashboard(): Promise<void> {
       activePageId.value = schema.pages[0].id
     }
     initializeDefaults()
+    // 自动分析从预览画布出现时就进入加载态，覆盖首轮组件数据查询阶段。
+    for (const component of collectVisibleAiAnalysisComponents(currentPageComponents.value)) {
+      const config = component.config as { autoGenerate?: boolean } | undefined
+      if (config?.autoGenerate === true) aiAnalysisGeneratingIds.add(component.id)
+    }
     // Schema 已可用，画布骨架可以先呈现；后续数据阶段各自回填
     markDashboardPerformance('insight-preview-canvas-ready')
+    dashboardLoading.value = false
     await materializePreviewDatasetInputs()
     previousRuntimeFilterState = getRuntimeFilterState()
     resetPreviewProgress(previewQueryComponentIds())
@@ -557,6 +588,9 @@ async function loadDashboard(): Promise<void> {
     previewDataReady.value = true
     // 报告读取是独立后台任务，不阻塞组件数据渲染路径；卸载后不回写状态
     void loadReport()
+  } else {
+    dashboardLoadError.value = t('insight.loadFailed')
+    dashboardLoading.value = false
   }
 }
 
@@ -1985,6 +2019,21 @@ function handlePageTabKeydown(event: KeyboardEvent, pageIds: string[], pageId: s
   border: 1px solid var(--db-border);
   border-radius: 12px;
   box-shadow: var(--shadow-card);
+}
+
+.preview-load-state {
+  flex: 1;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--db-text-muted);
+}
+
+.preview-load-state.is-error {
+  color: var(--db-negative, #b42318);
 }
 
 /* Tab 行：卡片头部平铺式标签，激活项主题色下划线，

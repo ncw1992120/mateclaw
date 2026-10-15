@@ -1,3 +1,32 @@
+# Maven 构建与 Windows 离线部署
+
+在项目根目录执行以下命令，Maven 会先生成可执行 JAR，再自动下载锁定的
+Windows x64 / CPython 3.12 wheel，生成 `mateclaw-dataagent/target/dataagent-offline-win-x64.zip`：
+
+```shell
+mvn -f mateclaw-dataagent/pom.xml clean package -DskipTests
+```
+
+构建机需要 Python 和 pip，以及可用的 Python 包源或 pip 下载缓存。
+Windows 默认调用 `python`，macOS/Linux 默认调用 `python3`；解释器不在 PATH 时，
+在同一条 Maven 命令追加 `-Dpython.packaging.command=解释器绝对路径`。
+依赖和哈希来自仓库的 `requirements-worker.txt`，不要求安装 uv。
+缺少 wheel 或下载/哈希校验失败会使 Maven 构建失败，避免交付不完整的离线包。
+仅做 Java 开发构建时，可追加 `-Dpython.offline.skip=true` 跳过离线部署包。
+
+内网解压整个 ZIP，在 `DataAgent` 目录打开 CMD，配置数据库等环境变量后执行：
+
+```cmd
+set "PYTHON_COMMAND="
+set "MATECLAW_PYTHON_WORKER_HOME=%CD%\python-worker"
+java -jar mateclaw-dataagent-1.0.0-SNAPSHOT.jar
+```
+
+内网需要 Java 21 与 Python 3.12。首次启动会自动创建 `.venv`，从部署包的
+`wheelhouse` 离线安装依赖；后续启动校验已安装依赖，无需手动执行 pip。
+显式配置 `PYTHON_COMMAND` 会使用指定解释器并跳过自动安装。
+Windows wheel 不能用于 Linux Docker 镜像。
+
 # Python 数据诊断工具
 
 DataAgent 内置 Worker 已提供 `diagnostics`，脚本可直接使用，也可以写 `from mateclaw import diagnostics`。无需新增服务或安装额外依赖。工具直接接收 pandas 或 Polars DataFrame，返回与输入一致的表格/列类型。

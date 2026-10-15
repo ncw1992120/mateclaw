@@ -31,6 +31,9 @@
         <mssql-jdbc.version>13.6.0.jre11</mssql-jdbc.version>
         <qlexpress.version>3.3.4</qlexpress.version>
         <resilience4j.version>2.4.0</resilience4j.version>
+        <!-- 构建机的 Python，仅用于下载 Windows wheel 和生成离线部署包。 -->
+        <python.packaging.command>python3</python.packaging.command>
+        <python.offline.skip>false</python.offline.skip>
     </properties>
 
     <dependencyManagement>
@@ -289,6 +292,38 @@
                     </execution>
                 </executions>
             </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <execution>
+                        <id>package-windows-python-offline</id>
+                        <phase>package</phase>
+                        <goals><goal>exec</goal></goals>
+                        <configuration>
+                            <skip>${python.offline.skip}</skip>
+                            <executable>${python.packaging.command}</executable>
+                            <arguments>
+                                <argument>${project.basedir}/../dev-support/package-dataagent-offline-win.py</argument>
+                                <argument>--jar</argument>
+                                <argument>${project.build.directory}/${project.build.finalName}.jar</argument>
+                                <argument>--worker</argument>
+                                <argument>${project.basedir}/python-worker</argument>
+                                <argument>--output</argument>
+                                <argument>${project.build.directory}/dataagent-offline-win-x64.zip</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>windows-python-packaging</id>
+            <activation><os><family>Windows</family></os></activation>
+            <properties><python.packaging.command>python</python.packaging.command></properties>
+        </profile>
+    </profiles>
 </project>

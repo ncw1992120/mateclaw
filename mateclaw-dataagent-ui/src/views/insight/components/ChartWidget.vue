@@ -2,7 +2,7 @@
   <div class="chart-widget">
     <!-- 隐藏标题栏：整个标题栏（含组件级时间筛选）随标题一并隐藏 -->
     <div v-if="component.titleBarStyle !== 'hidden'" class="chart-header" :class="`title-bar-${props.component.titleBarStyle ?? 'standard'}`">
-      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" :component-color="component.componentColor" />{{ component.title }}</div>
+      <div v-if="showTitle !== false && component.titleBarStyle !== 'hidden'" class="chart-title"><DashboardComponentIcon type="chart" :chart-type="component.chartType" :dashboard-theme="dashboardTheme" :title-icon-style="titleIconStylePreview ?? component.titleIconStyle" :theme-accent-group="component.themeAccentGroup" />{{ component.title }}</div>
       <div v-if="showTimeFilter" class="chart-time-filter">
         <el-date-picker
           v-model="localDateRange"

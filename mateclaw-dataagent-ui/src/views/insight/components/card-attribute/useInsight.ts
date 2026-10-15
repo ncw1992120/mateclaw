@@ -76,7 +76,7 @@ export interface DatasetConfig {
   id: string
   sourceType: DataSourceLeafType
   sourceLabel: string // 例："JDBC · db1"
-  alias: string // 数据集别名，例：table1
+  alias: string // 数据集别名，例：table_1790000000000
   /**
    * 字段注册表（唯一事实源）：字段名不可变，展示名 / 单位在此唯一登记。
    * 「字段名称」弹窗与「指标配置」弹窗读写的是同一份注册表 → 一处改、处处生效。
@@ -120,7 +120,6 @@ export interface CardItem {
   title: string
   titleBarStyle: 'hidden' | 'standard' | 'minimal' | 'accent' | 'section'
   themeAccentGroup?: 'primary' | 'secondary' | 'highlight'
-  componentColor?: string
   visualStyle: ComponentVisualStyle
   multiMetric: boolean // 多指标模式（仅 KPI/指标卡）
   multiTab: boolean // 多 TAB 模式（仅 KPI/指标卡）
@@ -302,10 +301,15 @@ export function currentPythonSource(): PythonSystemSource {
 
 /* ============================ 状态单例 ============================ */
 
-let aliasSeq = 0
+export function generateDatasetAlias(existingAliases: string[], timestamp = Date.now()): string {
+  const aliases = new Set(existingAliases)
+  let candidate = timestamp
+  while (aliases.has(`table_${candidate}`)) candidate += 1
+  return `table_${candidate}`
+}
+
 function nextAlias() {
-  aliasSeq += 1
-  return `table${aliasSeq}`
+  return generateDatasetAlias(state.datasets.map((dataset) => dataset.alias))
 }
 
 const state = reactive({

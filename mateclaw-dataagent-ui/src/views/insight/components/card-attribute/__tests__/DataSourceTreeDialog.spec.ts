@@ -19,12 +19,17 @@ const fixture = vi.hoisted(() => ({
     { id: 'aloudata-2', name: '经营数据源', sourceType: 'aloudata' },
   ],
 }))
+const apiMocks = vi.hoisted(() => ({ datasetList: vi.fn(), datasourceList: vi.fn() }))
+const runtime = vi.hoisted(() => ({ state: undefined as undefined | { ui: { treeVisible: boolean } } }))
 
-vi.mock('../useInsight', () => ({
-  useInsight: () => ({ state: fixture.state, onSelectLeaf: fixture.onSelectLeaf }),
-}))
-vi.mock('@/api/dataset', () => ({ list: vi.fn(async () => fixture.datasets) }))
-vi.mock('@/api/datasource', () => ({ list: vi.fn(async () => fixture.datasources) }))
+vi.mock('../useInsight', async () => {
+  const { reactive } = await import('vue')
+  const state = reactive(fixture.state)
+  runtime.state = state
+  return { useInsight: () => ({ state, onSelectLeaf: fixture.onSelectLeaf }) }
+})
+vi.mock('@/api/dataset', () => ({ list: apiMocks.datasetList }))
+vi.mock('@/api/datasource', () => ({ list: apiMocks.datasourceList }))
 
 const TreeStub = defineComponent({
   name: 'ElTree',
@@ -51,6 +56,37 @@ const DialogStub = defineComponent({
 afterEach(() => vi.clearAllMocks())
 
 describe('添加数据集数据源树', () => {
+  it('只在首次打开时加载一次数据源树，不在属性面板初始化时预加载', async () => {
+    fixture.state.ui.treeVisible = false
+    apiMocks.datasetList.mockResolvedValue(fixture.datasets)
+    apiMocks.datasourceList.mockResolvedValue(fixture.datasources)
+    const wrapper = mount(DataSourceTreeDialog, {
+      global: {
+        stubs: {
+          'el-dialog': DialogStub,
+          'el-input': true,
+          'el-icon': true,
+          Search: true,
+          Folder: true,
+          Coin: true,
+        },
+        components: { 'el-tree': TreeStub },
+      },
+    })
+    await flushPromises()
+    expect(apiMocks.datasetList).not.toHaveBeenCalled()
+    expect(apiMocks.datasourceList).not.toHaveBeenCalled()
+
+    runtime.state!.ui.treeVisible = true
+    await nextTick()
+    await flushPromises()
+
+    expect(apiMocks.datasetList).toHaveBeenCalledTimes(1)
+    expect(apiMocks.datasourceList).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+    runtime.state!.ui.treeVisible = true
+  })
+
   it('不在可复用数据集列表中展示仪表盘预览自动生成的数据集', async () => {
     const wrapper = mount(DataSourceTreeDialog, {
       global: {

@@ -103,7 +103,7 @@
           tabindex="0"
           @pointerdown="handleItemPointerDown($event, item.i)"
           :class="{ selected: selectedId === item.i, 'mc-card-hover': !editable, 'inline-filter-component': isInlineFilterComponent(getComponent(item.i)), 'custom-resizing': resizingItem?.id === item.i }"
-          :style="{ ...componentThemeStyle(dashboardTheme, getComponent(item.i)?.type ?? 'kpi', 0, getComponent(item.i)?.themeAccentGroup), ...resolveComponentVisualStyle(getComponent(item.i)?.visualStyle, getComponent(item.i)?.type ?? 'kpi'), animationDelay: `${index * 40}ms`, ...(resizingItem?.id === item.i && resizePreviewStyle ? resizePreviewStyle : {}) }"
+          :style="componentStyle(item, index)"
           @keydown="handleComponentKeydown($event, item.i)"
           @contextmenu.stop.prevent="handleComponentContextMenu($event, item.i)"
         >
@@ -334,7 +334,7 @@ import CombinationCardWidget from './CombinationCardWidget.vue'
 import ComponentQueryState from './ComponentQueryState.vue'
 import DashboardTitleIconStyleDialog from './DashboardTitleIconStyleDialog.vue'
 import { DASHBOARD_CANVAS_MIN_HEIGHT, DASHBOARD_CANVAS_MIN_WIDTH } from './dashboardCanvasConstants'
-import { themeCssVariables, componentThemeStyle, componentIconStyle } from '@/utils/dashboard-theme'
+import { themeCssVariables, componentThemeStyle, componentIconStyle, componentThemeShapeOverrides } from '@/utils/dashboard-theme'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
 import { hasConfiguredDataset, resolveComponentSample } from '@/utils/component-sample-data'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
@@ -748,6 +748,20 @@ function getComponent(id: string): InsightComponent | undefined {
 /** 根据 ID 获取组件标题 */
 function getComponentTitle(id: string): string {
   return getComponent(id)?.title ?? ''
+}
+
+function componentStyle(item: GridLayoutItem, index: number): Record<string, string> {
+  const component = getComponent(item.i)
+  const type = component?.type ?? 'kpi'
+  const themeStyle = componentThemeStyle(props.dashboardTheme, type, 0, component?.themeAccentGroup, sameRowIconVariant(item))
+  const visualStyle = resolveComponentVisualStyle(component?.visualStyle, type)
+  return {
+    ...themeStyle,
+    ...visualStyle,
+    ...componentThemeShapeOverrides(themeStyle, component?.visualStyle),
+    animationDelay: `${index * 40}ms`,
+    ...(resizingItem.value?.id === item.i && resizePreviewStyle.value ? resizePreviewStyle.value : {}),
+  }
 }
 
 /** 同一行组件按从左到右轮换同主题深色阶，避免并列组件视觉黏连。 */

@@ -19,8 +19,8 @@ describe('dashboard component theme standards', () => {
     const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
 
     expect(componentThemeStyle(theme, 'kpi')['--component-group-accent']).toBe(theme.primary)
-    expect(componentThemeStyle(theme, 'chart')['--component-group-accent']).toBe(theme.primary)
-    expect(componentThemeStyle(theme, 'table')['--component-group-accent']).toBe(theme.primary)
+    expect(componentThemeStyle(theme, 'chart')['--component-group-accent']).toBe(theme.accentAlt)
+    expect(componentThemeStyle(theme, 'table')['--component-group-accent']).toBe(theme.metricPalette[3])
     expect(componentThemeStyle(theme, 'aiAnalysis')['--component-group-accent']).toBe(theme.accentAlt)
     // 控制区不吃色相：不下发 accent，下游回落中性 --db-*
     expect(componentThemeStyle(theme, 'filter')['--component-group-accent']).toBeUndefined()
@@ -36,20 +36,6 @@ describe('dashboard component theme standards', () => {
     expect(componentThemeStyle(theme, 'kpi', 0, 'highlight')['--component-group-surface']).toBe('var(--insight-card-bg)')
     expect(componentThemeStyle(theme, 'kpi', 0, 'highlight')['--component-group-border']).not.toContain(theme.metricPalette[3])
     expect(componentIconStyle(theme, 'kpi', undefined, 0, 'highlight')['--dashboard-icon-color']).toBe(theme.metricPalette[3])
-  })
-
-  it('allows an explicit component color to override the theme accent', () => {
-    const theme = resolveDashboardTheme({ mode: 'preset', presetId: 'blue' }, 'light')
-
-    expect(componentThemeStyle(theme, 'chart', 0, undefined, '#A1B2C3')['--component-group-accent']).toBe('#A1B2C3')
-    expect(componentIconStyle(theme, 'chart', '销售趋势', 0, undefined, '#A1B2C3')['--dashboard-icon-color']).toBe('#A1B2C3')
-  })
-
-  it('keeps explicit component colors effective for legacy dashboards', () => {
-    const legacyTheme = resolveDashboardTheme(undefined, 'light')
-
-    expect(componentThemeStyle(legacyTheme, 'chart', 0, undefined, '#F43F5E')['--component-group-accent']).toBe('#F43F5E')
-    expect(componentIconStyle(legacyTheme, 'chart', '销售趋势', 0, undefined, '#F43F5E')['--dashboard-icon-color']).toBe('#F43F5E')
   })
 
   it('uses neutral canvas and nested surfaces instead of washing large areas with the primary color', () => {

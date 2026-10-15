@@ -7,8 +7,11 @@
 数据来源：仓库根目录的 generated_cljd_zcl.sql（策略解读 PG 造数脚本）。
 该脚本的两张表被映射为两个 Aloudata 指标视图：
 
-  cljd_zcl_zb（策略解读-子策略-指标） -> cljd_zcl_zb_view  5 维度 / 13 指标 / 6 行
-  cljd_zcl_wd（策略解读-子策略-维度） -> cljd_zcl_wd_view 13 维度 /  6 指标 / 18 行
+  cljd_zcl_zb（策略解读-子策略-指标） -> cljd_zcl_zb_view  5 维度 / 103 指标 / 1000 行
+  cljd_zcl_wd（策略解读-子策略-维度） -> cljd_zcl_wd_view 13 维度 /   6 指标 / 1012 行
+
+本地压测/脚本联调用扩展数据：宽表含 100+ 个 digo_ 指标物理列和 1000 行；维度表保留
+原始 18 行并新增与宽表业务键、metric_id 对应的数据。
 
 报文结构严格对齐真实 Aloudata 响应（实测自 demo 租户）：
   - 顶层固定为 data / success / code / errorMsg / detailErrorMsg / traceId，code 是字符串 "200"
@@ -24,6 +27,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+from datetime import date, timedelta
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
@@ -89,6 +94,20 @@ METRICS = [
     ("digo_touch_user_cnt_1", "触达人数", "触达人数", "人"),
 ]
 
+# 增加 45 个模拟指标 ID，每个 ID 在宽表生成一对规模/转化人数列，
+# 与原有 13 列合计 103 个 digo_ 物理指标列。
+SYNTHETIC_METRIC_COUNT = 45
+SYNTHETIC_METRICS = []
+for index in range(1, SYNTHETIC_METRIC_COUNT + 1):
+    metric_id = f"strategy_conversion_{index:03d}"
+    SYNTHETIC_METRICS.extend([
+        (f"digo_{metric_id}", f"转化规模模拟指标{index:03d}",
+         f"转化规模模拟指标{index:03d}-策略归因", "次"),
+        (f"digo_{metric_id}_trans_user_cnt", f"转化人数模拟指标{index:03d}",
+         f"转化人数模拟指标{index:03d}-策略归因", "人"),
+    ])
+METRICS.extend(SYNTHETIC_METRICS)
+
 # dimName / 展示名 / 描述 / originDataType
 DIMENSIONS = [
     ("metric_time", "指标日期", "指标日期", "TIMESTAMP"),
@@ -109,15 +128,17 @@ DIMENSIONS = [
 
 ZB_DIMS = ["metric_time", "attribution_plan_id", "attribution_strategy_id", "platform_id", "channel"]
 WD_DIMS = [d[0] for d in DIMENSIONS]
-ZB_METRICS = [m[0] for m in METRICS[:13]]
-WD_METRICS = [m[0] for m in METRICS[13:]]
+ZB_BASE_METRICS = [m[0] for m in METRICS[:13]]
+WD_METRICS = [m[0] for m in METRICS[13:19]]
+SYNTHETIC_ZB_METRICS = [m[0] for m in SYNTHETIC_METRICS]
+ZB_METRICS = ZB_BASE_METRICS + SYNTHETIC_ZB_METRICS
 
 # ---------------------------------------------------------------------------
 # 数据行（generated_cljd_zcl.sql 原文）
 # ---------------------------------------------------------------------------
 
-# cljd_zcl_zb：6 行
-ZB_ROWS = [
+# cljd_zcl_zb：保留 6 条 SQL 基础样本，后续扩展至 1000 行。
+ZB_BASE_ROWS = [
     ["2026-09-01", "PLAN-001", "STR-001", "SUB-001", "APP",
      1250000.00, 128, 420000.00, 96, 860000.00, 74, 210000.00, 39, 186, 72, 154, 91, 43],
     ["2026-09-01", "PLAN-001", "STR-001", "SUB-001", "SMS",
@@ -132,7 +153,7 @@ ZB_ROWS = [
      1550000.00, 161, 536000.00, 121, 982000.00, 94, 279000.00, 49, 223, 90, 190, 115, 55],
 ]
 
-# cljd_zcl_wd：6 组 × 3 个 metric_id = 18 行
+# cljd_zcl_wd：6 组 × 3 个 metric_id = 18 条 SQL 基础样本。
 # (metric_time, strategy_id, platform_id, channel, 6 指标)
 WD_GROUPS = [
     ("2026-09-01", "STR-001", "SUB-001", "APP", [2, 2, 180, 150, 120, 96]),
@@ -148,21 +169,63 @@ STRATEGY_OWNER = {"STR-001": "strategy_owner_a", "STR-002": "strategy_owner_b"}
 PLATFORM_NAME = {"SUB-001": "场内公募非货子策略", "SUB-002": "新客入金子策略"}
 
 # metric_id / metric_name 三元组（generated_cljd_zcl.sql 的 CROSS JOIN 取值）
-CONVERSION_METRICS = [
+BASE_CONVERSION_METRICS = [
     ("trd_fund_amt_inout_cy_jjgr", "经纪个人客户场内公募非货当年净买入"),
     ("fund_trd_amt_a566_fh_kgdb_jj0", "经纪个人场内公募非货交易量"),
     ("pub_fh_kgdb_trdamt_ppcadd_jjgr", "经纪个人场内公募非货加仓交易量"),
 ]
+CONVERSION_METRICS = BASE_CONVERSION_METRICS + list(
+    (f"strategy_conversion_{index:03d}", f"转化规模模拟指标{index:03d}")
+    for index in range(1, SYNTHETIC_METRIC_COUNT + 1)
+)
 
 PLAN_NAME = "策略解读示例计划"
 PLAN_OWNER = "plan_owner"
 CREATOR = "data_owner"
 
 
+def synthetic_zb_rows() -> list[list]:
+    """生成宽表补充行；每行有唯一计划 ID，确保 table_wd 可按业务键精确关联。"""
+    rows = []
+    start_day = date(2026, 9, 1)
+
+    def synthetic_metric_values(row_index: int) -> list[int]:
+        values = []
+        for metric_index in range(SYNTHETIC_METRIC_COUNT):
+            # 新增规模值稳定落在 80-120（约 100），人数值落在 20-100。
+            values.extend([
+                80 + ((row_index * 7 + metric_index * 13) % 41),
+                20 + ((row_index * 11 + metric_index * 5) % 81),
+            ])
+        return values
+
+    for row_index, seed in enumerate(ZB_BASE_ROWS):
+        rows.append([*seed[:5], *seed[5:], *synthetic_metric_values(row_index)])
+
+    for row_index in range(len(rows), 1000):
+        seed = ZB_BASE_ROWS[row_index % len(ZB_BASE_ROWS)]
+        metric_values = list(seed[5:])
+        metric_values.extend(synthetic_metric_values(row_index))
+        rows.append([
+            # 生成数据从 9 月 4 日起，避免污染原始 9 月 1-3 日筛选回归样例。
+            (start_day + timedelta(days=3 + row_index % 39)).isoformat(),
+            f"PLAN-{row_index + 1:04d}",
+            seed[2],
+            seed[3],
+            seed[4],
+            *metric_values,
+        ])
+    return rows
+
+
+ZB_ROWS = synthetic_zb_rows()
+
+
 def wd_rows() -> list[list]:
+    """保留 18 条原始维度样本，并为每条新增宽表业务记录生成匹配的指标维值。"""
     rows = []
     for metric_time, strategy_id, platform_id, channel, values in WD_GROUPS:
-        for metric_id, metric_name in CONVERSION_METRICS:
+        for metric_id, metric_name in BASE_CONVERSION_METRICS:
             rows.append([
                 metric_time,
                 "PLAN-001",
@@ -179,6 +242,33 @@ def wd_rows() -> list[list]:
                 metric_name,
                 *values,
             ])
+    base_values = WD_GROUPS[0][4]
+    for row_index, zb_row in enumerate(ZB_ROWS[len(ZB_BASE_ROWS):], start=len(ZB_BASE_ROWS)):
+        metric_id, metric_name = CONVERSION_METRICS[
+            (row_index - len(ZB_BASE_ROWS)) % len(CONVERSION_METRICS)
+        ]
+        strategy_id = zb_row[2]
+        platform_id = zb_row[3]
+        values = [
+            max(1, value + ((row_index + offset * 3) % 29) - 14)
+            for offset, value in enumerate(base_values)
+        ]
+        rows.append([
+            zb_row[0],
+            zb_row[1],
+            PLAN_NAME,
+            PLAN_OWNER,
+            strategy_id,
+            STRATEGY_NAME[strategy_id],
+            STRATEGY_OWNER[strategy_id],
+            platform_id,
+            PLATFORM_NAME[platform_id],
+            CREATOR,
+            zb_row[4],
+            metric_id,
+            metric_name,
+            *values,
+        ])
     return rows
 
 
@@ -485,8 +575,38 @@ def metrics_query_payload() -> dict:
 
 
 def write(path: Path, payload) -> None:
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    if path.name in {"analysis_view_query_data.json", "metrics_query.json"}:
+        content = compact_column_cells(content)
+    path.write_text(content + "\n", encoding="utf-8")
     print(f"  wrote {path.name}")
+
+
+def compact_column_cells(content: str) -> str:
+    """压缩列式结果中重复的 cell JSON，避免 1000 行夹具膨胀成百万行 diff。"""
+    content = re.sub(
+        r'\{\n([ ]+)"value": ([^\n]*),\n\1"flag": 0,\n\1"count": 1\n[ ]+\}',
+        r'{"value": \2, "flag": 0, "count": 1}',
+        content,
+    )
+
+    def compact_array(match: re.Match) -> str:
+        indent, name, body = match.groups()
+        cells = re.findall(r'\{"value": .*?, "flag": 0, "count": 1\}', body)
+        item_indent = indent + "  "
+        lines = [
+            item_indent + ", ".join(cells[index:index + 12])
+            for index in range(0, len(cells), 12)
+        ]
+        for index in range(len(lines) - 1):
+            lines[index] += ","
+        return f'{indent}"{name}": [\n' + "\n".join(lines) + f'\n{indent}]'
+
+    return re.sub(
+        r'(?m)^([ ]*)"([^"\n]+)": \[\n((?:[ ]+\{"value": [^\n]+\},?\n)+)[ ]*\]',
+        compact_array,
+        content,
+    )
 
 
 def main() -> None:
@@ -514,7 +634,8 @@ def main() -> None:
     })
     write(out / "metrics_query.json", envelope(metrics_query_payload(), "mock-trace-metrics-query"))
 
-    print(f"完成：zb_view {len(ZB_ROWS)} 行 / wd_view {len(VIEW_ROWS[WD_VIEW])} 行")
+    print(f"完成：zb_view {len(ZB_ROWS)} 行 / {len(ZB_METRICS)} 个指标列 / "
+          f"wd_view {len(VIEW_ROWS[WD_VIEW])} 行 / {len(CONVERSION_METRICS)} 个指标 ID")
 
 
 if __name__ == "__main__":

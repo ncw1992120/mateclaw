@@ -210,7 +210,7 @@ def execute_task(request: TaskRequest, work_directory: str | Path | None = None)
                         status="RESULT_REF",
                         output=output.replace(request.readToken, "[REDACTED]"),
                         outputRef=reference,
-                        error=stderr.replace(request.readToken, "[REDACTED]") or None,
+                        error=None,
                         stats={"returncode": return_code, **phase_timings},
                     )
             status = "RESULT_LIMIT"

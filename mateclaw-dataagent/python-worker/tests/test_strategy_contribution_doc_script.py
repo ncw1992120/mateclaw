@@ -27,8 +27,8 @@ class FakeInput:
 def execute_script(wd, zb):
     namespace = {
         "datasets": FakeDatasets({
-            "strategy_contribution_wd": wd,
-            "strategy_contribution_zb": zb,
+            "table_wd": wd,
+            "table_zb": zb,
         }),
     }
     source = SCRIPT_PATH.read_text(encoding="utf-8")
@@ -42,7 +42,7 @@ def test_empty_inputs_return_empty_result_even_when_schema_is_unavailable():
     assert result == []
 
 
-def test_script_accepts_legacy_metric_name_as_metric_key():
+def test_script_requires_metric_id_in_dimension_dataset():
     dimensions = {
         "attribution_plan_id": "PLAN-001",
         "attribution_strategy_id": "STR-001",
@@ -52,12 +52,12 @@ def test_script_accepts_legacy_metric_name_as_metric_key():
     wd = pd.DataFrame([{**dimensions, "metric_name": "metric_x"}])
     zb = pd.DataFrame([{**dimensions, "digo_metric_x": 120, "digo_metric_x_trans_user_cnt": 8}])
 
-    result = execute_script(wd, zb)
+    import pytest
+    with pytest.raises(ValueError, match="缺少 metric_id 字段"):
+        execute_script(wd, zb)
 
-    assert result == [{"metric_x": 120, "metric_x-转化人数": 8}]
 
-
-def test_script_maps_aloudata_display_name_to_wide_metric_id():
+def test_script_uses_dataset_metric_id_as_authority_over_display_name():
     dimensions = {
         "attribution_plan_id": "PLAN-001",
         "attribution_strategy_id": "STR-001",
@@ -66,18 +66,15 @@ def test_script_maps_aloudata_display_name_to_wide_metric_id():
     }
     wd = pd.DataFrame([{
         **dimensions,
-        "metric_id": "trd_fund_amt_inout_cy_jjgr",
+        "metric_id": "metric_x",
         "metric_name": "经纪个人客户场内公募非货当年净买入",
     }])
     zb = pd.DataFrame([{
         **dimensions,
-        "digo_trd_fund_amt_inout_cy_jjgr": 120,
-        "digo_trd_fund_amt_inout_cy_jjgr_trans_user_cnt": 8,
+        "digo_metric_x": 120,
+        "digo_metric_x_trans_user_cnt": 8,
     }])
 
     result = execute_script(wd, zb)
 
-    assert result == [{
-        "经纪个人客户场内公募非货当年净买入": 120,
-        "经纪个人客户场内公募非货当年净买入-转化人数": 8,
-    }]
+    assert result == [{"转化规模": 120, "转化人数": 8}]

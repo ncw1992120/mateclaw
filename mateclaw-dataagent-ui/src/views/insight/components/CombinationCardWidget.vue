@@ -93,7 +93,7 @@
         :key="child.id"
         class="cc-child"
         :class="[`mode-${cfg.layoutMode}`, { selected: selectedChildId === child.id, moving: movingId === child.id, 'is-dragout': dragOutChild?.childId === child.id, 'inline-filter-child': isInlineFilterChild(child) }]"
-        :style="childStyle(child)"
+        :style="childStyle(child, childIndex)"
         :data-child="child.id"
         :tabindex="editable ? 0 : undefined"
         :aria-label="editable ? `移动子组件 ${child.title}` : undefined"
@@ -335,7 +335,7 @@ import type {
   ResolvedDashboardTheme,
 } from '@/types'
 import { resolveComponentVisualStyle } from '@/utils/component-visual-style'
-import { componentThemeStyle } from '@/utils/dashboard-theme'
+import { componentThemeStyle, componentThemeShapeOverrides } from '@/utils/dashboard-theme'
 import KpiCardWidget from './KpiCardWidget.vue'
 import ChartWidget from './ChartWidget.vue'
 import DataTableWidget from './DataTableWidget.vue'
@@ -597,9 +597,11 @@ function isChildHeadVisible(child: InsightCombinationChild): boolean {
 
 const rootStyle = computed<Record<string, string>>(() => {
   const shared = resolveComponentVisualStyle(props.component.visualStyle, 'combination')
+  const themeStyle = componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup)
   return {
-    ...componentThemeStyle(props.dashboardTheme, 'combination', 0, props.component.themeAccentGroup),
+    ...themeStyle,
     ...shared,
+    ...componentThemeShapeOverrides(themeStyle, props.component.visualStyle),
   }
 })
 
@@ -672,9 +674,10 @@ function isSampleData(child: InsightCombinationChild): boolean {
 }
 
 /** 子卡片定位样式 */
-function childStyle(child: InsightCombinationChild): Record<string, string> {
+function childStyle(child: InsightCombinationChild, variant = 0): Record<string, string> {
   const visualStyle = resolveComponentVisualStyle(child.visualStyle, child.type)
-  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup)
+  const themeStyle = componentThemeStyle(props.dashboardTheme, child.type, 1, child.themeAccentGroup, variant)
+  const shapeOverrides = componentThemeShapeOverrides(themeStyle, child.visualStyle)
   if (cfg.value.layoutMode === 'free') {
     const l = childPreview.value && childPreview.value.id === child.id
       ? { ...child.layout, ...childPreview.value }
@@ -683,6 +686,7 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
     return {
       ...themeStyle,
       ...visualStyle,
+      ...shapeOverrides,
       position: 'absolute',
       // free 子卡片横向坐标按 ccHScale 等比映射（预览「自适应宽度」铺满后随画布一起加宽）；
       // 纵向 top/height 不映射，保证加宽后纵向布局不变、不重叠交错。
@@ -695,9 +699,9 @@ function childStyle(child: InsightCombinationChild): Record<string, string> {
     }
   }
   if (cfg.value.layoutMode === 'grid') {
-    return { ...themeStyle, ...visualStyle, gridColumn: `span ${child.layout.col}` }
+    return { ...themeStyle, ...visualStyle, ...shapeOverrides, gridColumn: `span ${child.layout.col}` }
   }
-  return { ...themeStyle, ...visualStyle }
+  return { ...themeStyle, ...visualStyle, ...shapeOverrides }
 }
 
 // ── 拖入组合卡片（标题栏 HTML5 通道）──────────────────────

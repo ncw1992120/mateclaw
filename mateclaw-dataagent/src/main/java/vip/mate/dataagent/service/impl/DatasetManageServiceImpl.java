@@ -228,7 +228,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
             insertAloudataField(entity, metric, displayNames.getOrDefault(metric, metric),
                     "DECIMAL", DataAgentConstants.FIELD_CATEGORY_MEASURE, ordinal++);
         }
-        entity.setColumnCount(countFields(entity.getId()));
+        entity.setColumnCount(countFields(entity.getId()).intValue());
         datasetMapper.updateById(entity);
     }
 

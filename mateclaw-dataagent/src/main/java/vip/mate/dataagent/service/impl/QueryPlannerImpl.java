@@ -81,6 +81,7 @@ public class QueryPlannerImpl implements QueryPlanner {
         List<Binding> bindings = authoritative
                 ? readAuthoritativeBindings(queryConfig, alias, fieldRoles.keySet())
                 : readLegacyBindings(component, alias);
+        Map<String, Object> runtimeParameters = runtime.parametersFor(alias);
 
         // Python transforms need their bound filter fields in the prepared input rows,
         // even when those fields are deliberately absent from the visible projection.
@@ -105,7 +106,7 @@ public class QueryPlannerImpl implements QueryPlanner {
 
         // ---- 参数白名单：runtime.parameters 的键必须来自组件内已声明的参数定义 ----
         Set<String> declaredParameters = collectDeclaredParameters(component);
-        for (String key : runtime.parameters().keySet()) {
+        for (String key : runtimeParameters.keySet()) {
             if (!declaredParameters.contains(key)) {
                 throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID,
                         "unknown query parameter: " + key);
@@ -131,10 +132,10 @@ public class QueryPlannerImpl implements QueryPlanner {
                     field, operator, normalizeFilterValue(operator, validated.value())));
         }
         for (Binding binding : bindings) {
-            if (!runtime.parameters().containsKey(binding.parameterName)) {
+            if (!runtimeParameters.containsKey(binding.parameterName)) {
                 continue; // 参数未提供 = 不过滤
             }
-            Object value = runtime.parameters().get(binding.parameterName);
+            Object value = runtimeParameters.get(binding.parameterName);
             if (isEmptySelection(value)) {
                 continue; // 清空 / null / 空串 = 不过滤
             }

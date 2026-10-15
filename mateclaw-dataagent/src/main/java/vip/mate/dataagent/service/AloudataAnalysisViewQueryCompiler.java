@@ -93,6 +93,14 @@ public class AloudataAnalysisViewQueryCompiler {
                             "展示字段不属于当前指标视图: " + requested));
             String canonical = canonicalName(definition);
             if (!resolved.contains(canonical)) resolved.add(canonical);
+            // 指标名称是展示字段；同视图若提供稳定的 metric_id，就一并投影，供后续数据关联使用。
+            if ("metric_name".equals(canonical)) {
+                definitions.stream()
+                        .filter(item -> "metric_id".equals(canonicalName(item)))
+                        .map(this::canonicalName)
+                        .filter(id -> !resolved.contains(id))
+                        .forEach(resolved::add);
+            }
         }
         return List.copyOf(resolved);
     }

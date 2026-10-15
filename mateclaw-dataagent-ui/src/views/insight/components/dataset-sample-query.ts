@@ -2,6 +2,7 @@ import { previewInput } from '@/api/dataset'
 import type { DatasetFilter, QuerySortSpec } from '@/types'
 import { extractApiParameters, extractSqlParameters } from '@/utils/parameter-extract'
 import { buildExecutionParameters, toDatasetFilters, type RuntimeFilterRow } from '@/utils/runtime-filter-bindings'
+import { toFixedDatasetFilters } from '@/utils/fixed-dataset-filters'
 import { getCachedQueryState } from './dataset-data-cache'
 import { draftRequestForDataset, isPersistedBackendDatasetId, type DatasetConfig } from './card-attribute/useInsight'
 import { previewDatasetDraft } from './card-attribute/useInsightBackend'
@@ -75,19 +76,24 @@ function querySort(dataset: DatasetConfig): QuerySortSpec[] {
 export async function fetchDatasetSampleRows(
   dataset: DatasetConfig,
   filterCatalog: Array<{ id: string; type?: string }>,
-  options: { limit?: number } = {},
+  options: { limit?: number; sampleOnly?: boolean } = {},
 ): Promise<{ rows: Record<string, unknown>[]; columns: string[] }> {
   const queryState = dataset.lastQueryState ?? getCachedQueryState(dataset.id)
   const policy = dataset.queryConfig?.paginationPolicy
   const paginationEnabled = policy?.enabled === true
-  const pageSize = paginationEnabled
-    ? Math.min(Math.max(1, queryState?.pageSize || policy.defaultPageSize || DEFAULT_BATCH_SIZE), Math.max(1, policy.maxPageSize || 500))
-    : Math.min(Math.max(1, options.limit ?? DEFAULT_BATCH_SIZE), 100_000)
-  const page = paginationEnabled ? Math.max(1, queryState?.page || 1) : 1
+  const pageSize = options.sampleOnly
+    ? 2
+    : paginationEnabled
+      ? Math.min(Math.max(1, queryState?.pageSize || policy.defaultPageSize || DEFAULT_BATCH_SIZE), Math.max(1, policy.maxPageSize || 500))
+      : Math.min(Math.max(1, options.limit ?? DEFAULT_BATCH_SIZE), 100_000)
+  const page = paginationEnabled && !options.sampleOnly ? Math.max(1, queryState?.page || 1) : 1
   const runtimeRows = queryFilterRows(dataset, filterCatalog)
   const request = {
     columns: queryDisplayColumns(dataset),
-    filters: toDatasetFilters(runtimeRows) as DatasetFilter[],
+    filters: [
+      ...toFixedDatasetFilters(dataset.filters, dataset.fields),
+      ...toDatasetFilters(runtimeRows),
+    ] as DatasetFilter[],
     orders: querySort(dataset),
     parameters: { ...queryParameters(dataset), ...buildExecutionParameters(runtimeRows) },
     limit: pageSize,
@@ -111,7 +117,37 @@ export async function fetchDatasetSampleRows(
   }
 
   return {
-    rows: (result.rows as Record<string, unknown>[] | null) ?? [],
+    rows: options.sampleOnly
+      ? ((result.rows as Record<string, unknown>[] | null) ?? []).slice(0, 2)
+      : (result.rows as Record<string, unknown>[] | null) ?? [],
     columns: result.schema ?? [],
   }
+}
+
+/**
+ * 用于使 Python 编辑器的样例缓存失效。只纳入查询及结构相关配置，
+ * 不包含界面状态；同时纳入最近一次运行条件，避免筛选值变化后继续展示旧行。
+ */
+export function datasetSampleSourceSignature(
+  datasets: DatasetConfig[],
+  filterCatalog: Array<{ id: string; type?: string }>,
+): string {
+  return JSON.stringify({
+    datasets: datasets.map((dataset) => ({
+      id: dataset.id,
+      backendDatasetId: dataset.backendDatasetId,
+      sourceType: dataset.sourceType,
+      alias: dataset.alias,
+      fields: dataset.fields,
+      schema: dataset.schema,
+      filters: dataset.filters,
+      jdbc: dataset.jdbc,
+      aloudata: dataset.aloudata,
+      api: dataset.api,
+      file: dataset.file,
+      queryConfig: dataset.queryConfig,
+      lastQueryState: dataset.lastQueryState ?? getCachedQueryState(dataset.id),
+    })),
+    filterCatalog,
+  })
 }

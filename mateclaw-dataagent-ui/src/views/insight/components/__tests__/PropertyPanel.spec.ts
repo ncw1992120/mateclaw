@@ -111,7 +111,7 @@ describe('PropertyPanel', () => {
     })
 
     const fields = wrapper.findAll('[data-testid="insight-color-field"]')
-    expect(fields).toHaveLength(3)
+    expect(fields).toHaveLength(2)
     const toplineField = fields.find(field => field.attributes('aria-label') === '自定义顶线颜色')!
     const backgroundField = fields.find(field => field.attributes('aria-label') === '自定义背景色')!
     expect(wrapper.findAll('label').filter(label => label.text() === '自定义顶线颜色')).toHaveLength(1)
@@ -195,13 +195,8 @@ describe('PropertyPanel', () => {
 
     const styleSettings = wrapper.get('.style-settings')
     expect(styleSettings.find('select[aria-label="标题栏样式"]').exists()).toBe(true)
-    expect(styleSettings.find('[aria-label="组件配色"]').exists()).toBe(true)
+    expect(styleSettings.find('[aria-label="组件配色"]').exists()).toBe(false)
     expect(wrapper.find('[aria-label="组件强调色"]').exists()).toBe(false)
-
-    const colorField = styleSettings.get('[aria-label="组件配色"]')
-    expect(colorField.attributes('data-show-picker')).toBe('true')
-    await colorField.setValue('#A1B2C3')
-    expect(wrapper.emitted('change')?.at(-1)?.[0]).toMatchObject({ componentColor: '#A1B2C3' })
   })
 
   it('所有组件共用样式设置，且不再暴露重复的标题开关', async () => {

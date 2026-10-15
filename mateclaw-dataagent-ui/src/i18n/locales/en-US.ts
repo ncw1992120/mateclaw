@@ -1941,7 +1941,7 @@ export default {
     },
     aiAnalysis: {
       generate: 'Generate Analysis',
-      generating: 'Generating...',
+      generating: 'Analyzing current data...',
       dataSection: 'Query Summary',
       aiSection: 'AI Analysis',
       dataSectionLabel: 'Data Overview',
