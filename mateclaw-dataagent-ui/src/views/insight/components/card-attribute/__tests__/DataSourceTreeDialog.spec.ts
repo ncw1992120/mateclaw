@@ -10,6 +10,7 @@ const fixture = vi.hoisted(() => ({
     { id: 'api-dataset-1', name: '已配置接口', sourceType: 'api' },
     { id: 'jdbc-dataset-1', name: '已配置 JDBC', sourceType: 'jdbc' },
     { id: 'preview-dashboard-1_sales_hash', name: 'preview_dashboard-1_sales_hash', description: '看板预览自动确认的数据集：销售组件', sourceType: 'aloudata' },
+    { id: 'component-dataset-1', name: 'table_ab', description: '仪表盘组件输入数据集：table_ab', sourceType: 'aloudata' },
     { id: 'preview-business-dataset', name: 'preview_业务数据集', description: '用户创建的真实数据集', sourceType: 'aloudata' },
   ],
   datasources: [
@@ -108,6 +109,31 @@ describe('添加数据集数据源树', () => {
     const flatten = (nodes: any[]): any[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])])
     expect(flatten(treeData).some((node) => node.label === 'preview_dashboard-1_sales_hash')).toBe(false)
     expect(flatten(treeData).some((node) => node.label === 'preview_业务数据集')).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('隐藏组件私有数据集，同时保留独立配置的数据集', async () => {
+    const wrapper = mount(DataSourceTreeDialog, {
+      global: {
+        stubs: {
+          'el-dialog': DialogStub,
+          'el-input': true,
+          'el-icon': true,
+          Search: true,
+          Folder: true,
+          Coin: true,
+        },
+        components: { 'el-tree': TreeStub },
+      },
+    })
+    await flushPromises()
+    await nextTick()
+
+    const treeData = wrapper.findComponent(TreeStub).props('data') as Array<Record<string, any>>
+    const flatten = (nodes: any[]): any[] => nodes.flatMap((node) => [node, ...flatten(node.children ?? [])])
+    const labels = flatten(treeData).map((node) => node.label)
+    expect(labels).not.toContain('table_ab')
+    expect(labels).toContain('preview_业务数据集')
     wrapper.unmount()
   })
 

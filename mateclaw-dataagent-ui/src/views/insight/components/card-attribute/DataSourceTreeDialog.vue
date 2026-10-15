@@ -75,8 +75,12 @@ function buildTree(datasets: Dataset[], datasources: Datasource[]): any[] {
 
   // 已配置数据集（按类型归类，作为可复用输入）
   datasets.forEach((d, i) => {
-    // 仪表盘预览为执行临时草稿自动确认的数据集，不应出现在用户可复用的数据集列表中。
-    if (String((d as any).description ?? '').startsWith('看板预览自动确认的数据集：')) return
+    const description = String((d as any).description ?? '')
+    // 执行预览草稿和仪表盘组件输入数据集均为内部记录，不应出现在可复用数据集列表中。
+    if (
+      description.startsWith('看板预览自动确认的数据集：')
+      || description.startsWith('仪表盘组件输入数据集：')
+    ) return
     const cat = classifyDatasourceType(d.sourceType)
     if (cat === 'unknown') return
     leaves.push({
