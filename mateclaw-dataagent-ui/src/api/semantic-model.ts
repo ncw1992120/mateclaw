@@ -131,7 +131,7 @@ export function pageAloudataMetrics(
 
 /** Query the live Aloudata category tree with metrics nested under each category. */
 export function getAloudataMetricDirectory(datasourceId: string) {
-  return api.get<AloudataMetricDirectoryNode[]>(`/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/directory`)
+  return api.get<AloudataMetricDirectoryNode[]>(`/v1/datasources/${datasourceId}/aloudata/metrics/directory`)
 }
 
 /** 分页查询 Aloudata 维度列表 */
@@ -148,14 +148,14 @@ export function pageAloudataDimensions(
 /** 实时获取单个指标详情（同义词、关联维度等，懒加载用） */
 export function getAloudataMetricDetail(datasourceId: string, metricName: string) {
   return api.get<AloudataSyncedMetric>(
-    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/detail`,
+    `/v1/datasources/${datasourceId}/aloudata/metrics/${encodeURIComponent(metricName)}/detail`,
   )
 }
 
 /** 实时获取单个维度详情（懒加载悬浮详情用） */
 export function getAloudataDimensionDetail(datasourceId: string, dimName: string) {
   return api.get<AloudataSyncedDimension>(
-    `/dataagent/api/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/detail`,
+    `/v1/datasources/${datasourceId}/aloudata/dimensions/${encodeURIComponent(dimName)}/detail`,
   )
 }
 

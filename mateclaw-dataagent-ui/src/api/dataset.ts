@@ -110,7 +110,7 @@ export interface DatasetComposerDraftRequest {
 
 export function previewDraft(request: DatasetComposerDraftRequest, requestOptions?: { timeout?: number; headers?: Record<string, string> }) {
   return api.post<DatasetBatch & { executionId?: string }>(
-    '/dataagent/api/v1/dataset-composer/drafts/preview', request, {
+    '/v1/dataset-composer/drafts/preview', request, {
       ...requestOptions,
       timeout: requestOptions?.timeout ?? 0,
     },
@@ -119,12 +119,12 @@ export function previewDraft(request: DatasetComposerDraftRequest, requestOption
 
 export function confirmDraft(request: DatasetComposerDraftRequest & { name: string; description?: string }) {
   return api.post<{ datasetId: string; descriptor: DatasetInputDescriptor }>(
-    '/dataagent/api/v1/dataset-composer/drafts/confirm', request,
+    '/v1/dataset-composer/drafts/confirm', request,
   )
 }
 
 export function getComposerExecution(executionId: string) {
-  return api.get<Record<string, unknown>>(`/dataagent/api/v1/dataset-composer/executions/${encodeURIComponent(executionId)}`)
+  return api.get<Record<string, unknown>>(`/v1/dataset-composer/executions/${encodeURIComponent(executionId)}`)
 }
 
 /** 更新数据集行数据 */
@@ -157,7 +157,7 @@ export function uploadFile(file: File) {
   const form = new FormData()
   form.append('file', file)
   return api.post<{ objectId: string; fileName?: string; format?: string }>(
-    '/dataagent/api/v1/dataset-files',
+    '/v1/dataset-files',
     form,
     { headers: { 'Content-Type': 'multipart/form-data' } },
   )
@@ -173,5 +173,5 @@ export function registerApiDefinition(data: {
   resultPath?: string
   headers?: Record<string, string>
 }) {
-  return api.post<{ apiDefinitionId: string }>('/dataagent/api/v1/dataset-composer/api-definitions', data)
+  return api.post<{ apiDefinitionId: string }>('/v1/dataset-composer/api-definitions', data)
 }
