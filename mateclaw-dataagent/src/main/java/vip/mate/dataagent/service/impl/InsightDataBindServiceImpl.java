@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
+import vip.mate.dataagent.aloudata.MetricTimeQueryGuard;
 import vip.mate.dataagent.dto.*;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.FilterValue;
 import vip.mate.dataagent.dto.DashboardFilterContextDTO.TimeRangeValue;
@@ -367,6 +368,10 @@ public class InsightDataBindServiceImpl implements InsightDataBindService {
         if ((filterContext == null || filterContext.getTimeRange() == null)
                 && ds.getTimeConstraint() != null && !ds.getTimeConstraint().isBlank()) {
             timeConstraint = ds.getTimeConstraint();
+        }
+        if (!MetricTimeQueryGuard.hasMetricTimeFilterExpressions(filterExpressions)
+                && !MetricTimeQueryGuard.hasMetricTimeConstraint(timeConstraint)) {
+            throw new IllegalArgumentException(MetricTimeQueryGuard.REQUIRED_MESSAGE);
         }
         request.setTimeConstraint(timeConstraint);
 

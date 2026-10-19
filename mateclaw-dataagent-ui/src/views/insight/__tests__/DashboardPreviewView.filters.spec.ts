@@ -49,7 +49,7 @@ const filter = {
 } as any
 const datasetComponent = {
   id: 'dataset-table', type: 'table', title: '数据表', position: { x: 1, y: 0, w: 2, h: 1 },
-  config: { datasetPipeline: { datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, queryConfig: {
+  config: { datasetPipeline: { datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, filters: [{ field: 'metric_time', operator: 'gte', value: '2026-09-01' }], queryConfig: {
     displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
     parameterBindings: [{ filterComponentId: 'filter-region', parameterName: 'regionParam', field: 'region', operator: 'eq' }],
   } }] } },
@@ -122,6 +122,36 @@ describe('DashboardPreviewView runtime filter query flow', () => {
     }))
     expect(mocks.previewQueryPlan).toHaveBeenCalledTimes(1)
     expect(wrapper.get('[data-test="canvas"]').text()).toContain('华南')
+  })
+
+  it('blocks an Aloudata pipeline query and shows the indicator-date requirement when metric_time is absent', async () => {
+    const missingDateComponent = {
+      ...datasetComponent,
+      id: 'missing-date-table',
+      config: { datasetPipeline: { datasetInputs: [{
+        datasetId: '101', inputName: 'sales', sourceType: 'ALOUDATA_METRICS',
+        queryConfig: {
+          displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
+          parameterBindings: [{ filterComponentId: 'filter-region', parameterName: 'region', field: 'region', operator: 'eq' }],
+        },
+      }] } },
+    } as any
+    mocks.currentDashboard.value.schemaJson = JSON.stringify({
+      version: '1.0', pages: [{ id: 'page-1', name: '策略视角', components: [filter, missingDateComponent] }],
+    })
+    const i18n = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': {} }, missingWarn: false })
+    wrapper = mount(DashboardPreviewView, {
+      props: { dashboardId: 'dashboard-1' },
+      global: { plugins: [i18n], stubs: {
+        DashboardCanvas: { props: ['components', 'componentDataMap'], template: '<div data-test="canvas">{{ JSON.stringify(componentDataMap) }}</div>' },
+        ElButton: true, ElIcon: true, ElDrawer: true,
+      } },
+    })
+    await flushPromises()
+
+    expect(mocks.previewQueryPlan).not.toHaveBeenCalled()
+    expect(mocks.executeComponent).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-test="canvas"]').text()).toContain('请配置指标日期（metric_time）筛选条件后再查询')
   })
 
   it('keeps the dashboard canvas mounted while a scoped filter refresh is pending', async () => {
@@ -217,6 +247,7 @@ describe('DashboardPreviewView runtime filter query flow', () => {
       config: { datasetPipeline: { datasetInputs: [{
         datasetId: '999', inputName: 'sales', sourceType: 'ALOUDATA_METRICS',
         sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] },
+        filters: [{ field: 'metric_time', operator: 'gte', value: '2026-09-01' }],
         queryConfig: { displayFields: [{ field: 'region', title: '区域', role: 'dimension' }], parameterBindings: [] },
       }] } },
     } as any
@@ -240,7 +271,7 @@ describe('DashboardPreviewView runtime filter query flow', () => {
       id: 'python-table',
       config: { datasetPipeline: {
         script: 'return sales',
-        datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, queryConfig: {
+        datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, filters: [{ field: 'metric_time', operator: 'gte', value: '2026-09-01' }], queryConfig: {
           displayFields: [{ field: 'region', title: '区域', role: 'dimension' }],
           parameterBindings: [
             { filterComponentId: 'filter-region', parameterName: 'inputRegion', field: 'region', operator: 'eq' },
@@ -470,7 +501,7 @@ describe('DashboardPreviewView runtime filter query flow', () => {
       id: 'python-table-stale-config',
       config: { datasetPipeline: {
         script: 'return sales',
-        datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, queryConfig: { displayFields: [], parameterBindings: [] } }],
+        datasetInputs: [{ datasetId: 'ds-1', inputName: 'sales', sourceType: 'ALOUDATA_METRICS', sourceConfig: { datasourceId: '9', metrics: ['sales'], dimensions: ['region'] }, filters: [{ field: 'metric_time', operator: 'gte', value: '2026-09-01' }], queryConfig: { displayFields: [], parameterBindings: [] } }],
         finalResultQueryConfig: {
           confirmed: true, schemaFingerprint: 'old-schema',
           displayFields: [{ field: 'obsolete_column', title: '旧字段', role: 'dimension', dataType: 'string' }],

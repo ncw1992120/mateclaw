@@ -131,7 +131,7 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
                 ? preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
                         inputs, script, parameters)
                 : preparation.prepare(taskId, workspaceGuard.currentWorkspaceId(), workspaceGuard.currentUserId(),
-                        inputs, script, parameters, plans);
+                        inputs, script, parameters, plans, true);
         long preparationMillis = elapsedMillis(preparationStarted);
 
         // 新版组件编排把执行策略随 pipeline 持久化；旧版仪表盘仍放在根级。

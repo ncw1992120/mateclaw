@@ -43,7 +43,7 @@ class DashboardExecutionServiceTest {
         when(dashboards.getDashboard(42L)).thenReturn(dashboard);
         var current = new vip.mate.dataagent.model.DatasetEntity(); current.setId(99L);
         when(datasets.selectOne(any())).thenReturn(current);
-        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result=[]"), anyMap(), anyMap()))
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result=[]"), anyMap(), anyMap(), eq(true)))
                 .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result=[]", Map.of(), Map.of(), "token"));
         when(runner.submit(anyMap())).thenReturn(Map.of("taskId", "task", "status", "RUNNING"));
         var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard,
@@ -61,7 +61,7 @@ class DashboardExecutionServiceTest {
         @SuppressWarnings("unchecked")
         var plans = org.mockito.ArgumentCaptor.forClass(Map.class);
         verify(preparation).prepare(anyString(), eq(7L), eq(8L), eq(Map.of("table_ab1", 99L)),
-                eq("result=[]"), anyMap(), plans.capture());
+                eq("result=[]"), anyMap(), plans.capture(), eq(true));
         assertEquals("99", ((DatasetQueryPlanDTO) plans.getValue().get("table_ab1")).datasetId());
     }
 
@@ -200,7 +200,7 @@ class DashboardExecutionServiceTest {
         dashboard.setId(42L);
         dashboard.setSchemaJson("{}");
         when(dashboards.getDashboard(42L)).thenReturn(dashboard);
-        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), anyMap()))
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), anyMap(), eq(true)))
                 .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result = []", Map.of(), Map.of(), "token"));
         when(runner.submit(anyMap())).thenReturn(Map.of("status", "RUNNING"));
 
@@ -253,7 +253,7 @@ class DashboardExecutionServiceTest {
         service.submit(42L, new DashboardExecutionRequest(Map.of(), "nested-python", schemaJson, queryContext));
 
         var plansCaptor = org.mockito.ArgumentCaptor.forClass(Map.class);
-        verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), plansCaptor.capture());
+        verify(preparation).prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result = []"), anyMap(), plansCaptor.capture(), eq(true));
         @SuppressWarnings("unchecked")
         Map<String, DatasetQueryPlanDTO> plans = plansCaptor.getValue();
         assertEquals(List.of("event_date_a", "region_a"), plans.get("input_a").filters().stream()

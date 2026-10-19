@@ -11,6 +11,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import vip.mate.dataagent.aloudata.AloudataApiClient;
 import vip.mate.dataagent.aloudata.AloudataConfigHelper;
+import vip.mate.dataagent.aloudata.MetricTimeQueryGuard;
 import vip.mate.dataagent.dto.AloudataAnalysisViewDetail;
 import vip.mate.dataagent.model.DatasetEntity;
 import vip.mate.dataagent.model.DatasourceEntity;
@@ -56,6 +57,9 @@ public class AloudataAnalysisViewAdapter implements DatasetSourceAdapter {
     @Override
     public DatasetBatch read(DatasetAccessContext context, DatasetReadRequest request) {
         DatasetEntity dataset = requireDataset(context, request.datasetId());
+        if (request.requireMetricTimeCondition()) {
+            MetricTimeQueryGuard.requireMetricTimeCondition(request.filters());
+        }
         String viewName = viewName(dataset);
         DatasourceEntity datasource = datasourceMapper.selectById(dataset.getDatasourceId());
         if (datasource == null) {

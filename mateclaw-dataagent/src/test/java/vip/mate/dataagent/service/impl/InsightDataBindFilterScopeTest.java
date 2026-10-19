@@ -22,6 +22,27 @@ import org.mockito.ArgumentCaptor;
 class InsightDataBindFilterScopeTest {
 
     @Test
+    void returnsHelpfulErrorInsteadOfQueryingAloudataWithoutIndicatorDate() {
+        InsightDashboardService dashboardService = mock(InsightDashboardService.class);
+        AloudataService aloudataService = mock(AloudataService.class);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setSchemaJson("""
+                {"version":"1.0","pages":[{"id":"page-1","components":[
+                  {"id":"table-1","type":"table","dataSource":{"datasourceId":"3","metrics":["revenue"],"dimensions":[]}}
+                ]}]}
+                """);
+        when(dashboardService.getDashboard(1L)).thenReturn(dashboard);
+        InsightDataBindServiceImpl service = new InsightDataBindServiceImpl(
+                dashboardService, aloudataService, null, null, null);
+
+        var result = service.previewData(1L);
+
+        assertEquals(1, result.size());
+        assertEquals("请配置指标日期（metric_time）筛选条件后再查询", result.getFirst().getError());
+        org.mockito.Mockito.verifyNoInteractions(aloudataService);
+    }
+
+    @Test
     void dashboardTimeFilterUsesPartitionExpressionInFilters() {
         InsightDashboardService dashboardService = mock(InsightDashboardService.class);
         AloudataService aloudataService = mock(AloudataService.class);
@@ -61,9 +82,9 @@ class InsightDataBindFilterScopeTest {
         dashboard.setSchemaJson("""
                 {"version":"1.0","pages":[{"id":"page-1","components":[
                   {"id":"bound","type":"table","boundFilterIds":["filter-region"],
-                   "dataSource":{"datasourceId":"11","metrics":["sales"],"dimensions":[]}},
+                   "dataSource":{"datasourceId":"11","metrics":["sales"],"dimensions":[],"timeConstraint":"([metric_time__day] >= \\"2026-09-01\\")"}},
                   {"id":"unbound","type":"table","boundFilterIds":[],
-                   "dataSource":{"datasourceId":"22","metrics":["sales"],"dimensions":[]}}
+                   "dataSource":{"datasourceId":"22","metrics":["sales"],"dimensions":[],"timeConstraint":"([metric_time__day] >= \\"2026-09-01\\")"}}
                 ]}]}
                 """);
         when(dashboardService.getDashboard(1L)).thenReturn(dashboard);

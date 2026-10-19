@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import vip.mate.dataagent.aloudata.AloudataFilterExpressions;
+import vip.mate.dataagent.aloudata.MetricTimeQueryGuard;
 import vip.mate.dataagent.dto.AloudataMetricQueryRequest;
 import vip.mate.dataagent.dto.AloudataMetricQueryResponse;
 import vip.mate.dataagent.model.AloudataDimensionEntity;
@@ -74,6 +75,9 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
 
     @Override public DatasetBatch read(DatasetAccessContext context, DatasetReadRequest request) {
         DatasetEntity dataset = require(context, request.datasetId());
+        if (request.requireMetricTimeCondition()) {
+            MetricTimeQueryGuard.requireMetricTimeCondition(request.filters());
+        }
         Map<String, Object> config = config(dataset);
         AloudataMetricQueryRequest query = new AloudataMetricQueryRequest();
         List<String> configuredMetrics = strings(config.get("metrics"));

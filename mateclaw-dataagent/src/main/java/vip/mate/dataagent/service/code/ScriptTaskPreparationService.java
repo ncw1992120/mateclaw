@@ -51,7 +51,7 @@ public class ScriptTaskPreparationService {
     }
 
     public PreparedTask prepare(String taskId, Long workspaceId, Long userId, Map<String,Long> inputDatasets, String script, Map<String,Object> parameters) {
-        return prepare(taskId, workspaceId, userId, inputDatasets, script, parameters, Map.of());
+        return prepare(taskId, workspaceId, userId, inputDatasets, script, parameters, Map.of(), false);
     }
 
     /**
@@ -61,6 +61,12 @@ public class ScriptTaskPreparationService {
      */
     public PreparedTask prepare(String taskId, Long workspaceId, Long userId, Map<String,Long> inputDatasets,
                                 String script, Map<String,Object> parameters, Map<String, DatasetQueryPlanDTO> plans) {
+        return prepare(taskId, workspaceId, userId, inputDatasets, script, parameters, plans, false);
+    }
+
+    public PreparedTask prepare(String taskId, Long workspaceId, Long userId, Map<String,Long> inputDatasets,
+                                String script, Map<String,Object> parameters, Map<String, DatasetQueryPlanDTO> plans,
+                                boolean requireMetricTimeCondition) {
         long prepareStarted = System.nanoTime();
         if (inputDatasets==null||inputDatasets.isEmpty()||script==null||script.isBlank()) throw new IllegalArgumentException("task inputs and script are required");
         DatasetAccessContext context=new DatasetAccessContext(workspaceId,userId,taskId,new HashSet<>(inputDatasets.values()));
@@ -83,7 +89,8 @@ public class ScriptTaskPreparationService {
                     pending.put(alias, CompletableFuture.supplyAsync(() -> {
                         long inputStarted = System.nanoTime();
                         try {
-                            ScriptTaskInputRegistry.PreparedInput input = materialize(context, alias, descriptor, plan);
+                            ScriptTaskInputRegistry.PreparedInput input = materialize(context, alias, descriptor, plan,
+                                    requireMetricTimeCondition);
                             LOGGER.info("[dashboard-perf] stage=input-materialize taskId={} input={} datasetId={} rows={} elapsedMs={}",
                                     taskId, alias, descriptor.datasetId(), input.rowCount(), elapsedMillis(inputStarted));
                             return input;
@@ -145,7 +152,8 @@ public class ScriptTaskPreparationService {
 
     /** 按计划分页读取源端并累积为有界完整输入；超过内联上限时转 ObjectRef。 */
     private ScriptTaskInputRegistry.PreparedInput materialize(DatasetAccessContext context, String alias,
-                                                              DatasetInputDescriptor descriptor, DatasetQueryPlanDTO plan) {
+                                                              DatasetInputDescriptor descriptor, DatasetQueryPlanDTO plan,
+                                                              boolean requireMetricTimeCondition) {
         if (plan.shortCircuitEmpty()) {
             // 显式空集合：不访问数据源，也不需要 Adapter
             return new ScriptTaskInputRegistry.PreparedInput(alias, descriptor.schema(), List.of(), null, 0,
@@ -168,7 +176,7 @@ public class ScriptTaskPreparationService {
             DatasetReadRequest readRequest = new DatasetReadRequest(datasetIdOf(plan, context, alias), alias,
                     plan.columns(), filtersOf(plan), plan.orders().stream()
                             .map(o -> new DatasetSort(o.field(), o.direction())).toList(),
-                    size, pageOffset, Map.of(), false);
+                    size, pageOffset, Map.of(), false, null, requireMetricTimeCondition);
             DatasetBatch batch = useStrategyFixture
                     ? strategyReadoutFixtures.read(context, readRequest)
                     : adapter.read(context, readRequest);

@@ -36,6 +36,19 @@ class AloudataAnalysisViewAdapterTest {
     @Mock AloudataConfigHelper configHelper;
 
     @Test
+    void rejectsQueryWithoutMetricTimeFilterBeforeCallingAloudata() {
+        AloudataAnalysisViewAdapter adapter = adapter();
+        when(datasetMapper.selectById(7L)).thenReturn(dataset());
+
+        DatasetReadException error = assertThrows(DatasetReadException.class, () -> adapter.read(
+                new DatasetAccessContext(1L, 2L, "task-1", Set.of(7L)),
+                new DatasetReadRequest(7L, "sales", List.of(), List.of(), List.of(), 5, 0, Map.of(), false, null, true)));
+
+        assertTrue(error.getMessage().contains("metric_time"));
+        verifyNoInteractions(apiClient);
+    }
+
+    @Test
     void readsViewWithoutFiltersAndReportsRemotePushdown() {
         AloudataAnalysisViewAdapter adapter = adapter();
         DatasetEntity dataset = dataset();

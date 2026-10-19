@@ -209,6 +209,7 @@ import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 import { DASHBOARD_CANVAS_BACKGROUND, resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
 import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
+import { findAloudataInputMissingMetricTime, METRIC_TIME_REQUIRED_MESSAGE } from '@/utils/dashboard-metric-time-guard'
 import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
 import { buildAiAnalysisSnapshot, collectVisibleAiAnalysisComponents, collectVisibleAnalysisComponents, type AiAnalysisTableView } from '@/utils/ai-analysis-context'
@@ -977,10 +978,15 @@ async function refreshPipelineComponent(
       : filters
     const invalidInput = pipeline.datasetInputs.find((input) => !/^\d+$/.test(String(input.datasetId)) || Number(input.datasetId) <= 0)
     if (invalidInput) throw new Error(`数据集「${invalidInput.inputName}」尚未落库，无法在预览中查询`)
+    const queryParameters = buildComponentQueryParameters(component, effectiveFilters)
+    const missingTimeInput = findAloudataInputMissingMetricTime(pipeline.datasetInputs, queryParameters)
+    if (missingTimeInput) {
+      throw new Error(`数据集「${missingTimeInput.displayName || missingTimeInput.inputName}」：${METRIC_TIME_REQUIRED_MESSAGE}`)
+    }
     const queryContext = {
       dashboardId: props.dashboardId,
       componentId: component.id,
-      parameters: buildComponentQueryParameters(component, effectiveFilters),
+      parameters: queryParameters,
       requestId: String(requestId),
     }
     let rows: Record<string, unknown>[]

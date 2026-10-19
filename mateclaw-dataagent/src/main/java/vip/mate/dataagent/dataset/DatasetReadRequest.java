@@ -23,19 +23,28 @@ public record DatasetReadRequest(
         Integer offset,
         Map<String, Object> parameters,
         boolean requestTotalCount,
-        String timeGranularity) {
+        String timeGranularity,
+        boolean requireMetricTimeCondition) {
+
+    /** Existing full constructor retained for non-dashboard dataset reads. */
+    public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
+                              List<DatasetSort> orders, Integer limit, Integer offset,
+                              Map<String, Object> parameters, boolean requestTotalCount, String timeGranularity) {
+        this(datasetId, inputName, columns, filters, orders, limit, offset, parameters,
+                requestTotalCount, timeGranularity, false);
+    }
 
     /** 旧构造重载：无排序、不请求总数，保持既有调用方行为不变。 */
     public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
                               Integer limit, Integer offset, Map<String, Object> parameters) {
-        this(datasetId, inputName, columns, filters, List.of(), limit, offset, parameters, false, null);
+        this(datasetId, inputName, columns, filters, List.of(), limit, offset, parameters, false, null, false);
     }
 
     /** 兼容含排序与总数的旧调用方。 */
     public DatasetReadRequest(long datasetId, String inputName, List<String> columns, List<DatasetFilter> filters,
                               List<DatasetSort> orders, Integer limit, Integer offset,
                               Map<String, Object> parameters, boolean requestTotalCount) {
-        this(datasetId, inputName, columns, filters, orders, limit, offset, parameters, requestTotalCount, null);
+        this(datasetId, inputName, columns, filters, orders, limit, offset, parameters, requestTotalCount, null, false);
     }
 
     public DatasetReadRequest {

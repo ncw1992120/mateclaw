@@ -29,6 +29,28 @@ import org.mockito.ArgumentCaptor;
 
 class AloudataMetricsAdapterTest {
 
+    @Test
+    void rejectsQueryWithoutMetricTimeFilterBeforeCallingAloudata() throws Exception {
+        DatasetMapper mapper = mock(DatasetMapper.class);
+        AloudataService service = mock(AloudataService.class);
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L);
+        dataset.setSourceType("ALOUDATA_METRICS");
+        dataset.setDatasourceId(3L);
+        dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of(
+                "metrics", List.of("revenue"), "dimensions", List.of("metric_time"))));
+        when(mapper.selectById(7L)).thenReturn(dataset);
+        AloudataMetricsAdapter adapter = new AloudataMetricsAdapter(
+                mapper, emptyMetricMapper(), emptyDimensionMapper(), emptyFieldMapper(), service, new ObjectMapper());
+
+        DatasetReadException error = assertThrows(DatasetReadException.class, () -> adapter.read(
+                new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
+                new DatasetReadRequest(7L, "metrics", List.of(), List.of(), List.of(), 20, 0, Map.of(), false, null, true)));
+
+        assertTrue(error.getMessage().contains("metric_time"));
+        verifyNoInteractions(service);
+    }
+
     /**
      * describe() 用 LambdaQueryWrapper 按实体列查询展示名；Lambda 列解析依赖
      * TableInfo 缓存，纯单测无 MyBatis 启动流程，这里手工注册两个实体。
