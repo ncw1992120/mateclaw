@@ -98,11 +98,28 @@ export function composeExecutionScript(state: DashboardSystemScriptState): strin
   return [system, user ? `${USER_REGION_MARKER}\n${user}` : USER_REGION_MARKER].filter(Boolean).join('\n\n').trim()
 }
 
+/** 同步 Python 变量及读取参数；注释、业务字符串和对象属性不属于输入别名。 */
+export function renamePythonDatasetAlias(code: string, previous: string, next: string): string {
+  const tokens = /#[^\r\n]*|(?:[rRuUbBfF]{1,2})?(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\[\s\S]|[^"\\])*"|'(?:\\[\s\S]|[^'\\])*')|[A-Za-z_][A-Za-z0-9_]*|[\s\S]/g
+  return code.replace(tokens, (token, offset: number) => {
+    if (token === previous && !/\.\s*$/.test(code.slice(0, offset))) return next
+    if (token === JSON.stringify(previous) || token === `'${previous}'`) {
+      const before = code.slice(0, offset)
+      const inputArgument = /\binput_name\s*=\s*$/.test(before)
+      const legacyInput = /\binputs\s*\[\s*$/.test(before)
+      const localGuard = /\bif\s*$/.test(before)
+        && /^\s+not\s+in\s+locals\s*\(\s*\)/.test(code.slice(offset + token.length))
+      if (inputArgument || legacyInput || localGuard) return `${token[0]}${next}${token[0]}`
+    }
+    return token
+  })
+}
+
 export function reconcileSystemScript(state: DashboardSystemScriptState, source: PythonSystemSource): ReconciledSystemScript {
   const generatedCode = generateSystemScript(source)
   const generatedFingerprint = fingerprintSystemSource(source)
   const managedCode = state.mode === 'managed'
-    ? addMissingInputReaders(state.managedCode || state.generatedCode, source.inputs)
+    ? addMissingInputReaders(removeObsoleteInputReaders(state.managedCode || state.generatedCode, source.inputs), source.inputs)
     : state.managedCode
   return {
     ...state,
@@ -111,6 +128,13 @@ export function reconcileSystemScript(state: DashboardSystemScriptState, source:
     generatedFingerprint,
     hasGeneratedUpdate: state.generatedFingerprint !== generatedFingerprint,
   }
+}
+
+/** 只清理系统标准读取块；用户接管的其他代码原样保留。 */
+function removeObsoleteInputReaders(code: string, inputs: DashboardDatasetInput[]): string {
+  const names = new Set(inputs.map((input) => input.inputName))
+  const reader = /^if (["'])([A-Za-z_][A-Za-z0-9_]*)\1 not in locals\(\):\r?\n[ \t]+\2\s*=\s*datasets\.input\(\s*input_name\s*=\s*(["'])\2\3\s*,?\s*\)\.to_(?:polars|pandas)\(\)[ \t]*(?:\r?\n|$)/gm
+  return code.replace(reader, (block, _quote: string, name: string) => names.has(name) ? block : '')
 }
 
 /** 手动接管系统区时保留既有读取方式，同时补齐新增数据集的标准读取块。 */

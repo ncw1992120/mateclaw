@@ -9,6 +9,7 @@ import {
   parsePythonEditorDocument,
   reconcileSystemScript,
   restoreGenerated,
+  renamePythonDatasetAlias,
 } from '../python-script-template'
 
 const source = {
@@ -18,6 +19,39 @@ const source = {
 }
 
 describe('python script system state', () => {
+  it('renames dataset readers, guards and business-code variables without changing data literals or similar names', () => {
+    const code = [
+      '# table_ab 是输入，注释保持不变',
+      'if "table_ab" not in locals():',
+      '    table_ab = datasets.input(',
+      '        input_name="table_ab",',
+      '    ).to_polars()',
+      'frame_ab = to_pandas(table_ab)',
+      'legacy = inputs["table_ab"]',
+      'label = "table_ab"',
+      'table_ab_extra = obj.table_ab',
+    ].join('\n')
+    const renamed = renamePythonDatasetAlias(code, 'table_ab', 'table_ab1')
+    expect(renamed).toContain('if "table_ab1" not in locals():')
+    expect(renamed).toContain('table_ab1 = datasets.input(')
+    expect(renamed).toContain('input_name="table_ab1"')
+    expect(renamed).toContain('to_pandas(table_ab1)')
+    expect(renamed).toContain('inputs["table_ab1"]')
+    expect(renamed).toContain('label = "table_ab"')
+    expect(renamed).toContain('table_ab_extra = obj.table_ab')
+    expect(renamed).toContain('# table_ab 是输入，注释保持不变')
+  })
+
+  it('managed execution removes obsolete standard readers just as the editor does, while retaining custom code', () => {
+    const current = { mode: 'managed' as const, generatedCode: '', generatedFingerprint: 'old',
+      managedCode: 'custom = custom_read()\nif "table_ab" not in locals():\n    table_ab = datasets.input(input_name="table_ab").to_polars()',
+      userCode: 'result = table_ab1' }
+    const next = reconcileSystemScript(current, { inputs: [{ datasetId: '1', inputName: 'table_ab1' }], bindings: [] })
+    expect(composeExecutionScript(next)).not.toContain('input_name="table_ab"')
+    expect(composeExecutionScript(next)).toContain('input_name="table_ab1"')
+    expect(composeExecutionScript(next)).toContain('custom = custom_read()')
+  })
+
   it('generates deterministic system code and fingerprint', () => {
     const first = generateSystemScript(source)
     const second = generateSystemScript({ ...source, bindings: [] })

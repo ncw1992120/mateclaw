@@ -47,6 +47,12 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
     private final ScriptResultContractService resultContract;
     private final String datasetReadBaseUrl;
     private final vip.mate.dataagent.service.QueryPlanner queryPlanner;
+    private ComponentDatasetResolver componentDatasets;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setComponentDatasetResolver(ComponentDatasetResolver resolver) {
+        this.componentDatasets = resolver;
+    }
 
     @org.springframework.beans.factory.annotation.Autowired
     public DashboardExecutionServiceImpl(
@@ -104,6 +110,10 @@ public class DashboardExecutionServiceImpl implements DashboardExecutionService 
             throw new IllegalArgumentException("dashboard script is required");
         }
         Map<String, Long> inputs = parseInputs(executionSchema.path("datasetInputs"));
+        if (pipeline != null && componentDatasets != null) {
+            componentDatasets.resolve(dashboardId, request.componentId(), executionSchema.path("datasetInputs"));
+            inputs = parseInputs(executionSchema.path("datasetInputs"));
+        }
         validateFilterBindings(executionSchema.path("scriptFilterBindings"), inputs.keySet());
         Map<String, Object> parameters = resolveParameters(
                 executionSchema.path("parameters"), request == null ? Map.of() : request.parameters());

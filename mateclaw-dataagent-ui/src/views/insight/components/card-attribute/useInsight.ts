@@ -46,6 +46,7 @@ import {
   fingerprintSystemSource,
   generateSystemScript,
   reconcileSystemScript,
+  renamePythonDatasetAlias,
   restoreGenerated,
   type PythonSystemSource,
 } from '@/utils/python-script-template'
@@ -599,16 +600,8 @@ function reconfigureDataset(id: string) {
   }
 }
 
-/** 转义正则特殊字符（用于按别名精确替换脚本引用） */
-function escapeRegExp(s: string) {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 /**
- * 修改数据集别名（用户反馈红框3）。写回 alias，并同步：
- *   - Python Base Script 中的 inputs["旧别名"] / inputs['旧别名'] 引用
- *   - 筛选器绑定里以别名为 key 的作用范围与字段映射
- * （真实后端以 datasetId 为稳定主键；本处按原型按别名引用同步，仅作回显兼容。）
+ * 修改组件输入别名，同时同步系统读取、用户代码和持久化脚本状态。
  */
 async function renameDataset(id: string, newAlias: string) {
   const ds = getDataset(id)
@@ -625,10 +618,16 @@ async function renameDataset(id: string, newAlias: string) {
   }
 
   // 同步 Python 脚本引用
-  if (state.pythonSystem.includes(`inputs["${oldAlias}"]`) || state.pythonSystem.includes(`inputs['${oldAlias}']`)) {
-    const re = new RegExp(`inputs\\[["']${escapeRegExp(oldAlias)}["']\\]`, 'g')
-    state.pythonSystem = state.pythonSystem.replace(re, `inputs["${clean}"]`)
-    state.pythonUser = state.pythonUser.replace(re, `inputs["${clean}"]`)
+  state.pythonSystem = renamePythonDatasetAlias(state.pythonSystem, oldAlias, clean)
+  state.pythonUser = renamePythonDatasetAlias(state.pythonUser, oldAlias, clean)
+  if (state.pythonSystemState) {
+    const script = state.pythonSystemState
+    state.pythonSystemState = {
+      ...script,
+      generatedCode: renamePythonDatasetAlias(script.generatedCode, oldAlias, clean),
+      ...(script.managedCode !== undefined ? { managedCode: renamePythonDatasetAlias(script.managedCode, oldAlias, clean) } : {}),
+      userCode: state.pythonUser,
+    }
   }
 
   // 同步筛选器绑定（仅当绑定以别名为 key 时），遍历所有已绑定筛选器
@@ -645,6 +644,10 @@ async function renameDataset(id: string, newAlias: string) {
   }
 
   ds.alias = clean
+  if (state.pythonSystemState) {
+    state.pythonSystemState = reconcileSystemScript(state.pythonSystemState, currentPythonSource())
+    state.pythonSystem = effectiveSystemCode(state.pythonSystemState)
+  }
 }
 
 /* ---- JDBC ---- */
@@ -1475,6 +1478,7 @@ function buildPipelineScript(): string | undefined {
     userCode: state.pythonUser,
   }
   state.pythonSystemState = scriptState
+  scriptState.userCode = state.pythonUser
   const script = composeExecutionScript(scriptState)
   return script || undefined
 }

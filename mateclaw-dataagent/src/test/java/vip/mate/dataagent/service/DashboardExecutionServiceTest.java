@@ -30,6 +30,42 @@ import static org.mockito.Mockito.*;
 
 class DashboardExecutionServiceTest {
     @Test
+    void resolvesScopedDatasetIdBeforePlanningAndPreparingPythonInputs() throws Exception {
+        InsightDashboardService dashboards = mock(InsightDashboardService.class);
+        ScriptTaskPreparationService preparation = mock(ScriptTaskPreparationService.class);
+        PythonExecutionService runner = mock(PythonExecutionService.class);
+        WorkspaceGuard guard = mock(WorkspaceGuard.class);
+        var datasets = mock(vip.mate.dataagent.repository.DatasetMapper.class);
+        when(guard.currentWorkspaceId()).thenReturn(7L);
+        when(guard.currentUserId()).thenReturn(8L);
+        InsightDashboardVO dashboard = new InsightDashboardVO();
+        dashboard.setSchemaJson("{}");
+        when(dashboards.getDashboard(42L)).thenReturn(dashboard);
+        var current = new vip.mate.dataagent.model.DatasetEntity(); current.setId(99L);
+        when(datasets.selectOne(any())).thenReturn(current);
+        when(preparation.prepare(anyString(), eq(7L), eq(8L), anyMap(), eq("result=[]"), anyMap(), anyMap()))
+                .thenReturn(new ScriptTaskPreparationService.PreparedTask("task", "result=[]", Map.of(), Map.of(), "token"));
+        when(runner.submit(anyMap())).thenReturn(Map.of("taskId", "task", "status", "RUNNING"));
+        var service = new DashboardExecutionServiceImpl(dashboards, preparation, runner, guard,
+                new ObjectMapper(), mock(DashboardExecutionMapper.class), mock(ObjectRefService.class),
+                new vip.mate.dataagent.service.code.ScriptResultContractService(), "http://localhost:18089", new QueryPlannerImpl());
+        service.setComponentDatasetResolver(new vip.mate.dataagent.service.impl.ComponentDatasetResolver(datasets, guard));
+        String schema = """
+                {"pages":[{"components":[{"id":"card-1","config":{"datasetPipeline":{
+                  "datasetInputs":[{"datasetId":"9","inputName":"table_ab1"}],"script":"result=[]"
+                }}}]}]}
+                """;
+        service.submit(42L, new DashboardExecutionRequest(Map.of(), "card-1", schema,
+                new QueryContextDTO("42", "card-1", null, Map.of(), null, null, "scope-test")));
+
+        @SuppressWarnings("unchecked")
+        var plans = org.mockito.ArgumentCaptor.forClass(Map.class);
+        verify(preparation).prepare(anyString(), eq(7L), eq(8L), eq(Map.of("table_ab1", 99L)),
+                eq("result=[]"), anyMap(), plans.capture());
+        assertEquals("99", ((DatasetQueryPlanDTO) plans.getValue().get("table_ab1")).datasetId());
+    }
+
+    @Test
     void structuredDataFailureKeepsUiDetailsButOmitsValuesFromServiceLogs() {
         WorkspaceGuard guard = mock(WorkspaceGuard.class);
         DashboardExecutionMapper executionMapper = mock(DashboardExecutionMapper.class);

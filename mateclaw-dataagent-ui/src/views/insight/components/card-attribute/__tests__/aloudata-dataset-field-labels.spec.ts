@@ -33,6 +33,10 @@ beforeEach(() => {
   state.datasets.splice(0, state.datasets.length)
   state.backend.dashboardId = '20'
   state.backend.componentId = 'card-1'
+  state.hasPython = false
+  state.pythonSystemState = null
+  state.pythonSystem = ''
+  state.pythonUser = ''
   mocks.listDatasets.mockReset().mockResolvedValue([])
   mocks.confirmDatasetDraft.mockReset().mockResolvedValue({
     datasetId: '103',
@@ -54,6 +58,26 @@ beforeEach(() => {
 })
 
 describe('Aloudata 数据集展示名取数', () => {
+  it('别名变更同步 managed 系统读取、用户代码以及最终执行和保存的脚本', async () => {
+    state.datasets.push({ id: 'first', alias: 'table_ab', sourceType: 'jdbc', sourceLabel: 'JDBC', fields: [], filters: [] })
+    const reader = 'if "table_ab" not in locals():\n    table_ab = datasets.input(input_name="table_ab").to_polars()'
+    state.hasPython = true
+    state.pythonSystem = reader
+    state.pythonUser = 'result = table_ab.to_dicts()'
+    state.pythonSystemState = { mode: 'managed', generatedCode: reader, managedCode: reader,
+      generatedFingerprint: 'old', userCode: state.pythonUser }
+
+    await useInsight().renameDataset('first', 'table_ab1')
+
+    const pipeline = buildPipeline()
+    expect(pipeline.datasetInputs[0].inputName).toBe('table_ab1')
+    expect(pipeline.script).toContain('input_name="table_ab1"')
+    expect(pipeline.script).toContain('result = table_ab1.to_dicts()')
+    expect(pipeline.script).not.toContain('input_name="table_ab"')
+    expect(pipeline.systemScript?.userCode).toBe('result = table_ab1.to_dicts()')
+    expect(state.pythonUser).toBe(pipeline.systemScript?.userCode)
+  })
+
   it('不会复用另一个组件的同名数据集，创建时提交当前组件归属', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1792000000000)
     mocks.listDatasets.mockResolvedValue([{ id: '999', name: 'table_1792000000000',
