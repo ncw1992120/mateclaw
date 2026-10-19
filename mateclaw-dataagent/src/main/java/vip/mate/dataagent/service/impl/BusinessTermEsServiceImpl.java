@@ -19,6 +19,7 @@ import org.springframework.ai.embedding.EmbeddingResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import vip.mate.dataagent.config.ElasticsearchAvailabilityLog;
 import vip.mate.dataagent.constants.DataAgentConstants;
 import vip.mate.dataagent.dto.BusinessTermRef;
 import vip.mate.dataagent.dto.BusinessTermSearchResult;
@@ -69,12 +70,15 @@ public class BusinessTermEsServiceImpl implements BusinessTermEsService {
      */
     private ElasticsearchClient getAvailableClient() {
         if (esClient == null) {
+            ElasticsearchAvailabilityLog.unavailable("业务术语检索", new IllegalStateException("ElasticsearchClient bean 未配置"));
             return null;
         }
         try {
             esClient.ping();
+            ElasticsearchAvailabilityLog.available("业务术语检索");
             return esClient;
         } catch (Exception e) {
+            ElasticsearchAvailabilityLog.unavailable("业务术语检索 ping", e);
             return null;
         }
     }

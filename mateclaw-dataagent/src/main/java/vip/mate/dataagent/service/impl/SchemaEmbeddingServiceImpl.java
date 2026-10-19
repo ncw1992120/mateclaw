@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import vip.mate.dataagent.constants.DataAgentConstants;
+import vip.mate.dataagent.config.ElasticsearchLogSanitizer;
 import vip.mate.dataagent.dto.LogicalRelationVO;
 import vip.mate.dataagent.dto.SchemaSearchRequest;
 import vip.mate.dataagent.dto.SchemaSearchResult;
@@ -246,7 +247,8 @@ public class SchemaEmbeddingServiceImpl implements SchemaEmbeddingService {
         try {
             esResult = schemaElasticsearchService.hybridSearch(request, queryVector);
         } catch (Exception e) {
-            log.warn("Elasticsearch 检索失败，降级为 MySQL: {}", e.getMessage());
+            log.warn("[ES-诊断] Schema 检索失败，降级为关系数据库检索；cause={}: {}",
+                    e.getClass().getSimpleName(), ElasticsearchLogSanitizer.sanitizeMessage(e.getMessage()));
             return searchSchemaWithMySQL(request);
         }
 

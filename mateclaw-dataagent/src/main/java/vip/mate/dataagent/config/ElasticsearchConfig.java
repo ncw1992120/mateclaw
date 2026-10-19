@@ -66,7 +66,10 @@ public class ElasticsearchConfig {
                         .setSocketTimeout(properties.getReadTimeout())
         );
 
-        log.info("Elasticsearch RestClient 初始化完成，连接地址: {}", properties.getUris());
+        log.info("Elasticsearch RestClient 已创建，endpoints={}, authConfigured={}, connectTimeoutMs={}, readTimeoutMs={}",
+                ElasticsearchLogSanitizer.sanitizeUris(properties.getUris()),
+                StringUtils.hasText(properties.getUsername()) && StringUtils.hasText(properties.getPassword()),
+                properties.getConnectTimeout(), properties.getReadTimeout());
         return builder.build();
     }
 
