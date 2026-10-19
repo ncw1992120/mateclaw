@@ -105,7 +105,7 @@ function metricViewDataset(partial: Partial<DatasetConfig> = {}): DatasetConfig 
     sourceLabel: 'Aloudata',
     alias: 'cljd_zcl_zb_view',
     fields: [],
-    filters: [],
+    filters: [{ field: 'metric_time', op: '>=', value: '2026-09-01' }],
     aloudata: {
       mode: 'metric-view',
       datasourceId: '2097582897597468673',
@@ -201,7 +201,10 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
 
   it('固定筛选只读展示且始终与本次筛选器绑定条件一起下推', async () => {
     const wrapper = await openWith(metricViewDataset({
-      filters: [{ field: 'status', op: '=', value: 'ACTIVE' }],
+      filters: [
+        { field: 'metric_time', op: '>=', value: '2026-09-01' },
+        { field: 'status', op: '=', value: 'ACTIVE' },
+      ],
       queryConfig: queryConfig([
         { filterComponentId: 'filter-date', parameterName: 'date', field: 'trade_date', operator: 'gte' },
       ]),
@@ -210,10 +213,11 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await runQuery(wrapper)
 
     expect(wrapper.get('[data-testid="fixed-filter-section"]').text()).toContain('始终生效 · 只读')
-    expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('ACTIVE')
+    expect(wrapper.findAll('[data-testid="fixed-filter-row"]').some((row) => row.text().includes('ACTIVE'))).toBe(true)
     expect(wrapper.find('[data-testid="fixed-filter-table"] thead').text()).not.toContain('操作符')
     expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
       filters: [
+        { field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' },
         { field: 'status', role: 'dimension', operator: 'eq', value: 'ACTIVE' },
         { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
       ],
@@ -571,7 +575,10 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       expect(wrapper.find('[data-testid="display-fields-empty"]').exists()).toBe(true)
       expect(wrapper.find('[data-testid="query-filter-row"]').exists()).toBe(false)
 
-      const fixedFilters = [{ field: 'cust_type', op: '=', value: '机构' }]
+      const fixedFilters = [
+        { field: 'metric_time', op: '>=', value: '2026-09-01' },
+        { field: 'cust_type', op: '=', value: '机构' },
+      ]
       const saveError = useInsight().saveQueryConfig(dataset.id, queryConfig([]), fixedFilters)
       await flushPromises()
 
@@ -581,7 +588,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
       expect(wrapper.text()).toContain('交易日期')
       expect(wrapper.text()).toContain('客户类型')
       expect(wrapper.text()).toContain('金额')
-      expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('机构')
+      expect(wrapper.findAll('[data-testid="fixed-filter-row"]').some((row) => row.text().includes('机构'))).toBe(true)
 
       await wrapper.get('[data-testid="run-query"]').trigger('click')
       await flushPromises()
@@ -589,7 +596,10 @@ describe('查看数据弹窗 · 打开时的行为', () => {
 
       expect(previewDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
         columns: ['trade_date', 'cust_type', 'amount'],
-        filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '机构' }],
+        filters: [
+          { field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' },
+          { field: 'cust_type', role: 'dimension', operator: 'eq', value: '机构' },
+        ],
       }), expect.objectContaining({ timeout: 0, headers: expect.objectContaining({ 'X-Perf-Id': expect.any(String) }) }))
       expect(wrapper.emitted('render')?.[0]?.[0]).toMatchObject({
         componentId: 'table-no-bindings',
@@ -683,6 +693,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     }
     expect(request.columns).toEqual(['cust_type', 'amount'])
     expect(request.filters).toEqual([
+      { field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' },
       { field: 'trade_date', role: 'dimension', operator: 'gte', value: '2026-09-01' },
       { field: 'trade_date', role: 'dimension', operator: 'lt', value: '2026-09-02' },
     ])
@@ -705,28 +716,51 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     unconfigured.unmount()
   })
 
-  it('没有筛选器绑定时仍可无条件查询', async () => {
+  it('没有筛选器绑定时仍可按固定指标日期条件查询', async () => {
     const wrapper = await openWith(metricViewDataset({
       queryConfig: queryConfig([]),
     }))
 
-    expect(wrapper.find('.dd-empty').text()).toContain('未绑定筛选器，本次查询将不附加筛选条件')
+    expect(wrapper.find('.dd-empty').text()).toContain('固定筛选条件仍会生效')
     expect(wrapper.find('.dd-query-row button').attributes('disabled')).toBeUndefined()
     await wrapper.find('.dd-query-row button').trigger('click')
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
-    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [], parameters: {} })
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
+      filters: [{ field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' }],
+      parameters: {},
+    })
     wrapper.unmount()
   })
 
-  it('已绑定筛选条件但值为空或全部禁用时仍可无条件查询', async () => {
+  it('Aloudata 查看数据缺少指标日期时提示并阻止查询', async () => {
+    const wrapper = await openWith(metricViewDataset({
+      filters: [],
+      queryConfig: queryConfig([]),
+    }))
+
+    await wrapper.get('[data-testid="run-query"]').trigger('click')
+    await flushPromises()
+
+    expect(previewDatasetDraft).not.toHaveBeenCalled()
+    expect(previewInput).not.toHaveBeenCalled()
+    expect(wrapper.get('[data-testid="dataset-query-performance"]').text()).toContain(
+      '请配置指标日期（metric_time）筛选条件后再查询',
+    )
+    wrapper.unmount()
+  })
+
+  it('已绑定筛选条件为空或禁用时仍按固定指标日期条件查询', async () => {
     const wrapper = await openWith(metricViewDataset())
     const queryButton = wrapper.find('.dd-query-row button')
     expect(queryButton.attributes('disabled')).toBeUndefined()
 
     await queryButton.trigger('click')
     await flushPromises()
-    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [], parameters: {} })
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
+      filters: [{ field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' }],
+      parameters: {},
+    })
 
     await wrapper.find('[data-testid="query-filter-enabled"]').setValue(false)
     expect(queryButton.attributes('disabled')).toBeUndefined()
@@ -818,7 +852,7 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     expect(wrapper.find('.dd-note').exists()).toBe(false)
   })
 
-  it('禁用唯一绑定筛选器时清空并锁定值，且可以无条件查询', async () => {
+  it('禁用唯一绑定筛选器时清空并锁定值，仍按固定指标日期条件查询', async () => {
     state.filterCatalog = [{ id: 'filter-strategy', title: '策略类型', type: 'filter', selectionMode: 'single' }]
     const dataset = metricViewDataset({
       queryConfig: {
@@ -840,13 +874,16 @@ describe('查看数据弹窗 · 打开时的行为', () => {
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
-    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({ filters: [] })
+    expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
+      filters: [{ field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' }],
+    })
   })
 
   it('JDBC SQL 在查看数据时只读，SQL 参数仍可编辑并进入 parameters', async () => {
     const wrapper = await openWith(metricViewDataset({
       sourceType: 'jdbc',
       aloudata: undefined,
+      filters: [],
       jdbc: { db: '1', sql: 'select * from orders where region = :region' },
       fields: [],
     }))
@@ -870,11 +907,14 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
     await flushPromises()
 
     const request = previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[]; parameters?: unknown; offset?: number }
-    expect(request.filters).toEqual([{ field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' }])
+    expect(request.filters).toEqual([
+      { field: 'metric_time', operator: 'gte', value: '2026-09-01', role: 'dimension' },
+      { field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' },
+    ])
     expect(request.parameters).toEqual({ date: '2026-09-01' })
     expect(request.offset).toBe(0)
     expect(dataset.queryConfig?.parameterBindings[0].field).toBe('trade_date')
-    expect(dataset.filters).toEqual([])
+    expect(dataset.filters).toEqual([{ field: 'metric_time', op: '>=', value: '2026-09-01' }])
   })
 
   it('时间筛选器合并为一行并提交包前不包后的过滤条件', async () => {
@@ -897,6 +937,7 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
 
     expect(previewDatasetDraft.mock.calls.at(-1)?.[0]).toMatchObject({ timeGranularity: 'WEEK' })
     expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
+      { field: 'metric_time', operator: 'gte', value: '2026-09-01', role: 'dimension' },
       { field: 'trade_date', operator: 'gte', value: '2026-09-01', role: 'dimension' },
       { field: 'trade_date', operator: 'lt', value: '2026-10-01', role: 'dimension' },
     ])
@@ -942,7 +983,9 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
 
     await wrapper.findAll('button').find((button) => button.text().includes('查询'))!.trigger('click')
     await flushPromises()
-    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([])
+    expect((previewDatasetDraft.mock.calls.at(-1)?.[0] as { filters?: unknown[] }).filters).toEqual([
+      { field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' },
+    ])
   })
 
   it('固定筛选不受旧全局 filterBindings 影响，并始终下推', async () => {
@@ -950,20 +993,26 @@ describe('查看数据弹窗 · 查询配置筛选条件', () => {
       filterName: '旧绑定', scope: { 'ds-1': true }, fieldMap: [], conditions: [],
     }] as never
     const dataset = metricViewDataset({
-      filters: [{ field: 'cust_type', op: '=', value: '旧值' }] as never,
+      filters: [
+        { field: 'metric_time', op: '>=', value: '2026-09-01' },
+        { field: 'cust_type', op: '=', value: '旧值' },
+      ] as never,
       queryConfig: queryConfig([]),
     })
     const wrapper = await openWith(dataset)
 
     expect(wrapper.findAll('[data-testid="query-filter-row"]')).toHaveLength(0)
-    expect(wrapper.get('[data-testid="fixed-filter-row"]').text()).toContain('旧值')
+    expect(wrapper.findAll('[data-testid="fixed-filter-row"]').some((row) => row.text().includes('旧值'))).toBe(true)
     expect(wrapper.find('.dd-empty').text()).toContain('固定筛选条件仍会生效')
     expect(wrapper.text()).not.toContain('添加筛选条件')
     await wrapper.findAll('button').find((b) => b.text().includes('查询'))!.trigger('click')
     await flushPromises()
     expect(previewDatasetDraft).toHaveBeenCalledTimes(1)
     expect(previewDatasetDraft.mock.calls[0][0]).toMatchObject({
-      filters: [{ field: 'cust_type', role: 'dimension', operator: 'eq', value: '旧值' }],
+      filters: [
+        { field: 'metric_time', role: 'dimension', operator: 'gte', value: '2026-09-01' },
+        { field: 'cust_type', role: 'dimension', operator: 'eq', value: '旧值' },
+      ],
     })
   })
 })
@@ -992,6 +1041,7 @@ describe('查看数据弹窗 · 按数据源类型给不同的筛选项', () => 
       metricViewDataset({
         sourceType: 'jdbc',
         aloudata: undefined,
+        filters: [],
         jdbc: { db: '1', sql: 'select * from t where region = :region' },
         fields: [],
       }),

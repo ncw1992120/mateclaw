@@ -363,6 +363,7 @@ import { componentPreviewData } from '@/utils/component-preview-data'
 import ComponentDataPreview from './ComponentDataPreview.vue'
 import ViewDataFilterSelect from './card-attribute/ViewDataFilterSelect.vue'
 import { resolveTimeFilterDefault } from '@/composables/useDashboardFilterContext'
+import { hasMetricTimeCondition, isAloudataSourceType, METRIC_TIME_REQUIRED_MESSAGE } from '@/utils/dashboard-metric-time-guard'
 
 const props = defineProps<{ dataset: DatasetConfig; component?: InsightComponent | null }>()
 const emit = defineEmits<{ (event: 'render', data: InsightComponentData): void }>()
@@ -778,6 +779,9 @@ async function fetchRows(reset: boolean): Promise<void> {
   try {
     const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
     const filters = [...fixedFilters.value, ...toDatasetFilters(enabledFilterRows)]
+    if (isAloudataSourceType(props.dataset.sourceType) && !hasMetricTimeCondition(filters)) {
+      throw new Error(METRIC_TIME_REQUIRED_MESSAGE)
+    }
     const request = draftRequestForDataset({
       ...props.dataset,
       filters: filters as unknown as DatasetConfig['filters'],
