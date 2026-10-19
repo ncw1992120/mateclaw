@@ -2,6 +2,32 @@ import { describe, expect, it } from 'vitest'
 import { createComponentPreviewQueryContext } from '../component-preview-query-context'
 
 describe('createComponentPreviewQueryContext', () => {
+  it('兼容历史时间绑定的开始和结束复用同一参数名，不将日期边界误判为冲突', () => {
+    const input: import('@/types').DashboardDatasetInput = {
+      datasetId: '1', inputName: 'table_ab',
+      queryConfig: {
+        displayFields: [],
+        parameterBindings: [
+          { filterComponentId: 'date', parameterName: 'comp_1792123987548_srqf', field: 'metric_time', operator: 'gte' },
+          { filterComponentId: 'date', parameterName: 'comp_1792123987548_srqf', field: 'metric_time', operator: 'lt' },
+        ],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      },
+      lastQueryState: { filters: [
+        { filterComponentId: 'date', field: 'metric_time', parameterName: 'comp_1792123987548_srqf', timeBoundary: 'start', value: '2026-10-09', enabled: true },
+        { filterComponentId: 'date', field: 'metric_time', parameterName: 'comp_1792123987548_srqf', timeBoundary: 'end', value: '2026-10-10', enabled: true },
+      ], parameters: {}, sort: null, page: 1, pageSize: 100 },
+    }
+    expect(createComponentPreviewQueryContext('1', 'card', [input]).datasetParameters).toEqual({
+      table_ab: { comp_1792123987548_srqf: ['2026-10-09', '2026-10-10'] },
+    })
+    input.lastQueryState!.filters[0].enabled = false
+    expect(createComponentPreviewQueryContext('1', 'card', [input]).datasetParameters).toEqual({
+      table_ab: { comp_1792123987548_srqf: [null, '2026-10-10'] },
+    })
+  })
+
   it('includes the dashboard and component identity with empty runtime filters', () => {
     expect(createComponentPreviewQueryContext('dashboard-1', 'component-1')).toMatchObject({
       dashboardId: 'dashboard-1',

@@ -39,6 +39,7 @@ import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-out
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
 import { isPersistedDatasetReferenceAvailable } from '@/utils/dataset-reference'
+import { assertUniqueDatasetInputAliases } from '@/utils/dataset-inputs'
 import {
   composeExecutionScript,
   effectiveSystemCode,
@@ -517,10 +518,11 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
     // 不再调 /synced-metrics、/synced-dimensions 接口。失败不阻塞添加：
     // 保持草稿状态，保存/查看数据时仍会兜底落库并按旧路径回显。
     persistOnCreate = true
+    const owner = datasetOwner()
     const creationTask = (async () => {
       try {
         const existingDatasets = await datasetApi.list()
-        await persistDatasetInputOnce(created, existingDatasets)
+        await persistDatasetInputOnce(created, existingDatasets, owner)
       } catch (e) {
         state.backend.lastError = `数据集「${created.alias}」自动落库失败：${(e as Error)?.message || '未知错误'}`
         throw e
@@ -608,12 +610,19 @@ function escapeRegExp(s: string) {
  *   - 筛选器绑定里以别名为 key 的作用范围与字段映射
  * （真实后端以 datasetId 为稳定主键；本处按原型按别名引用同步，仅作回显兼容。）
  */
-function renameDataset(id: string, newAlias: string) {
+async function renameDataset(id: string, newAlias: string) {
   const ds = getDataset(id)
   if (!ds) return
   const oldAlias = ds.alias
-  const clean = (newAlias ?? '').trim()
+  const clean = (newAlias ?? '').normalize('NFKC').trim()
   if (!clean || clean === oldAlias) return
+  assertUniqueDatasetInputAliases(state.datasets.map((dataset) => dataset.id === id ? clean : dataset.alias))
+  if (ds.backendDatasetId) {
+    const renamed = { ...ds, alias: clean }
+    const owner = datasetOwner()
+    await persistDatasetInputOnce(renamed, await datasetApi.list(), owner)
+    ds.backendDatasetId = renamed.backendDatasetId
+  }
 
   // 同步 Python 脚本引用
   if (state.pythonSystem.includes(`inputs["${oldAlias}"]`) || state.pythonSystem.includes(`inputs['${oldAlias}']`)) {
@@ -1472,6 +1481,7 @@ function buildPipelineScript(): string | undefined {
 
 /** 本地状态 → 组件级 datasetPipeline（后端契约） */
 export function buildPipeline(): ComponentDatasetPipeline {
+  assertUniqueDatasetInputAliases(state.datasets.map((dataset) => dataset.alias))
   const datasetInputs: DashboardDatasetInput[] = state.datasets.map((ds) => ({
     datasetId: ds.backendDatasetId ?? ds.id,
     inputName: ds.alias,
@@ -1653,8 +1663,12 @@ async function bootstrapDashboard(dashboardId?: string): Promise<boolean> {
 }
 
 type BackendDatasetList = Awaited<ReturnType<typeof datasetApi.list>>
+type DatasetOwner = Pick<typeof state.backend, 'dashboardId' | 'componentId'>
+function datasetOwner(): DatasetOwner {
+  return { dashboardId: state.backend.dashboardId, componentId: state.backend.componentId }
+}
 
-/** 进行中的落库任务按 ds.id 去重：避免「添加即落库」与保存流程并发触发重复 confirmDraft（同名 400）。 */
+/** 同一组件、同一数据集的落库任务共享；不同组件即便复制了前端 ID 也不串任务。 */
 const datasetPersistTasks = new Map<string, Promise<void>>()
 /** 添加 Aloudata 数据集的确认任务：确认弹窗和查询配置都等待这次字段快照落库。 */
 const datasetCreationTasks = new Map<string, Promise<void>>()
@@ -1683,11 +1697,19 @@ function applyDatasetDescriptor(ds: DatasetConfig, descriptor: datasetApi.Datase
 }
 
 /**
- * 落库单个数据集草稿：按名称和来源配置复用已有后端数据集，否则 confirmDraft 创建。
+ * 落库单个数据集草稿：仅在同一仪表盘、组件内按别名和来源复用。
  * 成功后回填 ds.backendDatasetId，后续保存/查看数据直接复用。
  */
-async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendDatasetList): Promise<void> {
-  if (isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) return
+async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendDatasetList, owner: DatasetOwner): Promise<void> {
+  const { dashboardId, componentId } = owner
+  if (!dashboardId || !componentId) throw new Error('请先保存仪表盘并选择组件，再保存数据集')
+  const inComponent = (candidate: BackendDatasetList[number]) =>
+    String(candidate.dashboardId ?? '') === dashboardId && candidate.componentId === componentId
+  const persisted = existingDatasets.find((candidate) => String(candidate.id) === ds.backendDatasetId && inComponent(candidate))
+  if (persisted && isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) {
+    if (persisted.name !== ds.alias) await datasetApi.update(String(persisted.id), { name: ds.alias })
+    return
+  }
   // 旧仪表盘可能仍保存数字 ID，但数据集记录已被清理；不能把“数字格式”当成有效引用。
   ds.backendDatasetId = undefined
   const request = draftRequestForDataset(ds)
@@ -1696,6 +1718,7 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
   // 复制仪表盘或重复点击“查看数据”时，数据集草稿可能已经在后端落库。
   // 先按名称和来源配置复用，避免 confirmDraft 因同名数据集返回 400。
   const existing = existingDatasets.find((candidate) => {
+    if (!inComponent(candidate)) return false
     if (candidate.name !== ds.alias || String(candidate.sourceType ?? '').toUpperCase() !== String(request.sourceType).toUpperCase()) return false
     if (String(candidate.datasourceId ?? '') !== String(request.datasourceId ?? '')) return false
     if (!candidate.sourceConfig) return true
@@ -1718,6 +1741,8 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
   const result = await backend.confirmDatasetDraft({
     ...request,
     name: ds.alias,
+    dashboardId,
+    componentId,
     description: `仪表盘组件输入数据集：${ds.alias}`,
   })
   ds.backendDatasetId = String(result.datasetId)
@@ -1726,20 +1751,24 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
   }
 }
 
-/** 带并发去重的落库入口：同一数据集的重复触发共享同一个任务。 */
-function persistDatasetInputOnce(ds: DatasetConfig, existingDatasets: BackendDatasetList): Promise<void> {
-  const inFlight = datasetPersistTasks.get(ds.id)
+/** 带组件归属的并发去重入口，异步等待期间切换组件不会改变本次落库归属。 */
+function persistDatasetInputOnce(ds: DatasetConfig, existingDatasets: BackendDatasetList, owner = datasetOwner()): Promise<void> {
+  const key = JSON.stringify([owner.dashboardId, owner.componentId, ds.id])
+  const inFlight = datasetPersistTasks.get(key)
   if (inFlight) return inFlight
-  const task = persistDatasetInput(ds, existingDatasets).finally(() => datasetPersistTasks.delete(ds.id))
-  datasetPersistTasks.set(ds.id, task)
+  const task = persistDatasetInput(ds, existingDatasets, owner).finally(() => datasetPersistTasks.delete(key))
+  datasetPersistTasks.set(key, task)
   return task
 }
 
 /** 保存当前卡片配置到后端 Schema */
 async function ensurePersistedDatasetInputs(): Promise<void> {
+  assertUniqueDatasetInputAliases(state.datasets.map((dataset) => dataset.alias))
+  const owner = datasetOwner()
+  const datasets = [...state.datasets]
   const existingDatasets = await datasetApi.list()
-  for (const ds of state.datasets) {
-    await persistDatasetInputOnce(ds, existingDatasets)
+  for (const ds of datasets) {
+    await persistDatasetInputOnce(ds, existingDatasets, owner)
   }
 }
 

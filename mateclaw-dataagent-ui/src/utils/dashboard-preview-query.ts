@@ -25,6 +25,15 @@ function isUnset(value: unknown): boolean {
   return value == null || value === '' || (Array.isArray(value) && value.length === 0)
 }
 
+/** 历史配置可能把同一时间筛选器的两个边界绑定到同一个参数。 */
+export function hasSharedTimeBoundaryParameter(binding: QueryParameterBinding, bindings: QueryParameterBinding[]): boolean {
+  const related = bindings.filter((candidate) => candidate.filterComponentId === binding.filterComponentId
+    && candidate.field === binding.field && candidate.parameterName === binding.parameterName)
+  return ['gte', 'lt', 'lte'].includes(binding.operator)
+    && related.some((candidate) => candidate.operator === 'gte')
+    && related.some((candidate) => ['lt', 'lte'].includes(candidate.operator))
+}
+
 function parameterValue(binding: QueryParameterBinding, value: unknown, expandHalfOpenRange: boolean): unknown {
   if (!isTimeRange(value)) return value
 
@@ -76,7 +85,9 @@ export function buildComponentQueryParameters(
         candidate.filterComponentId === binding.filterComponentId
         && candidate.field === binding.field
         && ['lt', 'lte'].includes(candidate.operator))
-      const value = parameterValue(binding, filter.value, !explicitEndBoundary)
+      const value = hasSharedTimeBoundaryParameter(binding, bindings) && isTimeRange(filter.value)
+        ? [filter.value.start || null, filter.value.end || null]
+        : parameterValue(binding, filter.value, !explicitEndBoundary)
       if (isUnset(value)) continue
       if (Object.hasOwn(parameters, binding.parameterName)) {
         if (!equalParameterValue(parameters[binding.parameterName], value)) {

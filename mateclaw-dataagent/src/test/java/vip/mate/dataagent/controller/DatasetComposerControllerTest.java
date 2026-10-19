@@ -24,6 +24,31 @@ import static org.mockito.Mockito.*;
 
 class DatasetComposerControllerTest {
     @Test
+    void confirmForwardsPersistedDashboardAndComponentIdentity() {
+        DatasetManageService datasets = mock(DatasetManageService.class);
+        vip.mate.dataagent.dto.DatasetVO saved = new vip.mate.dataagent.dto.DatasetVO();
+        saved.setId(101L);
+        when(datasets.createDataset(any())).thenReturn(saved);
+        when(datasets.getInputDescriptor(any(), eq(101L), eq("table_ab"))).thenReturn(
+                new vip.mate.dataagent.dataset.DatasetInputDescriptor(101L, "table_ab",
+                        vip.mate.dataagent.dataset.DatasetSourceType.FILE, List.of(), 0L, Map.of(), null));
+        DatasetComposerController controller = new DatasetComposerController(datasets,
+                mock(SqlValidationService.class), new ObjectMapper(), mock(WorkspaceGuard.class),
+                mock(DatasourceMapper.class), new HttpApiRequestPolicy(true), mock(AloudataService.class),
+                mock(HttpApiDatasetAdapter.class), mock(FileDatasetAdapter.class), mock(AloudataAnalysisViewAdapter.class));
+        DatasetComposerController.ConfirmRequest request = new DatasetComposerController.ConfirmRequest();
+        request.setName("table_ab"); request.setDashboardId(20L); request.setComponentId("card-1");
+        request.setSourceType("FILE"); request.setSourceConfig(Map.of("objectId", "file-test", "format", "CSV"));
+
+        controller.confirm(request);
+
+        ArgumentCaptor<vip.mate.dataagent.dto.DatasetCreateRequest> create = ArgumentCaptor.forClass(vip.mate.dataagent.dto.DatasetCreateRequest.class);
+        verify(datasets).createDataset(create.capture());
+        assertEquals(20L, create.getValue().getDashboardId());
+        assertEquals("card-1", create.getValue().getComponentId());
+    }
+
+    @Test
     void aloudataMetricsDraftPreviewDoesNotReturnBusinessFailureAsEmptySuccess() throws Exception {
         AloudataService aloudata = mock(AloudataService.class);
         AloudataMetricQueryResponse response = new ObjectMapper().readValue(

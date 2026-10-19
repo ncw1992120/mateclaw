@@ -12,6 +12,10 @@ public class DatasetCreateRequest {
 
     private String name;
 
+    private Long dashboardId;
+
+    private String componentId;
+
     private String description;
 
     private String datasourceId;

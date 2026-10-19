@@ -395,6 +395,7 @@ class DatasetCatalogServiceTest {
         return new DatasetManageServiceImpl(datasetMapper, datasetFieldMapper, datasetDataMapper,
                 datasourceMapper, datasourceTableMapper, datasourceColumnMapper,
                 aloudataMetricMapper, aloudataDimensionMapper,
-                new ObjectMapper(), workspaceGuard, datasourceManageService);
+                new ObjectMapper(), workspaceGuard, datasourceManageService,
+                mock(vip.mate.dataagent.repository.InsightDashboardMapper.class));
     }
 }

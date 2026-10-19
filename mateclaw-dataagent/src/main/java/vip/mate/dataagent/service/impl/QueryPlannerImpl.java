@@ -136,6 +136,19 @@ public class QueryPlannerImpl implements QueryPlanner {
                 continue; // 参数未提供 = 不过滤
             }
             Object value = runtimeParameters.get(binding.parameterName);
+            // 兼容历史时间筛选配置：gte/lt 使用同一参数名时，以二元组传递两个边界，
+            // 每条绑定只读取自己的边界；null 表示本次关闭了该边界。
+            if (value instanceof List<?> range && range.size() == 2
+                    && Set.of("gte", "lt", "lte").contains(binding.operator)
+                    && bindings.stream().anyMatch(candidate ->
+                        binding.filterComponentId.equals(candidate.filterComponentId)
+                                && binding.field.equals(candidate.field)
+                                && binding.parameterName.equals(candidate.parameterName)
+                                && (binding.operator.equals("gte")
+                                    ? Set.of("lt", "lte").contains(candidate.operator)
+                                    : candidate.operator.equals("gte")))) {
+                value = range.get(binding.operator.equals("gte") ? 0 : 1);
+            }
             if (isEmptySelection(value)) {
                 continue; // 清空 / null / 空串 = 不过滤
             }

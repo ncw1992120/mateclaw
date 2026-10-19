@@ -365,6 +365,8 @@ public class DatasetComposerController {
         validate(request, false);
         DatasetCreateRequest create = new DatasetCreateRequest();
         create.setName(request.name);
+        create.setDashboardId(request.dashboardId);
+        create.setComponentId(request.componentId);
         create.setDescription(request.description);
         create.setDatasourceId(request.getDatasourceId());
         create.setSourceDefinition(toDefinition(request));
@@ -438,7 +440,12 @@ public class DatasetComposerController {
         private Map<String, Object> parameters;
     }
     @Data
-    public static class ConfirmRequest extends DraftRequest { private String name; private String description; }
+    public static class ConfirmRequest extends DraftRequest {
+        private String name;
+        private String description;
+        private Long dashboardId;
+        private String componentId;
+    }
 
     @Data
     public static class ApiDefinitionRequest {

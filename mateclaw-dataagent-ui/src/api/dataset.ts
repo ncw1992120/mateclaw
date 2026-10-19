@@ -117,7 +117,7 @@ export function previewDraft(request: DatasetComposerDraftRequest, requestOption
   )
 }
 
-export function confirmDraft(request: DatasetComposerDraftRequest & { name: string; description?: string }) {
+export function confirmDraft(request: DatasetComposerDraftRequest & { name: string; description?: string; dashboardId?: string; componentId?: string }) {
   return api.post<{ datasetId: string; descriptor: DatasetInputDescriptor }>(
     '/v1/dataset-composer/drafts/confirm', request,
   )

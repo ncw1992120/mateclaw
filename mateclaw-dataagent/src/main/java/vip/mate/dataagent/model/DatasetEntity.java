@@ -60,6 +60,11 @@ public class DatasetEntity {
     @TableField("workspace_id")
     private Long workspaceId;
 
+    /** 组件输入的归属；公共数据集为空。组件 ID 来自已持久化的仪表盘 Schema。 */
+    private Long dashboardId;
+
+    private String componentId;
+
     /** 所有者用户 ID */
     @TableField("owner_id")
     private Long ownerId;

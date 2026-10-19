@@ -93,7 +93,7 @@ export function withPipeline(component: InsightComponent, pipeline: ComponentDat
  * 注意：需要后端已配置对应类型的数据源（JDBC/Aloudata/API/File 的具体凭据）。
  */
 export async function confirmDatasetDraft(
-  req: datasetApi.DatasetComposerDraftRequest & { name: string; description?: string },
+  req: datasetApi.DatasetComposerDraftRequest & { name: string; description?: string; dashboardId?: string; componentId?: string },
 ): Promise<{ datasetId: string }> {
   const res = (await datasetApi.confirmDraft(req)) as unknown as { datasetId: string }
   return res

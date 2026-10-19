@@ -1,4 +1,5 @@
 import type { DashboardDatasetInput, QueryContext } from '@/types'
+import { hasSharedTimeBoundaryParameter } from '@/utils/dashboard-preview-query'
 
 type SavedInputFilter = NonNullable<DashboardDatasetInput['lastQueryState']>['filters'][number]
 
@@ -31,12 +32,17 @@ function parametersFromLastInputQueries(inputs: DashboardDatasetInput[]): Record
   for (const input of inputs) {
     const parameters: Record<string, unknown> = {}
     const savedFilters = input.lastQueryState?.filters ?? []
-    for (const binding of input.queryConfig?.parameterBindings ?? []) {
+    const bindings = input.queryConfig?.parameterBindings ?? []
+    for (const binding of bindings) {
       const rows = savedFilters.filter((row: SavedInputFilter) =>
         row.filterComponentId === binding.filterComponentId && row.field === binding.field,
       )
       const start = rows.find((row) => row.timeBoundary === 'start' && row.enabled && hasValue(row.value))
       const end = rows.find((row) => row.timeBoundary === 'end' && row.enabled && hasValue(row.value))
+      if (hasSharedTimeBoundaryParameter(binding, bindings)) {
+        if (start || end) setParameter(parameters, binding.parameterName, [start?.value ?? null, end?.value ?? null])
+        continue
+      }
       const explicitEnd = input.queryConfig?.parameterBindings.some((candidate) =>
         candidate.filterComponentId === binding.filterComponentId
         && candidate.field === binding.field

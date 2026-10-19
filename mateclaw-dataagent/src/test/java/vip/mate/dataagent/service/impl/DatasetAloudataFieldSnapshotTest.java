@@ -40,7 +40,8 @@ class DatasetAloudataFieldSnapshotTest {
         DatasetManageServiceImpl service = new DatasetManageServiceImpl(
                 datasetMapper, datasetFieldMapper, datasetDataMapper, datasourceMapper,
                 datasourceTableMapper, datasourceColumnMapper, aloudataMetricMapper,
-                aloudataDimensionMapper, new ObjectMapper(), workspaceGuard, datasourceManageService);
+                aloudataDimensionMapper, new ObjectMapper(), workspaceGuard, datasourceManageService,
+                mock(InsightDashboardMapper.class));
         DatasourceEntity datasource = new DatasourceEntity();
         datasource.setId(9L);
         datasource.setName("Aloudata");

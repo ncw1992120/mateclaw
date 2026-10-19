@@ -24,12 +24,15 @@ vi.mock('@/api/semantic-model', () => ({
   listAloudataDimensions: mocks.listAloudataDimensions,
 }))
 
-import { useInsight, type DatasetConfig } from '../useInsight'
+import { buildPipeline, useInsight, type DatasetConfig } from '../useInsight'
 
 const { state, openQueryConfig } = useInsight()
 
 beforeEach(() => {
+  vi.restoreAllMocks()
   state.datasets.splice(0, state.datasets.length)
+  state.backend.dashboardId = '20'
+  state.backend.componentId = 'card-1'
   mocks.listDatasets.mockReset().mockResolvedValue([])
   mocks.confirmDatasetDraft.mockReset().mockResolvedValue({
     datasetId: '103',
@@ -51,6 +54,33 @@ beforeEach(() => {
 })
 
 describe('Aloudata 数据集展示名取数', () => {
+  it('不会复用另一个组件的同名数据集，创建时提交当前组件归属', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1792000000000)
+    mocks.listDatasets.mockResolvedValue([{ id: '999', name: 'table_1792000000000',
+      dashboardId: '20', componentId: 'other-card', sourceType: 'ALOUDATA_METRICS', datasourceId: '9' }])
+    state.ui.editingDatasetId = ''
+    state.ui.aloudata = { visible: true, mode: 'metric-dim', datasourceId: '9', metricView: '',
+      metrics: ['met_sales'], dims: ['dim_shop'], displayNames: {} }
+
+    await useInsight().confirmAloudata()
+
+    expect(mocks.confirmDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'table_1792000000000', dashboardId: '20', componentId: 'card-1',
+    }))
+    expect(state.datasets[0].backendDatasetId).toBe('103')
+  })
+
+  it('同一组件中重命名为已有别名时立即阻止，Python 编排也使用同一校验', async () => {
+    const base = { sourceType: 'jdbc' as const, sourceLabel: 'JDBC', fields: [], filters: [] }
+    state.datasets.push({ ...base, id: 'first', alias: 'table_ab' }, { ...base, id: 'second', alias: 'table_wd' })
+
+    await expect(useInsight().renameDataset('second', 'table_ab')).rejects.toThrow('别名重复')
+    expect(state.datasets[1].alias).toBe('table_wd')
+    state.datasets[1].alias = 'table_ab'
+    expect(() => buildPipeline()).toThrow('别名重复')
+    expect(mocks.confirmDatasetDraft).not.toHaveBeenCalled()
+  })
+
   it('点击查询配置后先显示弹窗，再异步同步字段展示名', async () => {
     const dataset: DatasetConfig = {
       id: 'dataset-open-first',
@@ -211,6 +241,7 @@ describe('Aloudata 数据集展示名取数', () => {
     await Promise.resolve()
     await Promise.resolve()
     expect(mocks.confirmDatasetDraft).toHaveBeenCalledWith(expect.objectContaining({
+      dashboardId: '20', componentId: 'card-1',
       sourceConfig: { metrics: ['met_sales'], dimensions: ['dim_shop'], displayNames: { dim_shop: '门店名称', met_sales: '销售额' } },
     }))
 

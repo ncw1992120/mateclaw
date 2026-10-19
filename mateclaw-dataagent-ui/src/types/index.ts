@@ -681,6 +681,8 @@ export const THINKING_LEVELS = [
 export interface Dataset {
   id: string
   name: string
+  dashboardId?: string
+  componentId?: string
   description: string
   datasourceId: string
   datasourceName: string

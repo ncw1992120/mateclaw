@@ -15,6 +15,10 @@ public class DatasetVO {
     /** 数据集名称 */
     private String name;
 
+    private Long dashboardId;
+
+    private String componentId;
+
     /** 描述 */
     private String description;
 

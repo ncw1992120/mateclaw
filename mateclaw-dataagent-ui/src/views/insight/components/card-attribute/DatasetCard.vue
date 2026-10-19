@@ -71,6 +71,7 @@ async function handleOpenQueryConfig(): Promise<void> {
 
 /* ---- 别名内联编辑 ---- */
 const editingAlias = ref(false)
+const savingAlias = ref(false)
 const aliasDraft = ref('')
 const aliasInputRef = ref<any>(null)
 
@@ -80,10 +81,19 @@ function startEditAlias() {
   nextTick(() => aliasInputRef.value?.focus())
 }
 
-function commitAlias() {
+async function commitAlias() {
   if (!editingAlias.value) return
-  renameDataset(props.dataset.id, aliasDraft.value)
-  editingAlias.value = false
+  if (savingAlias.value) return
+  savingAlias.value = true
+  try {
+    await renameDataset(props.dataset.id, aliasDraft.value)
+    editingAlias.value = false
+  } catch (error) {
+    ElMessage.error((error as Error)?.message || '保存数据集别名失败')
+    nextTick(() => aliasInputRef.value?.focus())
+  } finally {
+    savingAlias.value = false
+  }
 }
 
 function cancelEditAlias() {

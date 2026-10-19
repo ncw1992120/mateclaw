@@ -48,6 +48,7 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     private final ObjectMapper objectMapper;
     private final WorkspaceGuard workspaceGuard;
     private final DatasourceManageService datasourceManageService;
+    private final InsightDashboardMapper insightDashboardMapper;
     private StrategyReadoutDemoDatasetFixtures strategyReadoutFixtures;
 
     @Autowired(required = false)
@@ -144,7 +145,9 @@ public class DatasetManageServiceImpl implements DatasetManageService {
     public DatasetVO createDataset(DatasetCreateRequest request) {
         DatasetSourceDefinition typedDefinition = request.getSourceDefinition();
         String normalizedName = normalizeDatasetName(request.getName());
-        ensureUniqueDatasetName(normalizedName, workspaceGuard.currentWorkspaceId(), null);
+        validateComponentScope(request.getDashboardId(), request.getComponentId());
+        ensureUniqueDatasetName(normalizedName, workspaceGuard.currentWorkspaceId(),
+                request.getDashboardId(), request.getComponentId(), null);
         // Keep the nullable branch boxed: FILE datasets intentionally have no datasource id.
         Long datasourceIdLong = typedDefinition == null
                 ? Long.valueOf(request.getDatasourceId())
@@ -162,6 +165,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         }
         DatasetEntity entity = new DatasetEntity();
         entity.setName(normalizedName);
+        entity.setDashboardId(request.getDashboardId());
+        entity.setComponentId(request.getComponentId());
         entity.setDescription(request.getDescription());
         entity.setDatasourceId(datasourceIdLong);
         entity.setSourceType(typedDefinition == null ? DatasetSourceType.JDBC_TABLE.name() : typedDefinition.sourceType());
@@ -349,14 +354,39 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         return normalized;
     }
 
-    private void ensureUniqueDatasetName(String name, Long workspaceId, Long excludeId) {
+    private void validateComponentScope(Long dashboardId, String componentId) {
+        if (dashboardId == null && componentId == null) return;
+        if (dashboardId == null || componentId == null || componentId.isBlank()
+                || !componentId.equals(componentId.trim()) || componentId.length() > 128) {
+            throw new IllegalArgumentException("组件数据集必须同时提供仪表盘 ID 和组件 ID");
+        }
+        InsightDashboardEntity dashboard = insightDashboardMapper.selectById(dashboardId);
+        if (dashboard == null || Objects.equals(dashboard.getDeleted(), 1)) {
+            throw new BusinessException(404, "仪表盘不存在: " + dashboardId);
+        }
+        if (!Objects.equals(dashboard.getWorkspaceId(), workspaceGuard.currentWorkspaceId())) {
+            throw new BusinessException(403, "无权访问该仪表盘");
+        }
+        workspaceGuard.requireResourceOwner(dashboard.getOwnerId());
+    }
+
+    private void ensureUniqueDatasetName(String name, Long workspaceId, Long dashboardId,
+                                         String componentId, Long excludeId) {
         LambdaQueryWrapper<DatasetEntity> wrapper = new LambdaQueryWrapper<DatasetEntity>()
                 .eq(DatasetEntity::getWorkspaceId, workspaceId)
                 .eq(DatasetEntity::getName, name)
                 .eq(DatasetEntity::getDeleted, 0);
+        if (componentId == null) {
+            wrapper.isNull(DatasetEntity::getDashboardId).isNull(DatasetEntity::getComponentId);
+        } else {
+            wrapper.eq(DatasetEntity::getDashboardId, dashboardId)
+                    .eq(DatasetEntity::getComponentId, componentId);
+        }
         if (excludeId != null) wrapper.ne(DatasetEntity::getId, excludeId);
         if (datasetMapper.selectCount(wrapper) > 0) {
-            throw new IllegalArgumentException("同一工作区内数据集名称已存在: " + name);
+            throw new IllegalArgumentException(componentId == null
+                    ? "同一工作区内数据集名称已存在: " + name
+                    : "同一组件内数据集别名已存在: " + name);
         }
     }
 
@@ -366,7 +396,8 @@ public class DatasetManageServiceImpl implements DatasetManageService {
         DatasetEntity entity = datasetMapper.selectById(id);
         if (request.getName() != null) {
             String normalizedName = normalizeDatasetName(request.getName());
-            ensureUniqueDatasetName(normalizedName, entity.getWorkspaceId(), id);
+            ensureUniqueDatasetName(normalizedName, entity.getWorkspaceId(),
+                    entity.getDashboardId(), entity.getComponentId(), id);
             entity.setName(normalizedName);
         }
         if (request.getDescription() != null) {

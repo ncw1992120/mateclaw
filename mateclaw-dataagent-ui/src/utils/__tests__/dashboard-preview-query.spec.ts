@@ -93,6 +93,17 @@ describe('buildComponentQueryParameters', () => {
     })
   })
 
+  it('supports legacy start and end bindings sharing one parameter without a false conflict', () => {
+    const card = component([{ datasetId: '1', inputName: 'metrics', queryConfig: { parameterBindings: [
+      { filterComponentId: 'filter-date', parameterName: 'date_range', field: 'metric_time', operator: 'gte' },
+      { filterComponentId: 'filter-date', parameterName: 'date_range', field: 'metric_time', operator: 'lt' },
+    ] } }])
+    expect(buildComponentQueryParameters(card, state({ 'filter-date': {
+      field: 'metric_time', value: { preset: 'custom', start: '2026-10-09', end: '2026-10-10' },
+      scope: 'global', targetComponentIds: [],
+    } }))).toEqual({ date_range: ['2026-10-09', '2026-10-10'] })
+  })
+
   it('rejects conflicting filter values mapped to the same parameter name', () => {
     const card = component([{ datasetId: '1', inputName: 'input_a', queryConfig: { parameterBindings: [
       { filterComponentId: 'filter-a', parameterName: 'region', field: 'region_a', operator: 'eq' },

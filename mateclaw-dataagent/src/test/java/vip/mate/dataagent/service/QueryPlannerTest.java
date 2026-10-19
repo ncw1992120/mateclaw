@@ -187,6 +187,20 @@ class QueryPlannerTest {
     }
 
     @Test
+    void legacyTimeBoundariesSharingOneParameterUseTheirOwnEndpoint() throws Exception {
+        JsonNode component = component(QUERY_CONFIG_INPUT.replace("\"parameterName\": \"end_date\"", "\"parameterName\": \"start_date\""));
+        DatasetQueryPlanDTO plan = planner.plan(component, input(component),
+                context(Map.of("start_date", List.of("2026-10-09", "2026-10-10"))), false);
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-10-09"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-10-10"));
+        DatasetQueryPlanDTO endOnly = planner.plan(component, input(component),
+                context(Map.of("start_date", java.util.Arrays.asList(null, "2026-10-10"))), false);
+        assertThat(endOnly.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-10-10"));
+    }
+
+    @Test
     @DisplayName("单选 eq 与数值范围、文本搜索按各自运算符下推")
     void singleSelectNumericRangeAndContains() throws Exception {
         JsonNode component = component(QUERY_CONFIG_INPUT.replace("\"operator\": \"in\"", "\"operator\": \"eq\"")
