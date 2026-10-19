@@ -1980,6 +1980,7 @@ export default {
     aiAnalysis: {
       generate: 'AI分析',
       generating: '正在分析当前数据…',
+      waitingForComponents: '等待 {components} 组件数据返回…',
       dataSection: '查询概要',
       aiSection: 'AI 分析',
       dataSectionLabel: '数据概览',

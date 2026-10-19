@@ -89,7 +89,7 @@ async function mountPreview() {
       stubs: {
         DashboardCanvas: {
           name: 'DashboardCanvas',
-          props: ['components', 'componentDataMap', 'previewFillWidth'],
+          props: ['components', 'componentDataMap', 'previewFillWidth', 'aiAnalysisGeneratingIds', 'aiAnalysisWaitingComponentTitles'],
           emits: ['filter-change', 'ai-analysis-generate', 'table-view-change'],
           template: '<div data-test="canvas" :data-preview-fill-width="previewFillWidth">{{ JSON.stringify(componentDataMap) }}</div>',
         },
@@ -120,7 +120,7 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     mocks.generateComponentAnalysis.mockReset().mockResolvedValue('## 趋势分析\n\n数据总体上升。')
     mocks.previewQueryPlan.mockResolvedValue({ rows: [{ region: '华东' }], rowCount: 1 })
   })
-  afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.clearAllMocks() })
+  afterEach(() => { wrapper?.unmount(); wrapper = undefined; vi.useRealTimers(); vi.clearAllMocks() })
 
   it('详情请求未完成时展示预览加载态，不提前显示暂无组件', async () => {
     const pendingDashboard = deferred<void>()
@@ -315,6 +315,130 @@ describe('DashboardPreviewView 阶段式并行加载', () => {
     expect(mocks.generateComponentAnalysis).toHaveBeenCalledWith(
       'dashboard-1', 'analysis-manual', expect.objectContaining({ snapshot: expect.any(Object) }), expect.any(AbortSignal),
     )
+  })
+
+  it('逐项更新等待名单，只有当前可见组件返回后才分析，不等待隐藏页签', async () => {
+    const directQuery = deferred<any>()
+    mocks.preview.mockReturnValue(directQuery.promise)
+    const visibleQuery = deferred<any>()
+    const hiddenQuery = deferred<any>()
+    mocks.previewQueryPlan.mockImplementation(({ datasetId }: any) => datasetId === '101' ? visibleQuery.promise : hiddenQuery.promise)
+    const aiComponent = { id: 'analysis-1', type: 'aiAnalysis', title: '分析', config: { autoGenerate: true } }
+    const hidden = { ...pipelineComponent, id: 'hidden-table', title: '隐藏表格', config: { datasetPipeline: {
+      datasetInputs: [{ datasetId: '102', inputName: 'hidden' }],
+    } } }
+    const combo = { id: 'combo', type: 'combination', title: '组合', containerConfig: {
+      activeTab: 'visible', tabs: [
+        { id: 'visible', title: '当前', children: [pipelineComponent] },
+        { id: 'hidden', title: '隐藏', children: [hidden] },
+      ],
+    } }
+    mocks.currentDashboard.value = { id: 'dashboard-1', schemaJson: schemaFor([directComponent, combo, aiComponent]) }
+    wrapper = await mountPreview()
+    await flushPromises()
+    const canvas = wrapper.findComponent({ name: 'DashboardCanvas' })
+    expect(canvas.props('aiAnalysisGeneratingIds').has('analysis-1')).toBe(true)
+    expect(canvas.props('aiAnalysisWaitingComponentTitles')).toEqual(['直连表格', '管线表格'])
+    directQuery.resolve([])
+    await flushPromises()
+    expect(canvas.props('aiAnalysisWaitingComponentTitles')).toEqual(['管线表格'])
+
+    visibleQuery.resolve({ rows: [{ region: '华东' }], rowCount: 1 })
+    await flushPromises()
+    expect(canvas.props('aiAnalysisWaitingComponentTitles')).toEqual([])
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    expect(mocks.generateComponentAnalysis.mock.calls[0][2].snapshot.components.map((c: any) => c.componentId)).toEqual(['legacy-bound-table', 'dataset-table'])
+    hiddenQuery.resolve({ rows: [], rowCount: 0 })
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+  })
+
+  it('筛选切换立即取消旧分析，等待最新查询，拒绝晚到的旧结果', async () => {
+    vi.useFakeTimers()
+    const oldAnalysis = deferred<string>()
+    const newAnalysis = deferred<string>()
+    const refreshedQuery = deferred<any>()
+    mocks.generateComponentAnalysis.mockReturnValueOnce(oldAnalysis.promise).mockReturnValueOnce(newAnalysis.promise)
+    mocks.preview.mockResolvedValue([{ componentId: directComponent.id, renderType: 'table', table: { columns: ['region'], rows: [['旧数据']] } }])
+    const filter = { id: 'filter-region', type: 'filter', config: { field: 'region' } }
+    const aiComponent = { id: 'analysis-1', type: 'aiAnalysis', title: '分析', config: { autoGenerate: true } }
+    mocks.currentDashboard.value = { id: 'dashboard-1', schemaJson: schemaFor([filter, directComponent, aiComponent]) }
+    wrapper = await mountPreview()
+    await flushPromises()
+    const oldSignal = mocks.generateComponentAnalysis.mock.calls[0][3] as AbortSignal
+    mocks.preview.mockReturnValueOnce(refreshedQuery.promise)
+    const canvas = wrapper.findComponent({ name: 'DashboardCanvas' })
+    canvas.vm.$emit('filter-change', { componentId: filter.id, field: 'region', value: '华北' })
+    await flushPromises()
+    expect(oldSignal.aborted).toBe(true)
+    expect(canvas.props('aiAnalysisGeneratingIds').has('analysis-1')).toBe(true)
+    expect(canvas.props('aiAnalysisWaitingComponentTitles')).toEqual(['直连表格'])
+    await vi.advanceTimersByTimeAsync(300)
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    oldAnalysis.resolve('旧分析不应出现')
+    await flushPromises()
+    expect(canvasDataMap(wrapper)['analysis-1'].aiAnalysis.analysisSection).not.toContain('旧分析')
+    refreshedQuery.resolve([{ componentId: directComponent.id, renderType: 'table', table: { columns: ['region'], rows: [['华北']] } }])
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(2)
+    expect(mocks.generateComponentAnalysis.mock.calls[1][2].snapshot.components[0].table.rows).toEqual([['华北']])
+    newAnalysis.resolve('最新分析')
+    await flushPromises()
+    expect(canvasDataMap(wrapper)['analysis-1'].aiAnalysis.analysisSection).toBe('最新分析')
+    expect(canvas.props('aiAnalysisGeneratingIds').has('analysis-1')).toBe(false)
+  })
+
+  it('组合页签切换取消旧分析，用新页签数据重新分析', async () => {
+    const oldAnalysis = deferred<string>()
+    mocks.generateComponentAnalysis.mockReturnValueOnce(oldAnalysis.promise).mockResolvedValue('新页签分析')
+    const aiComponent = { id: 'analysis-1', type: 'aiAnalysis', title: '分析', config: { autoGenerate: true } }
+    const combo = { id: 'combo', type: 'combination', title: '组合', containerConfig: {
+      activeTab: 'a', tabs: [
+        { id: 'a', title: 'A', children: [{ id: 'kpi-a', type: 'kpi', title: 'A指标' }] },
+        { id: 'b', title: 'B', children: [{ id: 'kpi-b', type: 'kpi', title: 'B指标' }] },
+      ],
+    } }
+    mocks.currentDashboard.value = { id: 'dashboard-1', schemaJson: schemaFor([combo, aiComponent]) }
+    wrapper = await mountPreview()
+    await flushPromises()
+    const signal = mocks.generateComponentAnalysis.mock.calls[0][3] as AbortSignal
+    const canvas = wrapper.findComponent({ name: 'DashboardCanvas' })
+    canvas.props('components')[0].containerConfig.activeTab = 'b'
+    await flushPromises()
+    expect(signal.aborted).toBe(true)
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(2)
+    expect(mocks.generateComponentAnalysis.mock.calls[1][2].snapshot.components.map((c: any) => c.componentId)).toEqual(['kpi-b'])
+    oldAnalysis.resolve('旧页签分析')
+    await flushPromises()
+    expect(canvasDataMap(wrapper)['analysis-1'].aiAnalysis.analysisSection).toBe('新页签分析')
+  })
+
+  it('手动点击后的等待任务跟随新筛选，旧查询晚到也不能覆盖最新分析', async () => {
+    vi.useFakeTimers()
+    const oldQuery = deferred<any>()
+    const newQuery = deferred<any>()
+    mocks.preview.mockReturnValueOnce(oldQuery.promise).mockReturnValueOnce(newQuery.promise)
+    const filter = { id: 'filter-region', type: 'filter', config: { field: 'region' } }
+    const aiComponent = { id: 'analysis-1', type: 'aiAnalysis', title: '分析', config: { autoGenerate: false } }
+    mocks.currentDashboard.value = { id: 'dashboard-1', schemaJson: schemaFor([filter, directComponent, aiComponent]) }
+    wrapper = await mountPreview()
+    await flushPromises()
+    const canvas = wrapper.findComponent({ name: 'DashboardCanvas' })
+    expect(canvas.props('aiAnalysisGeneratingIds').has('analysis-1')).toBe(false)
+    canvas.vm.$emit('ai-analysis-generate', 'analysis-1')
+    canvas.vm.$emit('filter-change', { componentId: filter.id, field: 'region', value: '华北' })
+    await flushPromises()
+    expect(canvas.props('aiAnalysisGeneratingIds').has('analysis-1')).toBe(true)
+    await vi.advanceTimersByTimeAsync(300)
+    newQuery.resolve([{ componentId: directComponent.id, renderType: 'table', table: { columns: ['region'], rows: [['华北']] } }])
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    expect(mocks.generateComponentAnalysis.mock.calls[0][2].snapshot.components[0].table.rows).toEqual([['华北']])
+    oldQuery.resolve([{ componentId: directComponent.id, renderType: 'table', table: { columns: ['region'], rows: [['过期']] } }])
+    await flushPromises()
+    expect(mocks.generateComponentAnalysis).toHaveBeenCalledTimes(1)
+    expect(canvasDataMap(wrapper)[directComponent.id].table.rows).toEqual([['华北']])
   })
 
   it('无数据集管线时不请求数据集列表（不做物化探测）', async () => {

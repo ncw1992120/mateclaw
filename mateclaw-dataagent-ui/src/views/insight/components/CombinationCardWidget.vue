@@ -243,6 +243,7 @@
             :show-title="false"
             :dashboard-theme="dashboardTheme"
             :generating="aiAnalysisGeneratingIds?.has(child.id)"
+            :waiting-component-titles="aiAnalysisWaitingComponentTitles"
             @generate="(id) => emit('ai-analysis-generate', id)"
           />
           <CombinationCardWidget
@@ -250,6 +251,7 @@
             :component="toWidgetComponent(child)"
             :component-data-map="componentDataMap"
             :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
+            :ai-analysis-waiting-component-titles="aiAnalysisWaitingComponentTitles"
             :runtime-filter-state="runtimeFilterState"
             :editable="editable"
             :container-resizing="resizingId === child.id"
@@ -356,6 +358,7 @@ const props = withDefaults(
     component: InsightComponent
     componentDataMap?: Record<string, InsightComponentData>
     aiAnalysisGeneratingIds?: Set<string>
+    aiAnalysisWaitingComponentTitles?: string[]
     runtimeFilterState?: DashboardRuntimeFilterState
     /** 容器本身不展示样例数据；内部子组件按自身类型决定，保留字段兼容旧调用方。 */
     sampleMode?: boolean

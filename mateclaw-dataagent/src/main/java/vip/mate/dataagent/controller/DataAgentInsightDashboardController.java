@@ -291,6 +291,15 @@ public class DataAgentInsightDashboardController {
         return R.ok(reportService.generateComponentAnalysis(id, componentId, request));
     }
 
+    @PostMapping("/{id}/components/{componentId}/ai-analysis/{requestId}/cancel")
+    @RequireWorkspaceRole(DataAgentConstants.WORKSPACE_ROLE_VIEWER)
+    @Operation(summary = "取消指定轮次的组件 AI 分析")
+    public R<Void> cancelComponentAnalysis(@PathVariable Long id, @PathVariable String componentId,
+                                          @PathVariable String requestId) {
+        reportService.cancelComponentAnalysis(id, componentId, requestId);
+        return R.ok();
+    }
+
     /**
      * 获取已生成的 AI 报告
      */

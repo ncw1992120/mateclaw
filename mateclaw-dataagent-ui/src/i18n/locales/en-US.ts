@@ -1942,6 +1942,7 @@ export default {
     aiAnalysis: {
       generate: 'Generate Analysis',
       generating: 'Analyzing current data...',
+      waitingForComponents: 'Waiting for data from {components}...',
       dataSection: 'Query Summary',
       aiSection: 'AI Analysis',
       dataSectionLabel: 'Data Overview',

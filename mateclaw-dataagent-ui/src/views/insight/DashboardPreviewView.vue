@@ -136,6 +136,7 @@
         :dashboard-theme="dashboardTheme"
         :canvas-background="'var(--dashboard-preview-background)'"
         :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
+        :ai-analysis-waiting-component-titles="aiAnalysisWaitingComponentTitles"
         @filter-change="handleFilterChange"
         @time-filter-change="handleTimeFilterChange"
         @component-time-range-change="handleComponentTimeRangeChange"
@@ -256,10 +257,13 @@ const componentTimeRanges = reactive<Record<string, TimeRangeValue>>({})
 /** 正在生成 AI 分析的组件 ID 集合 */
 const aiAnalysisGeneratingIds = reactive<Set<string>>(new Set())
 const previewDataReady = ref(false)
+/** 取数尚在准备或防抖阶段；派发后按当前可见组件的 queryStatus 判断就绪。 */
 const dataRefreshPending = ref(false)
 let autoAnalysisScheduleSequence = 0
 let aiAnalysisRequestSequence = 0
-const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController; waitingForData: boolean }>()
+const aiAnalysisRequests = new Map<string, { sequence: number; controller: AbortController }>()
+/** 手动点击发起的本轮意图，切换数据期间保留，完成或离开可见范围后清除。 */
+const manualAnalysisIntents = new Set<string>()
 const lastAutoAnalysisKeys = new Map<string, string>()
 
 /** 报告生成中状态 */
@@ -511,6 +515,7 @@ async function loadDashboard(): Promise<void> {
   for (const request of aiAnalysisRequests.values()) request.controller.abort()
   aiAnalysisRequests.clear()
   aiAnalysisGeneratingIds.clear()
+  manualAnalysisIntents.clear()
   lastAutoAnalysisKeys.clear()
   previewDataReady.value = false
   dataRefreshPending.value = true
@@ -573,19 +578,21 @@ async function loadDashboard(): Promise<void> {
     // 直连组件查询、Python 绑定执行、数据集管线三个通道互不依赖，并行启动；
     // 各通道内部会把单组件的 loading/success/empty/error/timeout 写入 componentDataMap，
     // 单通道失败只影响其目标组件，不会拖垮其他通道。
-    const channelResults = await Promise.allSettled([
+    const channels = [
       reloadComponentData(filterContext.value),
       reloadScriptBindings(filterContext.value),
       refreshPipelineComponents(getRuntimeFilterState(), true),
-    ])
+    ]
+    // 三个通道已同步标记各自的 loading，分析只等待当前可见组件。
+    dataRefreshPending.value = false
+    previewDataReady.value = true
+    const channelResults = await Promise.allSettled(channels)
     for (const result of channelResults) {
       if (result.status === 'rejected') {
         // 防御兜底：通道本身抛出未捕获异常时记录，不让页面停留在整体加载态
         console.error('[preview] 数据通道执行失败', result.reason)
       }
     }
-    dataRefreshPending.value = false
-    previewDataReady.value = true
     // 报告读取是独立后台任务，不阻塞组件数据渲染路径；卸载后不回写状态
     void loadReport()
   } else {
@@ -1178,20 +1185,22 @@ async function reloadScopedComponentData(context: DashboardFilterContext): Promi
 /** 防抖重载（筛选频繁变化时避免过多请求） */
 function scheduleReloadWithFilters(context: DashboardFilterContext, refreshAllPipelines = false): void {
   dataRefreshPending.value = true
+  invalidatePendingAiAnalysis()
+  scheduleAutoAiAnalysis()
   if (filterReloadTimer) {
     clearTimeout(filterReloadTimer)
   }
   filterReloadTimer = setTimeout(() => {
+    filterReloadTimer = null
     if (previewDisposed) return
     const state = getRuntimeFilterState()
     void Promise.allSettled([
       reloadScopedComponentData(context),
       reloadScriptBindings(context),
       refreshPipelineComponents(state, refreshAllPipelines),
-    ]).finally(() => {
-      dataRefreshPending.value = false
-      scheduleAutoAiAnalysis()
-    })
+    ])
+    // 旧轮次的完成回调不能改变新轮次的就绪状态。
+    dataRefreshPending.value = false
   }, 300)
 }
 
@@ -1300,22 +1309,32 @@ function isQueryExpected(component: InsightComponent): boolean {
 
 function isCurrentAnalysisDataReady(): boolean {
   if (!previewDataReady.value || dataRefreshPending.value) return false
-  return collectVisibleAnalysisComponents(currentPageComponents.value).every((component) => {
-    if (!isQueryExpected(component)) return true
-    const status = componentDataMap.value[component.id]?.queryStatus
-    return Boolean(status && status !== 'loading')
-  })
+  return aiAnalysisWaitingComponentTitles.value.length === 0
 }
 
-function waitForCurrentAnalysisData(): Promise<void> {
-  if (isCurrentAnalysisDataReady()) return Promise.resolve()
+const aiAnalysisWaitingComponentTitles = computed(() =>
+  collectVisibleAnalysisComponents(currentPageComponents.value)
+    .filter((component) => {
+      if (!isQueryExpected(component)) return false
+      if (!previewDataReady.value || dataRefreshPending.value) return true
+      const status = componentDataMap.value[component.id]?.queryStatus
+      return !status || status === 'loading'
+    })
+    .map((component) => component.title || component.id),
+)
+
+function waitForCurrentAnalysisData(signal: AbortSignal): Promise<void> {
+  if (signal.aborted || previewDisposed || isCurrentAnalysisDataReady()) return Promise.resolve()
   return new Promise((resolve) => {
+    const finish = () => {
+      stop()
+      signal.removeEventListener('abort', finish)
+      resolve()
+    }
     const stop = watch(isCurrentAnalysisDataReady, (ready) => {
-      if (ready || previewDisposed) {
-        stop()
-        resolve()
-      }
-    }, { immediate: true })
+      if (ready) finish()
+    })
+    signal.addEventListener('abort', finish, { once: true })
   })
 }
 
@@ -1333,55 +1352,55 @@ function currentAiAnalysisSnapshot() {
 
 function invalidatePendingAiAnalysis(): void {
   for (const [componentId, request] of aiAnalysisRequests) {
-    if (request.waitingForData) continue
     request.controller.abort()
     aiAnalysisRequests.delete(componentId)
     aiAnalysisGeneratingIds.delete(componentId)
+  }
+  const visibleIds = new Set(collectVisibleAiAnalysisComponents(currentPageComponents.value).map((component) => component.id))
+  for (const componentId of manualAnalysisIntents) {
+    if (!visibleIds.has(componentId)) manualAnalysisIntents.delete(componentId)
   }
 }
 
 function scheduleAutoAiAnalysis(): void {
   const scheduleSequence = ++autoAnalysisScheduleSequence
-  if (previewDisposed || !isCurrentAnalysisDataReady()) return
+  if (previewDisposed) return
+  const components = collectVisibleAiAnalysisComponents(currentPageComponents.value).filter((component) =>
+    (component.config as { autoGenerate?: boolean } | undefined)?.autoGenerate === true || manualAnalysisIntents.has(component.id))
+  for (const component of components) aiAnalysisGeneratingIds.add(component.id)
   void nextTick().then(() => {
-    if (previewDisposed || scheduleSequence !== autoAnalysisScheduleSequence || !isCurrentAnalysisDataReady()) return
-    const snapshot = currentAiAnalysisSnapshot()
-    for (const component of collectVisibleAiAnalysisComponents(currentPageComponents.value)) {
-      const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
-      if (config?.autoGenerate !== true) continue
-      const key = JSON.stringify({ promptTemplate: config.promptTemplate ?? '', snapshot })
-      if (lastAutoAnalysisKeys.get(component.id) === key) continue
-      lastAutoAnalysisKeys.set(component.id, key)
-      void runAiAnalysis(component.id, snapshot, config.promptTemplate)
-    }
+    if (previewDisposed || scheduleSequence !== autoAnalysisScheduleSequence) return
+    for (const component of components) void runAiAnalysis(component.id)
   })
 }
 
 /** 自动模式在当前快照变化后运行；手动模式由卡片按钮调用同一流程。 */
-async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<typeof currentAiAnalysisSnapshot>, promptTemplate?: string): Promise<void> {
+async function runAiAnalysis(componentId: string): Promise<void> {
   if (aiAnalysisRequests.has(componentId)) return
   const sequence = ++aiAnalysisRequestSequence
   const controller = new AbortController()
-  const requestState = { sequence, controller, waitingForData: true }
+  const requestState = { sequence, controller }
   aiAnalysisRequests.set(componentId, requestState)
   aiAnalysisGeneratingIds.add(componentId)
 
   try {
-    while (!previewDisposed && !isCurrentAnalysisDataReady()) {
-      await waitForCurrentAnalysisData()
+    do {
+      await waitForCurrentAnalysisData(controller.signal)
       // 让表格在查询完成后先同步实际展示页，快照中的 rows/page/size 才与界面一致。
       await nextTick()
-    }
-    if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
-    requestState.waitingForData = false
+    } while (!controller.signal.aborted && !previewDisposed && !isCurrentAnalysisDataReady())
+    if (previewDisposed || controller.signal.aborted || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
     const component = collectVisibleAiAnalysisComponents(currentPageComponents.value).find((item) => item.id === componentId)
     if (!component) return
     const config = component.config as { autoGenerate?: boolean; promptTemplate?: string } | undefined
-    const snapshot = suppliedSnapshot ?? currentAiAnalysisSnapshot()
-    const requestPrompt = promptTemplate ?? config?.promptTemplate
+    const snapshot = currentAiAnalysisSnapshot()
+    const requestPrompt = config?.promptTemplate
+    const key = JSON.stringify({ promptTemplate: requestPrompt ?? '', snapshot })
+    if (!manualAnalysisIntents.has(componentId) && lastAutoAnalysisKeys.get(componentId) === key) return
     const request = { promptTemplate: requestPrompt, snapshot }
     const markdown = await generateComponentAnalysis(props.dashboardId, componentId, request, controller.signal)
     if (previewDisposed || aiAnalysisRequests.get(componentId)?.sequence !== sequence) return
+    if (config?.autoGenerate === true) lastAutoAnalysisKeys.set(componentId, key)
     const existing = componentDataMap.value[componentId]
     componentDataMap.value = {
       ...componentDataMap.value,
@@ -1403,12 +1422,14 @@ async function runAiAnalysis(componentId: string, suppliedSnapshot?: ReturnType<
     if (aiAnalysisRequests.get(componentId)?.sequence === sequence) {
       aiAnalysisRequests.delete(componentId)
       aiAnalysisGeneratingIds.delete(componentId)
+      manualAnalysisIntents.delete(componentId)
     }
   }
 }
 
 /** 手动模式只在明确点击时生成；同样等待当前可见数据进入终态。 */
 async function handleAiAnalysisGenerate(componentId: string): Promise<void> {
+  manualAnalysisIntents.add(componentId)
   await runAiAnalysis(componentId)
 }
 

@@ -8,6 +8,21 @@ const BASE_URL = '/v1/insight/dashboards'
 /** 报告 API 路径常量 */
 const REPORT_BASE_URL = '/v1/insight/reports'
 
+/** 新轮次发送前，必须确认同一组件的旧任务已退出（包括已经进入保存阶段的任务）。 */
+const pendingAnalysisCancellations = new Map<string, { requestId: string; promise: Promise<unknown> }>()
+
+function cancelAnalysisRequest(url: string, requestId: string): Promise<unknown> {
+  const entry = { requestId, promise: api.post<void>(`${url}/${requestId}/cancel`) }
+  pendingAnalysisCancellations.set(url, entry)
+  void entry.promise.then(() => {
+    if (pendingAnalysisCancellations.get(url) === entry) pendingAnalysisCancellations.delete(url)
+  }, (error) => {
+    // 保留失败项，下一轮先重试取消；不能在取消失败时抢先生成新结果。
+    console.warn('[ai-analysis] 取消后台分析失败', error)
+  })
+  return entry.promise
+}
+
 /** 归因分析请求参数 */
 export interface AttributionAnalysisParams {
   /** 数据源 ID */
@@ -103,17 +118,43 @@ export function generateReport(dashboardId: string) {
 }
 
 /** 基于预览页当前已经加载的数据快照生成单个 AI 分析组件内容。 */
-export function generateComponentAnalysis(
+export async function generateComponentAnalysis(
   dashboardId: string,
   componentId: string,
   request: { promptTemplate?: string; snapshot: AiAnalysisSnapshot },
   signal?: AbortSignal,
 ) {
-  return api.post<string>(
-    `${BASE_URL}/${dashboardId}/components/${encodeURIComponent(componentId)}/ai-analysis`,
-    request,
-    { timeout: 0, signal },
-  )
+  if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError')
+  const url = `${BASE_URL}/${dashboardId}/components/${encodeURIComponent(componentId)}/ai-analysis`
+  const pending = pendingAnalysisCancellations.get(url)
+  if (pending) {
+    try {
+      await pending.promise
+    } catch {
+      if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError')
+      await cancelAnalysisRequest(url, pending.requestId)
+    }
+  }
+  // 等待期间可能再次切换筛选；尚未发送的轮次不注册 cancel，也不能覆盖旧任务的取消屏障。
+  if (signal?.aborted) throw new DOMException('Analysis cancelled', 'AbortError')
+  const requestId = crypto.randomUUID()
+  let cancellationRequested = false
+  const cancel = () => {
+    if (cancellationRequested) return
+    cancellationRequested = true
+    // 断开浏览器请求之外，还要取消服务端模型订阅，阻止旧分析落库。
+    void cancelAnalysisRequest(url, requestId)
+  }
+  signal?.addEventListener('abort', cancel, { once: true })
+  try {
+    return await api.post<string>(url, { ...request, requestId }, { timeout: 0, signal })
+  } catch (error) {
+    // 网络断开不代表服务端模型已经停止，同样登记取消屏障。
+    cancel()
+    throw error
+  } finally {
+    signal?.removeEventListener('abort', cancel)
+  }
 }
 
 /** 获取已生成的报告 */

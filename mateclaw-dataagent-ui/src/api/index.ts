@@ -82,6 +82,8 @@ api.interceptors.response.use(
     return res.data as any
   },
   (error) => {
+    // 用户切换筛选/页签而主动取消的旧请求，不属于网络故障。
+    if (axios.isCancel(error)) return Promise.reject(error)
     const status = error.response?.status
 
     // 401：Token 过期或无效，清除登录状态并跳转登录页

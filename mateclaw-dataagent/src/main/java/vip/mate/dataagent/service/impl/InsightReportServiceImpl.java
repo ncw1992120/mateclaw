@@ -1,6 +1,8 @@
 package vip.mate.dataagent.service.impl;
 
 import cn.hutool.json.JSONUtil;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 import vip.mate.agent.AgentService.StreamDelta;
 import vip.mate.agent.model.AgentEntity;
 import vip.mate.dataagent.auth.service.WorkspaceGuard;
@@ -37,8 +40,11 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -72,6 +78,27 @@ public class InsightReportServiceImpl implements InsightReportService {
     private final AloudataService aloudataService;
     private final InsightReportMapper insightReportMapper;
     private final InsightReportSubscriptionMapper insightReportSubscriptionMapper;
+
+    private record ComponentAnalysisKey(Long dashboardId, String componentId, String requestId) {}
+
+    private static class ComponentAnalysisRun {
+        private final Sinks.Empty<Void> cancellation = Sinks.empty();
+        private boolean cancelled;
+
+        synchronized void cancel() {
+            cancelled = true;
+            cancellation.tryEmitEmpty();
+        }
+
+        synchronized void checkActive() {
+            if (cancelled) throw new BusinessException(409, "本轮 AI 分析已取消");
+        }
+    }
+
+    private final ConcurrentMap<ComponentAnalysisKey, ComponentAnalysisRun> componentAnalysisRuns = new ConcurrentHashMap<>();
+    /** 取消请求可能先于生成请求到达；短期保留标识，避免迟到请求再次启动。 */
+    private final Cache<ComponentAnalysisKey, Boolean> cancelledComponentAnalyses = Caffeine.newBuilder()
+            .expireAfterWrite(Duration.ofMinutes(15)).maximumSize(10_000).build();
 
     /** SSE 报告生成线程池（报告生成频率低，2-4 个线程足够） */
     private final ExecutorService reportExecutor = new ThreadPoolExecutor(
@@ -158,11 +185,51 @@ public class InsightReportServiceImpl implements InsightReportService {
             throw new BusinessException(413, "当前页面数据过大，无法生成 AI 分析；请减少表格分页大小或组件数量");
         }
         String prompt = buildComponentAnalysisPrompt(request.getPromptTemplate(), snapshotJson);
-        String result = runtime.chat(resolveAgentId(dashboardId), prompt,
-                DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + "component-" + UUID.randomUUID());
-        String markdown = cleanLlmOutput(result == null ? "" : result.trim());
-        saveComponentAiAnalysisContent(dashboardId, componentId, markdown);
-        return markdown;
+        String conversationId = DataAgentConstants.INSIGHT_REPORT_CONVERSATION_PREFIX + "component-" + UUID.randomUUID();
+        if (request.getRequestId() == null) {
+            String result = runtime.chat(resolveAgentId(dashboardId), prompt, conversationId);
+            String markdown = cleanLlmOutput(result == null ? "" : result.trim());
+            saveComponentAiAnalysisContent(dashboardId, componentId, markdown);
+            return markdown;
+        }
+        ComponentAnalysisKey key = new ComponentAnalysisKey(dashboardId, componentId, request.getRequestId());
+        ComponentAnalysisRun run = new ComponentAnalysisRun();
+        if (componentAnalysisRuns.putIfAbsent(key, run) != null) {
+            throw new BusinessException(409, "本轮 AI 分析已在运行");
+        }
+        try {
+            if (cancelledComponentAnalyses.getIfPresent(key) != null) run.cancel();
+            run.checkActive();
+            String result = runtime.chatStructuredStream(resolveAgentId(dashboardId), prompt, conversationId)
+                    .filter(delta -> !delta.isEvent() && delta.content() != null)
+                    .map(StreamDelta::content)
+                    .reduce(new StringBuilder(), StringBuilder::append)
+                    .takeUntilOther(run.cancellation.asMono())
+                    .map(StringBuilder::toString)
+                    .block(Duration.ofMinutes(10));
+            // 与取消操作互斥，已经取消的旧轮次不能写回看板。
+            synchronized (run) {
+                run.checkActive();
+                String markdown = cleanLlmOutput(result == null ? "" : result.trim());
+                saveComponentAiAnalysisContent(dashboardId, componentId, markdown);
+                return markdown;
+            }
+        } finally {
+            componentAnalysisRuns.remove(key, run);
+        }
+    }
+
+    @Override
+    public void cancelComponentAnalysis(Long dashboardId, String componentId, String requestId) {
+        // 与生成接口一致，先校验当前用户/工作区对看板的访问权限。
+        if (dashboardService.getDashboard(dashboardId) == null) throw new BusinessException(404, "仪表盘不存在");
+        if (requestId == null || !requestId.matches("[a-zA-Z0-9-]{1,64}")) {
+            throw new BusinessException(400, "分析请求标识格式无效");
+        }
+        ComponentAnalysisKey key = new ComponentAnalysisKey(dashboardId, componentId, requestId);
+        cancelledComponentAnalyses.put(key, true);
+        ComponentAnalysisRun run = componentAnalysisRuns.get(key);
+        if (run != null) run.cancel();
     }
 
     private String buildComponentAnalysisPrompt(String promptTemplate, String snapshotJson) {

@@ -245,6 +245,7 @@
                 :component="getComponent(item.i)!"
                 :component-data="getComponentData(item.i)"
                 :generating="aiAnalysisGeneratingIds.has(item.i)"
+                :waiting-component-titles="aiAnalysisWaitingComponentTitles"
                 :dashboard-theme="dashboardTheme"
                 :title-icon-style-preview="componentTitleIconStylePreview"
                 @generate="(id) => emit('ai-analysis-generate', id)"
@@ -254,6 +255,7 @@
                 :component="getComponent(item.i)!"
                 :component-data-map="componentDataMapWithFieldLabels"
                 :ai-analysis-generating-ids="aiAnalysisGeneratingIds"
+                :ai-analysis-waiting-component-titles="aiAnalysisWaitingComponentTitles"
                 :runtime-filter-state="runtimeFilterState"
                 :editable="editable"
                 :container-resizing="resizingItem?.id === item.i"
@@ -371,6 +373,7 @@ const props = withDefaults(defineProps<{
   dashboardTheme?: ResolvedDashboardTheme
   /** 正在生成 AI 分析的组件 ID 集合 */
   aiAnalysisGeneratingIds?: Set<string>
+  aiAnalysisWaitingComponentTitles?: string[]
 }>(), {
   aiAnalysisGeneratingIds: () => new Set(),
 })

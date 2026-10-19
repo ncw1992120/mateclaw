@@ -198,4 +198,16 @@ class DataAgentInsightDashboardControllerQueryTest {
         org.junit.jupiter.api.Assertions.assertEquals(snapshot, captor.getValue().getSnapshot());
         org.junit.jupiter.api.Assertions.assertEquals("关注转化率", captor.getValue().getPromptTemplate());
     }
+
+    @Test
+    void componentAiAnalysisCancellationPassesExactRequestIdentity() throws Exception {
+        InsightReportService reports = mock(InsightReportService.class);
+        DataAgentInsightDashboardController controller = new DataAgentInsightDashboardController(
+                mock(InsightDashboardService.class), mock(InsightDataBindService.class), reports,
+                mock(DashboardExecutionService.class), mock(ResultSetQueryService.class));
+        MockMvc standalone = MockMvcBuilders.standaloneSetup(controller).build();
+        standalone.perform(post("/v1/insight/dashboards/7/components/ai-1/ai-analysis/request-2/cancel"))
+                .andExpect(status().isOk());
+        verify(reports).cancelComponentAnalysis(7L, "ai-1", "request-2");
+    }
 }

@@ -14,7 +14,7 @@
       </el-button>
       <div v-else-if="generating" class="generating-indicator">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <span>{{ t('insight.aiAnalysis.generating') }}</span>
+        <span>{{ loadingMessage }}</span>
       </div>
     </div>
 
@@ -26,7 +26,7 @@
 
       <div v-if="generating" class="analysis-loading-state" role="status" aria-live="polite">
         <el-icon class="is-loading"><Loading /></el-icon>
-        <span>{{ t('insight.aiAnalysis.generating') }}</span>
+        <span>{{ loadingMessage }}</span>
       </div>
 
       <!-- AI 生成部分 -->
@@ -65,6 +65,7 @@ const props = defineProps<{
   component: InsightComponent
   componentData?: InsightComponentData
   generating?: boolean
+  waitingComponentTitles?: string[]
   /** 是否由组件内部显示标题；画布编辑态由统一标题栏显示 */
   showTitle?: boolean
   /** 正在编辑的组件标题图标样式即时预览 */
@@ -79,6 +80,9 @@ const emit = defineEmits<{
 const dataSection = computed(() => props.componentData?.aiAnalysis?.dataSection)
 const analysisSection = computed(() => props.componentData?.aiAnalysis?.analysisSection)
 const autoGenerate = computed(() => (props.component.config as AIAnalysisComponentConfig | undefined)?.autoGenerate === true)
+const loadingMessage = computed(() => props.waitingComponentTitles?.length
+  ? t('insight.aiAnalysis.waitingForComponents', { components: props.waitingComponentTitles.join('、') })
+  : t('insight.aiAnalysis.generating'))
 
 /** 将 Markdown 渲染为安全 HTML */
 function renderMarkdown(md: string): string {

@@ -33,6 +33,9 @@ public interface InsightReportService {
     /** 基于预览页已加载的数据快照生成单个 AI 分析组件的 Markdown 内容。 */
     String generateComponentAnalysis(Long dashboardId, String componentId, InsightComponentAiAnalysisRequest request);
 
+    /** 取消指定轮次的模型订阅，取消后的分析不得保存。 */
+    void cancelComponentAnalysis(Long dashboardId, String componentId, String requestId);
+
     /**
      * 获取已生成的报告内容
      *

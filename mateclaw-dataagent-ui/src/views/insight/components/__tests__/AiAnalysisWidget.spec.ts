@@ -90,4 +90,21 @@ describe('AiAnalysisWidget', () => {
     expect(wrapper.find('.analysis-placeholder').exists()).toBe(true)
     expect(wrapper.findAll('.analysis-section').length).toBe(0)
   })
+
+  it('等待数据时显示剩余组件名称，数据全部返回后切换到分析提示', async () => {
+    const messages = createI18n({ legacy: false, locale: 'zh-CN', messages: { 'zh-CN': { insight: { aiAnalysis: {
+      generating: '正在分析当前数据…', waitingForComponents: '等待 {components} 组件数据返回…',
+    } } } }, missingWarn: false, fallbackWarn: false })
+    const wrapper = mount(AiAnalysisWidget, {
+      props: { component, generating: true, waitingComponentTitles: ['策略概括', '策略执行'],
+        componentData: { aiAnalysis: { analysisSection: '旧分析' } } as any },
+      global: { ...globalStubs.global, plugins: [messages] },
+    })
+    expect(wrapper.get('[role="status"]').text()).toBe('等待 策略概括、策略执行 组件数据返回…')
+    expect(wrapper.text()).not.toContain('旧分析')
+    await wrapper.setProps({ waitingComponentTitles: ['策略执行'] })
+    expect(wrapper.get('[role="status"]').text()).toBe('等待 策略执行 组件数据返回…')
+    await wrapper.setProps({ waitingComponentTitles: [] })
+    expect(wrapper.get('[role="status"]').text()).toBe('正在分析当前数据…')
+  })
 })
