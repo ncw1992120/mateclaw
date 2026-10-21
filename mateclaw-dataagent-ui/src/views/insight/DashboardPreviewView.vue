@@ -208,7 +208,7 @@ import { extractResultSchema, parseScriptResultEnvelope, resultEnvelopeToCompone
 import { toComponentData } from './composables/useResultSetRestore'
 import { buildScriptParameters } from '@/utils/script-parameters'
 import { DASHBOARD_CANVAS_BACKGROUND, resolveDashboardTheme, themeCssVariables } from '@/utils/dashboard-theme'
-import { buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
+import { buildComponentInputQueries, buildComponentQueryParameters } from '@/utils/dashboard-preview-query'
 import { findAloudataInputMissingMetricTime, METRIC_TIME_REQUIRED_MESSAGE } from '@/utils/dashboard-metric-time-guard'
 import { readDashboardPreviewFillWidth, saveDashboardPreviewFillWidth } from '@/utils/dashboard-preview-preferences'
 import { readComponentDatasetPipeline } from '@/utils/component-dataset-pipeline'
@@ -987,6 +987,7 @@ async function refreshPipelineComponent(
       dashboardId: props.dashboardId,
       componentId: component.id,
       parameters: queryParameters,
+      datasetQueries: buildComponentInputQueries(component, effectiveFilters),
       requestId: String(requestId),
     }
     let rows: Record<string, unknown>[]

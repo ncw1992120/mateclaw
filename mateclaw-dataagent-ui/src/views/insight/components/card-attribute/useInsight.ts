@@ -35,6 +35,7 @@ import { buildKpiMetrics, syncMetricStylesToAll } from '@/utils/kpi-metrics'
 import { extractResultSchema, formatScriptResultError, parseScriptResultEnvelope } from '@/utils/script-result'
 import { buildFinalResultQueryConfig, reconcileFinalResultDisplayFields, resolveFinalResultQueryConfigAfterExecution } from '@/utils/final-result-query'
 import { createComponentPreviewQueryContext } from './component-preview-query-context'
+import { clearCachedQuery } from '../dataset-data-cache'
 import { outputContractTemplate, resolveOutputSpec } from '@/utils/component-output-spec'
 import { getExecutionResult } from '@/api/insight-dashboard'
 import { patchDashboardSchema } from '@/utils/insight-schema-patch'
@@ -112,6 +113,7 @@ export interface DatasetConfig {
   queryConfig?: DatasetQueryConfig
   /** 最近一次查看数据时填写的运行条件，随仪表盘 Schema 持久化。 */
   lastQueryState?: DatasetLastQueryState
+  lastSuccessfulQueryState?: DatasetLastQueryState
 }
 
 /** 卡片（仪表盘画布上的组件） */
@@ -491,6 +493,8 @@ function commitDataset(payload: Partial<DatasetConfig> & { sourceType: DataSourc
     const ds = getDataset(editingId)
     if (ds) {
       Object.assign(ds, payload)
+      delete ds.lastSuccessfulQueryState
+      clearCachedQuery(ds.id)
       // 指标&维度可在不请求后端的情况下确定字段集合。先同步查询配置，避免用户
       // 在 schema 异步刷新前打开配置弹窗时仍看到旧字段。
       if (ds.sourceType === 'aloudata' && ds.aloudata?.mode === 'metric-dim') {
@@ -1232,6 +1236,11 @@ function saveQueryConfig(datasetId: string, config: DatasetQueryConfig, fixedFil
     })
     const error = validateFieldMetas(fields)
     if (error) return error
+    if (JSON.stringify(dataset.queryConfig) !== JSON.stringify(config)
+      || (fixedFilters && JSON.stringify(dataset.filters) !== JSON.stringify(fixedFilters))) {
+      delete dataset.lastSuccessfulQueryState
+      clearCachedQuery(dataset.id)
+    }
     dataset.fields = fields
     dataset.queryConfig = config
     if (fixedFilters) dataset.filters = fixedFilters
@@ -1396,6 +1405,7 @@ export function datasetFromInput(input: DashboardDatasetInput, index = 0): Datas
     filters: (input.filters ?? []) as unknown as InputFilter[],
     queryConfig: input.queryConfig,
     lastQueryState: input.lastQueryState,
+    lastSuccessfulQueryState: input.lastSuccessfulQueryState,
     jdbc: cfg.sql
       ? { db: String(cfg.datasourceId ?? ''), sql: cfg.sql }
       : undefined,
@@ -1504,6 +1514,7 @@ export function buildPipeline(): ComponentDatasetPipeline {
     // 新版静态查询配置：保存后以 queryConfig 为本输入的权威配置（旧 scriptFilterBindings 仅读取兼容）
     ...(ds.queryConfig ? { queryConfig: ds.queryConfig } : {}),
     ...(ds.lastQueryState ? { lastQueryState: ds.lastQueryState } : {}),
+    ...(ds.lastSuccessfulQueryState ? { lastSuccessfulQueryState: ds.lastSuccessfulQueryState } : {}),
     // 契约定版（§4.3）：source=字段名（后端下推唯一依据），target=展示名（仅导出表头等展示场景）
     fieldMappings: toFieldMappings(ds.fields ?? []),
     // filters[].field 自本版本起恒为字段名（存展示名的老配置在读入时已惰性归一，见 normalizeDatasetFields）
@@ -1711,7 +1722,18 @@ async function persistDatasetInput(ds: DatasetConfig, existingDatasets: BackendD
     String(candidate.dashboardId ?? '') === dashboardId && candidate.componentId === componentId
   const persisted = existingDatasets.find((candidate) => String(candidate.id) === ds.backendDatasetId && inComponent(candidate))
   if (persisted && isPersistedDatasetReferenceAvailable(ds.backendDatasetId, existingDatasets)) {
-    if (persisted.name !== ds.alias) await datasetApi.update(String(persisted.id), { name: ds.alias })
+    const request = draftRequestForDataset(ds)
+    let sourceDefinition: Record<string, unknown> | undefined
+    if (ds.sourceType === 'aloudata' && request) {
+      const stored = typeof persisted.sourceConfig === 'string' ? JSON.parse(persisted.sourceConfig) : persisted.sourceConfig
+      const changed = String(persisted.datasourceId ?? '') !== String(request.datasourceId ?? '')
+        || persisted.sourceType !== request.sourceType
+        || Object.entries(request.sourceConfig ?? {}).some(([key, value]) => JSON.stringify(stored?.[key]) !== JSON.stringify(value))
+      if (changed) sourceDefinition = { sourceType: request.sourceType, datasourceId: request.datasourceId, ...request.sourceConfig }
+    }
+    if (persisted.name !== ds.alias || sourceDefinition) {
+      await datasetApi.update(String(persisted.id), { name: ds.alias, ...(sourceDefinition ? { sourceDefinition } : {}) })
+    }
     return
   }
   // 旧仪表盘可能仍保存数字 ID，但数据集记录已被清理；不能把“数字格式”当成有效引用。

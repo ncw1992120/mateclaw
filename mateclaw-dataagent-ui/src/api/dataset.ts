@@ -27,7 +27,7 @@ export function create(data: {
 }
 
 /** 更新数据集 */
-export function update(id: string, data: Partial<Pick<Dataset, 'name' | 'description'>>) {
+export function update(id: string, data: Partial<Pick<Dataset, 'name' | 'description'>> & { sourceDefinition?: Record<string, unknown> }) {
   return api.put<Dataset>(`${BASE_URL}/${id}`, data)
 }
 

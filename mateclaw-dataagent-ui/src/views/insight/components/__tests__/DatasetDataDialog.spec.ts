@@ -296,7 +296,9 @@ describe('查看数据弹窗 · 保留最近一次执行结果', () => {
     await flushPromises()
 
     const requestOptions = previewDatasetDraft.mock.calls.at(-1)?.[1] as { headers?: Record<string, string> }
-    const event = log.mock.calls.filter(([name]) => name === '[dataset-query-perf]').at(-1)?.[1] as Record<string, unknown> | undefined
+    // 其他已卸载弹窗的绘制回调可能稍晚完成，按本次请求 ID 匹配，不能取最后一条日志。
+    const event = log.mock.calls.find(([name, value]) => name === '[dataset-query-perf]'
+      && value?.requestId === requestOptions.headers?.['X-Perf-Id'])?.[1] as Record<string, unknown> | undefined
     expect(requestOptions.headers?.['X-Perf-Id']).toMatch(/^[\w-]{8,64}$/)
     expect(event).toMatchObject({
       requestId: requestOptions.headers?.['X-Perf-Id'],

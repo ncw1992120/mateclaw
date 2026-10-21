@@ -26,7 +26,20 @@ public record DatasetQueryPlanDTO(
         /** 显式空集合短路：不访问数据源，直接返回空结果。 */
         boolean shortCircuitEmpty,
         /** 有 Python 脚本（可能改变行数/粒度）时源端读取的行数上限，保证结果集阶段有完整数据可用。 */
-        Integer readLimit) {
+        Integer readLimit,
+        QueryContextDTO.InputQueryOptions inputQuery) {
+
+    public DatasetQueryPlanDTO(String datasetId, String inputName, List<String> columns,
+                               List<FilterSpec> filters, List<OrderSpec> orders,
+                               QueryContextDTO.PaginationSpec pagination, PushdownSpec pushdown,
+                               List<String> residualOperations, boolean shortCircuitEmpty, Integer readLimit) {
+        this(datasetId, inputName, columns, filters, orders, pagination, pushdown, residualOperations,
+                shortCircuitEmpty, readLimit, null);
+    }
+
+    public String timeGranularity() {
+        return inputQuery == null ? null : inputQuery.timeGranularity();
+    }
 
     public DatasetQueryPlanDTO {
         columns = columns == null ? List.of() : List.copyOf(columns);

@@ -2,6 +2,7 @@ import type {
   DashboardRuntimeFilterState,
   InsightComponent,
   QueryParameterBinding,
+  QueryContext,
   TimeRangeValue,
 } from '@/types'
 
@@ -10,7 +11,33 @@ interface PipelineQueryConfig {
 }
 
 interface PipelineDatasetInput {
+  inputName?: string
   queryConfig?: PipelineQueryConfig
+}
+
+/** 只读取当前预览筛选器，不回退编辑态 lastQueryState。 */
+export function buildComponentInputQueries(
+  component: InsightComponent,
+  runtimeFilters: DashboardRuntimeFilterState,
+): NonNullable<QueryContext['datasetQueries']> {
+  const pipeline = (component.config?.datasetPipeline ?? {}) as ComponentPipelineConfig
+  const result: NonNullable<QueryContext['datasetQueries']> = {}
+  for (const input of pipeline.datasetInputs ?? []) {
+    if (!input.inputName) continue
+    const granularities = new Set((input.queryConfig?.parameterBindings ?? []).flatMap((binding) => {
+      const filter = runtimeFilters[binding.filterComponentId]
+      if (!filter || (filter.scope === 'scoped' && !filter.targetComponentIds.includes(component.id))) return []
+      return filter.timeGranularity ? [filter.timeGranularity] : []
+    }))
+    if (granularities.size > 1) throw new Error(`数据集「${input.inputName}」绑定的时间筛选器粒度不一致`)
+    const timeFields = (input.queryConfig?.parameterBindings ?? []).flatMap((binding) => {
+      const filter = runtimeFilters[binding.filterComponentId]
+      if (!filter?.timeGranularity || (filter.scope === 'scoped' && !filter.targetComponentIds.includes(component.id))) return []
+      return [binding.field]
+    })
+    result[input.inputName] = { timeGranularity: [...granularities][0], timeFields: [...new Set(timeFields)] }
+  }
+  return result
 }
 
 interface ComponentPipelineConfig {

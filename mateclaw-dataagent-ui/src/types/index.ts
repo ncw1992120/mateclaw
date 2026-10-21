@@ -1647,6 +1647,17 @@ export interface QueryContext {
   parameters: Record<string, unknown>
   /** Python 输入数据集的本次参数；同名页面筛选器可按 inputName 使用各自最近一次查询值。 */
   datasetParameters?: Record<string, Record<string, unknown>>
+  /** 输入查询选项；预览态只传当前粒度，编辑态可重放上游成功查询。 */
+  datasetQueries?: Record<string, {
+    editor?: boolean
+    timeGranularity?: TimeGranularity
+    timeFields?: string[]
+    sort?: QuerySortSpec | null
+    pagination?: QueryPaginationSpec | null
+    queryLimit?: number
+    filters?: DatasetFilter[]
+    parameters?: Record<string, unknown>
+  }>
   sort?: QuerySortSpec | null
   pagination?: QueryPaginationSpec | null
   /** 链路关联标识，用于丢弃旧请求晚返回的响应。 */
@@ -1815,6 +1826,9 @@ export interface ThemeValidationError {
 
 /** 查看数据弹窗最近一次使用的条件；结果行不随仪表盘持久化。 */
 export interface DatasetLastQueryState {
+  /** 成功执行时实际发出的运行条件（不含固定条件）；不保存结果行。 */
+  executedFilters?: DatasetFilter[]
+  executedParameters?: Record<string, unknown>
   filters: Array<{
     filterComponentId: string
     field: string
@@ -1867,6 +1881,7 @@ export interface DashboardDatasetInput {
   queryConfig?: DatasetQueryConfig
   /** 最近一次「查看数据」的运行条件值；刷新或重新登录后回显。 */
   lastQueryState?: DatasetLastQueryState
+  lastSuccessfulQueryState?: DatasetLastQueryState
 }
 
 /** 仪表盘脚本参数定义；参数只描述作用域，不绑定具体字段。 */

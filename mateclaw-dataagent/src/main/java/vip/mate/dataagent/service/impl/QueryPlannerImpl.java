@@ -45,6 +45,8 @@ public class QueryPlannerImpl implements QueryPlanner {
             throw QueryPlanException.of(QueryPlanErrorCodes.QUERY_CONTEXT_INVALID, "query context is required");
         }
         String alias = requiredText(input, "inputName", "dataset input alias");
+        QueryContextDTO.InputQueryOptions inputQuery = runtime.datasetQueries().get(alias);
+        boolean editor = inputQuery != null && inputQuery.editor();
         JsonNode queryConfig = input.path("queryConfig");
         boolean authoritative = queryConfig.isObject() && queryConfig.size() > 0;
 
@@ -81,17 +83,18 @@ public class QueryPlannerImpl implements QueryPlanner {
         List<Binding> bindings = authoritative
                 ? readAuthoritativeBindings(queryConfig, alias, fieldRoles.keySet())
                 : readLegacyBindings(component, alias);
-        Map<String, Object> runtimeParameters = runtime.parametersFor(alias);
+        Map<String, Object> runtimeParameters = editor && inputQuery.filters() != null
+                ? Map.of() : runtime.parametersFor(alias);
 
-        // Python transforms need their bound filter fields in the prepared input rows,
-        // even when those fields are deliberately absent from the visible projection.
-        if (hasPython) {
-            for (Binding binding : bindings) {
-                if (fieldRoles.containsKey(binding.field) && !columns.contains(binding.field)) {
-                    columns.add(binding.field);
-                }
+        // 筛选字段不自动进入投影，避免 Aloudata 增加 GROUP BY，改变上游结果粒度。
+        // 时间筛选字段与「查看数据」一致，仅用于过滤，不输出为分组维度。
+        Set<String> timeFields = new LinkedHashSet<>();
+        for (Binding binding : bindings) {
+            if (inputQuery != null && inputQuery.timeFields().contains(binding.field)) {
+                timeFields.add(binding.field);
             }
         }
+        columns.removeIf(field -> timeFields.contains(field) && "dimension".equals(fieldRoles.get(field)));
 
         // ---- 绑定的筛选器组件必须仍然存在（被删除的映射在 Planner 阶段失败） ----
         Set<String> boundFilterIds = readBoundFilterComponentIds(component);
@@ -181,11 +184,27 @@ public class QueryPlannerImpl implements QueryPlanner {
         }
 
         // ---- 排序：仅 allowedSortFields 且非脚本计算字段才可下推 ----
-        QueryContextDTO.SortSpec effectiveSort = runtime.sort();
+        if (editor && inputQuery.filters() != null) {
+            // 快照只包含运行条件；固定条件始终以当前数据集定义为准。
+            for (DatasetQueryPlanDTO.FilterSpec filter : inputQuery.filters()) {
+                if (authoritative && !fieldRoles.containsKey(filter.field())) {
+                    throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED,
+                            "input query references an unregistered field: " + filter.field());
+                }
+                if (bindings.stream().noneMatch(binding -> binding.field.equals(filter.field()))) {
+                    throw QueryPlanException.of(QueryPlanErrorCodes.FIELD_NOT_ALLOWED,
+                            "input query references a removed filter binding: " + filter.field());
+                }
+                Object value = normalizeFilterValue(filter.operator(), filter.value());
+                new DatasetFilter(filter.field(), fieldRoles.getOrDefault(filter.field(), "dimension"), filter.operator(), value);
+                filters.add(new DatasetQueryPlanDTO.FilterSpec(filter.field(), filter.operator(), value));
+            }
+        }
+        QueryContextDTO.SortSpec effectiveSort = editor ? inputQuery.sort() : runtime.sort();
         List<DatasetQueryPlanDTO.OrderSpec> orders = new ArrayList<>();
         boolean sortPushed = false;
         List<String> residual = new ArrayList<>();
-        if (effectiveSort == null && authoritative) {
+        if (effectiveSort == null && authoritative && !editor) {
             effectiveSort = readDefaultSort(queryConfig);
         }
         if (effectiveSort != null) {
@@ -204,7 +223,7 @@ public class QueryPlannerImpl implements QueryPlanner {
                         "sort field is not allowed: " + effectiveSort.field());
             }
             orders.add(new DatasetQueryPlanDTO.OrderSpec(effectiveSort.field(), effectiveSort.direction()));
-            if (hasPython) {
+            if (hasPython && !editor) {
                 // 脚本可能改变行数/粒度/顺序：最终排序放在结果集阶段
                 residual.add("SORT_AT_RESULT_STAGE");
             } else {
@@ -213,7 +232,7 @@ public class QueryPlannerImpl implements QueryPlanner {
         }
 
         // ---- 分页：单数据集且无改变行数的脚本时才可下推最终分页 ----
-        QueryContextDTO.PaginationSpec pagination = runtime.pagination();
+        QueryContextDTO.PaginationSpec pagination = editor ? inputQuery.pagination() : runtime.pagination();
         boolean paginationPushed = false;
         Integer readLimit = null;
         if (pagination != null) {
@@ -232,7 +251,7 @@ public class QueryPlannerImpl implements QueryPlanner {
                 throw QueryPlanException.of(QueryPlanErrorCodes.PAGE_SIZE_EXCEEDED,
                         "pageSize exceeds the configured maximum " + maxPageSize);
             }
-            if (hasPython) {
+            if (hasPython && !editor) {
                 // 结果集阶段分页；源端读取必须有明确行数上限，不能先截断再聚合
                 residual.add("PAGINATION_AT_RESULT_STAGE");
                 readLimit = DEFAULT_SCRIPT_READ_LIMIT;
@@ -242,6 +261,7 @@ public class QueryPlannerImpl implements QueryPlanner {
         } else if (hasPython && !orders.isEmpty()) {
             readLimit = DEFAULT_SCRIPT_READ_LIMIT;
         }
+        if (editor) readLimit = inputQuery.queryLimit() == null ? 10_000 : inputQuery.queryLimit();
 
         // 显式空集合短路：AND 语义下结果恒为空，清空条件且不访问数据源
         if (shortCircuitEmpty) {
@@ -251,7 +271,7 @@ public class QueryPlannerImpl implements QueryPlanner {
         String datasetId = requiredDatasetId(input, runtime);
         return new DatasetQueryPlanDTO(datasetId, alias, columns, filters, orders, pagination,
                 new DatasetQueryPlanDTO.PushdownSpec(!shortCircuitEmpty, sortPushed, paginationPushed),
-                residual, shortCircuitEmpty, readLimit);
+                residual, shortCircuitEmpty, readLimit, inputQuery);
     }
 
     private String requiredDatasetId(JsonNode input, QueryContextDTO runtime) {

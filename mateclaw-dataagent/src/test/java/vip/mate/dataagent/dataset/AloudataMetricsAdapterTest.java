@@ -30,6 +30,25 @@ import org.mockito.ArgumentCaptor;
 class AloudataMetricsAdapterTest {
 
     @Test
+    void queriesOnlyProjectedMetricsAndDimensionsLikeDatasetDraftPreview() throws Exception {
+        DatasetMapper datasets = mock(DatasetMapper.class);
+        AloudataService aloudata = mock(AloudataService.class);
+        DatasetEntity dataset = new DatasetEntity();
+        dataset.setId(7L); dataset.setDatasourceId(3L); dataset.setSourceType("ALOUDATA_METRICS");
+        dataset.setSourceConfig(new ObjectMapper().writeValueAsString(Map.of(
+                "metrics", List.of("revenue", "profit"), "dimensions", List.of("region", "metric_time"))));
+        when(datasets.selectById(7L)).thenReturn(dataset);
+        var adapter = new AloudataMetricsAdapter(datasets, emptyMetricMapper(), emptyDimensionMapper(),
+                emptyFieldMapper(), aloudata, new ObjectMapper());
+        adapter.read(new DatasetAccessContext(1L, 2L, "task", Set.of(7L)),
+                new DatasetReadRequest(7L, "table_zb", List.of("revenue", "region"), List.of(), 20, 0, Map.of()));
+        var query = ArgumentCaptor.forClass(AloudataMetricQueryRequest.class);
+        verify(aloudata).queryMetrics(eq(3L), query.capture());
+        assertEquals(List.of("revenue"), query.getValue().getMetrics());
+        assertEquals(List.of("region"), query.getValue().getDimensions());
+    }
+
+    @Test
     void rejectsQueryWithoutMetricTimeFilterBeforeCallingAloudata() throws Exception {
         DatasetMapper mapper = mock(DatasetMapper.class);
         AloudataService service = mock(AloudataService.class);

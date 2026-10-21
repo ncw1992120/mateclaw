@@ -123,7 +123,9 @@ class ScriptTaskPreparationServiceTest {
         DatasetQueryPlanDTO plan=new DatasetQueryPlanDTO("3","orders",List.of("in_account"),
                 List.of(new DatasetQueryPlanDTO.FilterSpec("in_account","gte",50)),
                 List.of(new DatasetQueryPlanDTO.OrderSpec("in_account","desc")),null,
-                new DatasetQueryPlanDTO.PushdownSpec(true,true,false),List.of(),false,null);
+                new DatasetQueryPlanDTO.PushdownSpec(true,true,false),List.of(),false,300,
+                new vip.mate.dataagent.dto.QueryContextDTO.InputQueryOptions(true, "MONTH", null, null, 300,
+                        null, Map.of("region", "east"), List.of()));
         var prepared=service.prepare("task-2",7L,9L,Map.of("orders",3L),"print(1)",Map.of(),Map.of("orders",plan));
 
         var input=prepared.preparedInputs().get("orders");
@@ -137,6 +139,9 @@ class ScriptTaskPreparationServiceTest {
         verify(adapter,times(1)).read(any(),captured.capture());
         assertEquals("gte",captured.getAllValues().getFirst().filters().getFirst().operator());
         assertEquals(0,captured.getAllValues().getFirst().offset());
+        assertEquals("MONTH", captured.getValue().timeGranularity());
+        assertEquals(Map.of("region", "east"), captured.getValue().parameters());
+        assertEquals(300, captured.getValue().limit());
     }
 
     @Test void shortCircuitPlanSkipsSourceAndPreparedInputExpiryIsExplainable() {

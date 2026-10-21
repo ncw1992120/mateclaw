@@ -761,6 +761,9 @@ const resultHint = computed(() => {
 
 async function fetchRows(reset: boolean): Promise<void> {
   const requestSignature = currentSignature.value
+  // 在请求发出时固定参数，不能把等待过程中用户修改的新条件记录为成功查询。
+  persistQueryState()
+  const submittedQueryState = JSON.parse(JSON.stringify(props.dataset.lastQueryState))
   const performanceId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
   const performanceStartedAt = performance.now()
   let responseReceivedAt: number | undefined
@@ -777,7 +780,7 @@ async function fetchRows(reset: boolean): Promise<void> {
   }
   const started = Date.now()
   try {
-    const enabledFilterRows = queryFilterRows.value.filter((row) => row.enabled)
+    const enabledFilterRows = JSON.parse(JSON.stringify(queryFilterRows.value.filter((row) => row.enabled))) as PreviewQueryFilterRow[]
     const filters = [...fixedFilters.value, ...toDatasetFilters(enabledFilterRows)]
     if (isAloudataSourceType(props.dataset.sourceType) && !hasMetricTimeCondition(filters)) {
       throw new Error(METRIC_TIME_REQUIRED_MESSAGE)
@@ -860,7 +863,12 @@ async function fetchRows(reset: boolean): Promise<void> {
         }, { timeout: 0, headers: { 'X-Perf-Id': performanceId } })
     responseReceivedAt = performance.now()
     // 旧请求晚返回：丢弃，不覆盖新结果（表头快速切换场景）
-    if (currentRequest !== requestSequence) return
+    if (currentRequest !== requestSequence || requestSignature !== currentSignature.value) return
+    props.dataset.lastSuccessfulQueryState = {
+      ...submittedQueryState,
+      executedFilters: JSON.parse(JSON.stringify(toDatasetFilters(enabledFilterRows))),
+      executedParameters: JSON.parse(JSON.stringify(parameters)),
+    }
     const nextRows = (batch.rows as Record<string, unknown>[] | null) ?? []
     performanceRowCount = nextRows.length
     rows.value = paginationEnabled.value || reset ? nextRows : [...rows.value, ...nextRows]

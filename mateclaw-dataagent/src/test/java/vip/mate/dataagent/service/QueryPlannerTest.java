@@ -82,6 +82,58 @@ class QueryPlannerTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private QueryPlanner planner;
 
+    @Test
+    void editorReplaysEnabledFiltersExactlyAndKeepsCurrentFixedFilters() throws Exception {
+        JsonNode c = component(QUERY_CONFIG_INPUT);
+        ((com.fasterxml.jackson.databind.node.ObjectNode) input(c)).set("filters", mapper.readTree("""
+          [{"field":"strategy_id","operator":"eq","value":"STR-001"}]
+          """));
+        QueryContextDTO runtime = mapper.readValue("""
+          {"dashboardId":"dashboard-001","componentId":"component-001",
+           "parameters":{"start_date":"2000-01-01","strategy_ids":["old"]},
+           "datasetQueries":{"strategy_data":{"editor":true,"timeGranularity":"MONTH",
+             "timeFields":["metric_date"],"queryLimit":300,
+             "filters":[{"field":"metric_date","operator":"gte","value":"2026-09-01"},
+                        {"field":"metric_date","operator":"lt","value":"2026-09-03"}]}}}
+          """, QueryContextDTO.class);
+        DatasetQueryPlanDTO plan = planner.plan(c, input(c), runtime, true);
+        assertThat(plan.columns()).containsExactly("strategy_id", "in_account");
+        assertThat(plan.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("strategy_id", "eq", "STR-001"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-09-01"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "lt", "2026-09-03"));
+        assertThat(plan.readLimit()).isEqualTo(300);
+        // 预览态即使 Schema 还保留编辑态条件，也只使用本次页面参数。
+        DatasetQueryPlanDTO preview = planner.plan(c, input(c), context(Map.of("start_date", "2026-10-01")), true);
+        assertThat(preview.filters()).containsExactly(
+                new DatasetQueryPlanDTO.FilterSpec("strategy_id", "eq", "STR-001"),
+                new DatasetQueryPlanDTO.FilterSpec("metric_date", "gte", "2026-10-01"));
+    }
+
+    @Test
+    void editorInputUsesUpstreamProjectionAndQueryRange() throws Exception {
+        JsonNode c = component("""
+          {"datasetId":"7","inputName":"table_zb","queryConfig":{
+            "displayFields":[{"field":"revenue","role":"measure"}],
+            "queryableFields":[{"name":"revenue","role":"measure"},{"name":"metric_time","role":"dimension"}],
+            "parameterBindings":[{"filterComponentId":"date_range","parameterName":"start","field":"metric_time","operator":"gte"}],
+            "sortPolicy":{"enabled":true,"allowedFields":["revenue"]},
+            "paginationPolicy":{"enabled":true,"maxPageSize":100}
+          }}
+          """);
+        QueryContextDTO runtime = mapper.readValue("""
+          {"dashboardId":"dashboard-001","componentId":"component-001","parameters":{},
+           "datasetQueries":{"table_zb":{"editor":true,"timeGranularity":"MONTH",
+             "sort":{"field":"revenue","direction":"desc"},"pagination":{"page":2,"pageSize":20}}}}
+          """, QueryContextDTO.class);
+        DatasetQueryPlanDTO plan = planner.plan(c, input(c), runtime, true);
+        assertThat(plan.columns()).containsExactly("revenue");
+        assertThat(plan.orders()).containsExactly(new DatasetQueryPlanDTO.OrderSpec("revenue", "desc"));
+        assertThat(plan.pagination()).isEqualTo(new QueryContextDTO.PaginationSpec(2, 20));
+        assertThat(plan.pushdown().pagination()).isTrue();
+        assertThat(plan.timeGranularity()).isEqualTo("MONTH");
+    }
+
     @BeforeEach
     void setUp() {
         planner = new QueryPlannerImpl();
@@ -375,8 +427,8 @@ class QueryPlannerTest {
     }
 
     @Test
-    @DisplayName("Python 输入保留绑定筛选字段，即使该字段不属于展示列")
-    void scriptInputIncludesBoundFilterFieldsOutsideDisplayProjection() throws Exception {
+    @DisplayName("Python 筛选字段不自动加入分组维度，保持与上游展示投影一致")
+    void scriptInputDoesNotAddHiddenBoundFilterFieldsToProjection() throws Exception {
         JsonNode component = component("""
                 {
                   "datasetId": "42",
@@ -399,7 +451,7 @@ class QueryPlannerTest {
         DatasetQueryPlanDTO plan = planner.plan(component, input(component),
                 context(Map.of("metric_date", "2026-09-01")), true);
 
-        assertThat(plan.columns()).containsExactly("strategy_id", "metric_time");
+        assertThat(plan.columns()).containsExactly("strategy_id");
         assertThat(plan.filters()).containsExactly(
                 new DatasetQueryPlanDTO.FilterSpec("metric_time", "eq", "2026-09-01"));
     }

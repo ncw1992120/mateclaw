@@ -27,7 +27,36 @@ public record QueryContextDTO(
         Map<String, Map<String, Object>> datasetParameters,
         SortSpec sort,
         PaginationSpec pagination,
-        String requestId) {
+        String requestId,
+        Map<String, InputQueryOptions> datasetQueries) {
+
+    public QueryContextDTO(String dashboardId, String componentId, String datasetId,
+                           Map<String, Object> parameters, Map<String, Map<String, Object>> datasetParameters,
+                           SortSpec sort, PaginationSpec pagination, String requestId) {
+        this(dashboardId, componentId, datasetId, parameters, datasetParameters, sort, pagination, requestId, Map.of());
+    }
+
+    /** 输入查询选项与 Python 输出分页分离；仅编辑态允许重放上游查询快照。 */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record InputQueryOptions(boolean editor, String timeGranularity, SortSpec sort,
+                                    PaginationSpec pagination, Integer queryLimit,
+                                    java.util.List<DatasetQueryPlanDTO.FilterSpec> filters,
+                                    Map<String, Object> parameters, java.util.List<String> timeFields) {
+        public InputQueryOptions {
+            if (timeGranularity != null && !java.util.Set.of("YEAR", "QUARTER", "MONTH", "WEEK", "DAY").contains(timeGranularity)) {
+                throw new IllegalArgumentException("unsupported input time granularity");
+            }
+            if (queryLimit != null && (queryLimit < 1 || queryLimit > 100_000)) {
+                throw new IllegalArgumentException("input queryLimit must be between 1 and 100000");
+            }
+            filters = filters == null ? null : java.util.List.copyOf(filters);
+            timeFields = timeFields == null ? java.util.List.of() : java.util.List.copyOf(timeFields);
+            parameters = parameters == null ? Map.of() : java.util.Collections.unmodifiableMap(new java.util.LinkedHashMap<>(parameters));
+            if (!editor && (filters != null || !parameters.isEmpty() || sort != null || pagination != null || queryLimit != null)) {
+                throw new IllegalArgumentException("input query snapshots are only supported in editor mode");
+            }
+        }
+    }
 
     /** 向后兼容旧请求与现有 Java 调用点。 */
     public QueryContextDTO(String dashboardId, String componentId, String datasetId,
@@ -41,6 +70,7 @@ public record QueryContextDTO(
     private static final int MAX_REQUEST_ID_LENGTH = 128;
 
     public QueryContextDTO {
+        datasetQueries = datasetQueries == null ? Map.of() : Map.copyOf(datasetQueries);
         if (dashboardId == null || dashboardId.isBlank()) {
             throw new IllegalArgumentException("dashboardId is required");
         }

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   getInputDescriptor: vi.fn(),
   listDatasets: vi.fn(),
+  updateDataset: vi.fn(),
+  submitComponentExecution: vi.fn(),
   confirmDatasetDraft: vi.fn(),
   listAloudataMetrics: vi.fn(),
   listAloudataDimensions: vi.fn(),
@@ -12,11 +14,13 @@ vi.mock('@/api/dataset', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/dataset')>()),
   getInputDescriptor: mocks.getInputDescriptor,
   list: mocks.listDatasets,
+  update: mocks.updateDataset,
 }))
 
 vi.mock('../useInsightBackend', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../useInsightBackend')>()),
   confirmDatasetDraft: mocks.confirmDatasetDraft,
+  submitComponentExecution: mocks.submitComponentExecution,
 }))
 
 vi.mock('@/api/semantic-model', () => ({
@@ -38,6 +42,7 @@ beforeEach(() => {
   state.pythonSystem = ''
   state.pythonUser = ''
   mocks.listDatasets.mockReset().mockResolvedValue([])
+  mocks.updateDataset.mockReset().mockResolvedValue({})
   mocks.confirmDatasetDraft.mockReset().mockResolvedValue({
     datasetId: '103',
     descriptor: {
@@ -58,6 +63,28 @@ beforeEach(() => {
 })
 
 describe('Aloudata 数据集展示名取数', () => {
+  it('修改上游字段配置后清理旧的成功查询快照', () => {
+    const config = { displayFields: [], parameterBindings: [],
+      sortPolicy: { enabled: false, mode: 'single' as const, allowedFields: [] },
+      paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false } }
+    state.datasets.push({ id: 'changed-input', alias: 'table_wd', sourceType: 'aloudata', sourceLabel: 'Aloudata',
+      fields: [], filters: [], lastSuccessfulQueryState: { filters: [], parameters: {}, sort: null, page: 1, pageSize: 100 } })
+    expect(useInsight().saveQueryConfig('changed-input', config)).toBeNull()
+    expect(state.datasets[0].lastSuccessfulQueryState).toBeUndefined()
+  })
+  it('Python 执行前同步已落库输入的最新指标维度定义', async () => {
+    state.datasets.push({ id: 'fresh-source', backendDatasetId: '103', alias: 'table_zb', sourceType: 'aloudata',
+      sourceLabel: 'Aloudata', fields: [], filters: [],
+      aloudata: { mode: 'metric-dim', datasourceId: '9', metrics: ['new_sales'], dims: ['region'] } })
+    mocks.listDatasets.mockResolvedValue([{ id: '103', name: 'table_zb', dashboardId: '20', componentId: 'card-1',
+      sourceType: 'ALOUDATA_METRICS', datasourceId: '9', sourceConfig: JSON.stringify({ metrics: ['old_sales'], dimensions: ['old_date'] }) }])
+    mocks.submitComponentExecution.mockRejectedValueOnce(new Error('stop after preparation'))
+    await useInsight().runComponentPreview()
+    expect(mocks.updateDataset).toHaveBeenCalledWith('103', {
+      name: 'table_zb', sourceDefinition: { sourceType: 'ALOUDATA_METRICS', datasourceId: '9', metrics: ['new_sales'], dimensions: ['region'], displayNames: undefined },
+    })
+    expect(mocks.confirmDatasetDraft).not.toHaveBeenCalled()
+  })
   it('别名变更同步 managed 系统读取、用户代码以及最终执行和保存的脚本', async () => {
     state.datasets.push({ id: 'first', alias: 'table_ab', sourceType: 'jdbc', sourceLabel: 'JDBC', fields: [], filters: [] })
     const reader = 'if "table_ab" not in locals():\n    table_ab = datasets.input(input_name="table_ab").to_polars()'

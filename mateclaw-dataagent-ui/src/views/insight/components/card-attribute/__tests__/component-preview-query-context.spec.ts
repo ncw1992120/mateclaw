@@ -2,6 +2,22 @@ import { describe, expect, it } from 'vitest'
 import { createComponentPreviewQueryContext } from '../component-preview-query-context'
 
 describe('createComponentPreviewQueryContext', () => {
+  it('编辑态使用成功查询快照，传递输入各自的粒度、排序和取数范围', () => {
+    const success = { filters: [], parameters: {}, sort: { field: 'revenue', direction: 'desc' as const },
+      page: 2, pageSize: 20, queryLimit: 300, timeGranularity: 'MONTH' as const }
+    const context = createComponentPreviewQueryContext('1', 'card', [{
+      datasetId: '7', inputName: 'table_zb',
+      lastQueryState: { ...success, timeGranularity: 'DAY' },
+      lastSuccessfulQueryState: success,
+      queryConfig: { displayFields: [], parameterBindings: [],
+        sortPolicy: { enabled: true, mode: 'single', allowedFields: ['revenue'] },
+        paginationPolicy: { enabled: true, defaultPageSize: 20, maxPageSize: 100, returnTotalCount: false } },
+    } as import('@/types').DashboardDatasetInput])
+    expect(context).toHaveProperty('datasetQueries.table_zb', {
+      editor: true, timeGranularity: 'MONTH', sort: { field: 'revenue', direction: 'desc' },
+      pagination: { page: 2, pageSize: 20 }, queryLimit: 300,
+    })
+  })
   it('兼容历史时间绑定的开始和结束复用同一参数名，不将日期边界误判为冲突', () => {
     const input: import('@/types').DashboardDatasetInput = {
       datasetId: '1', inputName: 'table_ab',

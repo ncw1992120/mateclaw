@@ -29,7 +29,7 @@ function parametersFromLastInputQueries(inputs: DashboardDatasetInput[]): Record
   const datasetParameters: Record<string, Record<string, unknown>> = {}
   for (const input of inputs) {
     const parameters: Record<string, unknown> = {}
-    const savedFilters = input.lastQueryState?.filters ?? []
+    const savedFilters = (input.lastSuccessfulQueryState ?? input.lastQueryState)?.filters ?? []
     const bindings = input.queryConfig?.parameterBindings ?? []
     for (const binding of bindings) {
       const rows = savedFilters.filter((row: SavedInputFilter) =>
@@ -75,6 +75,27 @@ export function createComponentPreviewQueryContext(
     componentId,
     parameters: {},
     datasetParameters: parametersFromLastInputQueries(inputs),
+    datasetQueries: Object.fromEntries(inputs.map((input) => {
+      const saved = input.lastSuccessfulQueryState ?? input.lastQueryState
+      const policy = input.queryConfig?.paginationPolicy
+      const sort = saved?.sort
+      return [input.inputName, {
+        editor: true,
+        ...(saved?.timeGranularity ? { timeGranularity: saved.timeGranularity } : {}),
+        ...(saved?.filters.some((row) => row.timeBoundary) ? {
+          timeFields: [...new Set(saved.filters.filter((row) => row.timeBoundary).map((row) => row.field))],
+        } : {}),
+        sort: sort && input.queryConfig?.sortPolicy.enabled
+          && input.queryConfig.sortPolicy.allowedFields.includes(sort.field) ? sort : null,
+        ...(policy?.enabled ? { pagination: {
+          page: Math.max(1, saved?.page ?? 1),
+          pageSize: Math.min(saved?.pageSize ?? policy.defaultPageSize, policy.maxPageSize, 500),
+        } } : {}),
+        queryLimit: Math.min(Math.max(1, saved?.queryLimit ?? 10_000), 100_000),
+        ...(saved?.executedFilters ? { filters: saved.executedFilters } : {}),
+        ...(saved?.executedParameters ? { parameters: saved.executedParameters } : {}),
+      }]
+    })),
     requestId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
   }
 }

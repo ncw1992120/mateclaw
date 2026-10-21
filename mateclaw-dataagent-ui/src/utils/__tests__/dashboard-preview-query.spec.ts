@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DashboardRuntimeFilterState, InsightComponent } from '@/types'
-import { buildComponentQueryParameters } from '../dashboard-preview-query'
+import { buildComponentInputQueries, buildComponentQueryParameters } from '../dashboard-preview-query'
 
 function component(inputs: unknown[], extraPipeline: Record<string, unknown> = {}): InsightComponent {
   return {
@@ -17,6 +17,15 @@ function state(entries: DashboardRuntimeFilterState): DashboardRuntimeFilterStat
 }
 
 describe('buildComponentQueryParameters', () => {
+  it('预览只使用当前筛选器粒度，不恢复编辑态查询快照', () => {
+    const card = component([{ inputName: 'table_zb', lastQueryState: { timeGranularity: 'YEAR' },
+      lastSuccessfulQueryState: { timeGranularity: 'YEAR', executedFilters: [{ field: 'region', value: 'old' }] },
+      queryConfig: { parameterBindings: [{ filterComponentId: 'date', field: 'metric_time', parameterName: 'start', operator: 'gte' }] } }])
+    const filters: DashboardRuntimeFilterState = { date: { field: 'metric_time', scope: 'global', targetComponentIds: [],
+      value: { preset: 'custom', start: '2026-09-01', end: '2026-09-03' }, timeGranularity: 'MONTH' } }
+    expect(buildComponentInputQueries(card, filters)).toEqual({ table_zb: { timeGranularity: 'MONTH', timeFields: ['metric_time'] } })
+    expect(buildComponentInputQueries(card, {})).toEqual({ table_zb: { timeFields: [] } })
+  })
   it('maps one selected filter by its id to each input declared parameter name', () => {
     const card = component([
       { datasetId: '1', inputName: 'input_a', queryConfig: { parameterBindings: [

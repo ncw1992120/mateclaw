@@ -85,7 +85,7 @@ public class AloudataMetricsAdapter implements DatasetSourceAdapter {
                 dataset.getId(), dataset.getDatasourceId(), config, request.columns());
         // 指标仍使用数据集配置；分组维度只使用本次展示字段中的维度。
         // 隐藏维度可用于筛选，但不能继续参与 GROUP BY，否则 KPI 会被拆成多行。
-        List<String> metrics = configuredMetrics;
+        List<String> metrics = requestedFields(configuredMetrics, request.columns());
         List<String> dimensions = requestedFields(configuredDimensions, request.columns());
         query.setMetrics(metrics); query.setDimensions(dimensions);
         // metric_time（分区字段）条件生成单引号 DateTrunc/Cast 专用形态进 filters

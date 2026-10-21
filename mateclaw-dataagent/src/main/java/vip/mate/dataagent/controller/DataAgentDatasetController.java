@@ -120,7 +120,7 @@ public class DataAgentDatasetController {
         Integer offset = plan.pagination() == null ? 0 : plan.pagination().offset();
         boolean requestTotal = plan.pagination() != null;
         DatasetReadRequest readRequest = new DatasetReadRequest(request.datasetId(), request.inputName(),
-                plan.columns(), filters, sorts, limit, offset, Map.of(), requestTotal, null, true);
+                plan.columns(), filters, sorts, limit, offset, Map.of(), requestTotal, plan.timeGranularity(), true);
         DatasetBatch batch = executionService.preview(context, readRequest);
         response.put("rows", batch.rows());
         response.put("rowCount", batch.rowCount());

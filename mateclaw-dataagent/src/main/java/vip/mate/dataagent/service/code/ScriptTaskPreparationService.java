@@ -176,7 +176,8 @@ public class ScriptTaskPreparationService {
             DatasetReadRequest readRequest = new DatasetReadRequest(datasetIdOf(plan, context, alias), alias,
                     plan.columns(), filtersOf(plan), plan.orders().stream()
                             .map(o -> new DatasetSort(o.field(), o.direction())).toList(),
-                    size, pageOffset, Map.of(), false, null, requireMetricTimeCondition);
+                    size, pageOffset, plan.inputQuery() == null ? Map.of() : plan.inputQuery().parameters(),
+                    false, plan.timeGranularity(), requireMetricTimeCondition);
             DatasetBatch batch = useStrategyFixture
                     ? strategyReadoutFixtures.read(context, readRequest)
                     : adapter.read(context, readRequest);
