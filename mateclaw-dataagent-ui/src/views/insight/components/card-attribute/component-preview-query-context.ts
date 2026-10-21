@@ -20,9 +20,7 @@ function inclusiveEndDate(value: unknown): unknown {
 
 function setParameter(parameters: Record<string, unknown>, name: string, value: unknown): void {
   if (!name || !hasValue(value)) return
-  if (Object.hasOwn(parameters, name) && JSON.stringify(parameters[name]) !== JSON.stringify(value)) {
-    throw new Error(`上游数据集的筛选值冲突：参数 ${name}`)
-  }
+  // 多个筛选绑定若复用同名参数，按配置顺序保留最后一个有效值，不阻止 Python 查询提交。
   parameters[name] = value
 }
 

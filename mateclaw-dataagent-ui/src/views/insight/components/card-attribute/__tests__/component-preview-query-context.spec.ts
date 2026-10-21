@@ -96,4 +96,30 @@ describe('createComponentPreviewQueryContext', () => {
     expect(context.parameters).toEqual({})
     expect(context.datasetParameters).toEqual({})
   })
+
+  it('同一输入的多个筛选绑定复用参数名时不再因值不同而阻止查询', () => {
+    const context = createComponentPreviewQueryContext('dashboard-1', 'python-1', [{
+      datasetId: '1', inputName: 'table_ab',
+      queryConfig: {
+        displayFields: [],
+        parameterBindings: [
+          { filterComponentId: 'filter-a', parameterName: 'comp_1792123987548_srqf', field: 'metric_time', operator: 'eq' },
+          { filterComponentId: 'filter-b', parameterName: 'comp_1792123987548_srqf', field: 'region', operator: 'eq' },
+        ],
+        sortPolicy: { enabled: false, mode: 'single', allowedFields: [] },
+        paginationPolicy: { enabled: false, defaultPageSize: 100, maxPageSize: 500, returnTotalCount: false },
+      },
+      lastQueryState: {
+        filters: [
+          { filterComponentId: 'filter-a', field: 'metric_time', parameterName: 'comp_1792123987548_srqf', value: '2026-10-09', enabled: true },
+          { filterComponentId: 'filter-b', field: 'region', parameterName: 'comp_1792123987548_srqf', value: '华东', enabled: true },
+        ],
+        parameters: {}, sort: null, page: 1, pageSize: 100,
+      },
+    }])
+
+    expect(context.datasetParameters).toEqual({
+      table_ab: { comp_1792123987548_srqf: '华东' },
+    })
+  })
 })
