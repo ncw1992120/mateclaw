@@ -3,3 +3,5 @@
 .card.arriving{animation:arrive .45s ease both}
 
 .card.selected{border-color:#748eeb;box-shadow:0 0 0 2px #e9eeff}
+
+.card.selected{border-color:#647be7;outline:2px solid #dce4ff;box-shadow:0 0 0 5px #647bea12,0 9px 28px #24476b12}
