@@ -5,3 +5,20 @@
 .card.selected{border-color:#748eeb;box-shadow:0 0 0 2px #e9eeff}
 
 .card.selected{border-color:#647be7;outline:2px solid #dce4ff;box-shadow:0 0 0 5px #647bea12,0 9px 28px #24476b12}
+
+.report.edit-mode .card.editing{cursor:pointer;user-select:none;transition:outline-color .16s,box-shadow .16s,opacity .16s}
+.report.edit-mode .card.editing:hover{outline:1px solid #cbd5fa;outline-offset:2px}
+.report.edit-mode .card.editing.selected{outline:2px solid #6e7ce9;outline-offset:2px;box-shadow:0 0 0 5px #647bea12,0 9px 28px #24476b12;z-index:2}
+.card-head{min-height:34px}
+.move-grip{border:0;background:#f5f7fc;color:#9aa7bd;border-radius:5px;padding:2px 6px;line-height:1;cursor:grab;font-size:14px}
+.move-grip:active{cursor:grabbing}
+.move-grip[hidden]{display:none}
+.rename-title{border:0;background:transparent;color:#93a0b5;padding:2px 5px;font-size:11px}
+.rename-title:hover{color:var(--accent);background:#f2f5ff}
+.card-title-input{min-width:60px;max-width:60%;border:1px solid #cfd8ef;border-radius:5px;padding:4px 6px;color:var(--ink);font-weight:600}
+.resize-handle{position:absolute;right:3px;bottom:3px;width:20px;height:20px;border:0;background:transparent;z-index:3;cursor:nwse-resize;padding:0}
+.resize-handle span{position:absolute;right:3px;bottom:3px;width:10px;height:10px;border-right:2px solid #9caee5;border-bottom:2px solid #9caee5;border-radius:0 0 3px}
+.resize-handle:hover span{border-color:var(--accent)}
+.card.is-dragging{opacity:.48;outline:2px dashed #7888e7}
+.card.drop-target{outline:2px solid #8ba0ef;outline-offset:3px;background:#f8faff}
+.report.edit-mode .filter-bar button,.report.edit-mode .rank button{cursor:default}
